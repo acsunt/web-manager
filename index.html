@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>网页管理系统 Pro Max v9.6.2 (定制增强版)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <link rel="stylesheet" href="./style.css">
+    <style id="custom-css-style"></style>
+</head>
+<body>
+
+    <div id="web-bg-layer"></div>
+    <div id="web-bg-overlay"></div>
+    <div id="custom-layer-root"></div>
+    <div id="toast-notification"></div>
+    <div id="totalFloatingCount">共 0 个网页</div>
+
+    <div class="toolbar" id="mainToolbar">
+        <div class="toolbar-row" id="toolbarBtnRow">
+            <button class="btn" id="editModeBtn" onclick="toggleEditMode()"><i class="fas fa-list-check"></i> 管理</button>
+            <button class="btn" id="addCatBtn" onclick="openAddModal('category')"><i class="fas fa-folder-plus"></i> 分类</button>
+            <button class="btn" id="addPageBtn" onclick="openAddModal('page')"><i class="fas fa-file-circle-plus"></i> 网页</button>
+            <button class="btn" id="toolsBtn" onclick="openToolsModal()"><i class="fas fa-toolbox"></i> 工具</button>
+            <button class="btn" id="clearBtn" onclick="clearAllData()"><i class="fas fa-eraser"></i> 清空</button>
+            <button class="btn" id="themeBtn" onclick="openThemeModal()"><i class="fas fa-palette"></i> 主题</button>
+            <button class="btn" id="countToggleBtn" onclick="toggleCountDisplay(this)"><i class="fas fa-hashtag"></i></button>
+            <button class="btn" id="localTagToggleBtn" onclick="toggleLocalTagDisplay(this)"><i class="fas fa-tags"></i></button>
+            <button class="btn" id="urlToggleBtn" onclick="toggleUrlDisplay(this)"><i class="fas fa-link"></i></button>
+            <button class="btn" id="noteToggleBtn" onclick="toggleNoteDisplay(this)"><i class="fas fa-sticky-note"></i></button>
+            <button class="btn" id="badgeToggleBtn" onclick="toggleBadgeDisplay(this)"><i class="fas fa-layer-group"></i></button>
+            <button class="btn" id="testModeBtn" onclick="toggleTestMode(this)"><i class="fas fa-eye"></i></button>
+            <button class="btn" id="alignToggleBtn" onclick="cycleTextAlign(this)"><i class="fas fa-align-center"></i></button>
+            <button class="btn" id="targetToggleBtn" onclick="toggleOpenTarget(this)"><i class="fas fa-external-link-alt"></i></button>
+            <button class="btn" id="autoRefreshToggleBtn" onclick="toggleAutoRefresh(this)"><i class="fas fa-sync-alt"></i></button>
+            <button class="btn" id="iconGlobalConfigBtn" onclick="openIconGlobalModal()"><i class="fas fa-icons"></i></button>
+            <button class="btn" id="ioBtn" onclick="openImportExportModal()"><i class="fas fa-cloud-arrow-up"></i></button>
+            <button class="btn" id="toolbarEditBtn" onclick="openToolbarEditModal()"><i class="fas fa-cog"></i></button>
+        </div>
+        
+        <div class="toolbar-row" id="toolbarSearchRow">
+            <div class="search-wrapper">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="搜索名称、备注或网址 (搜全站)..." oninput="handleSearchInput(this.value)" onclick="handleSearchFocus()" onblur="handleSearchBlur()" autocomplete="off">
+                    <i class="fas fa-times search-clear-btn" id="searchClearBtn" onclick="clearSearch()"></i>
+                    <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#999; pointer-events: none;"><i class="fas fa-search"></i></div>
+                </div>
+            </div>
+            
+            <div class="view-controls">
+                <button class="btn" id="expandToggleBtn" onclick="toggleExpandAll()"><i class="fas fa-expand-arrows-alt"></i> <span>全部展开</span></button>
+                <button class="btn" id="sortModeBtn" onclick="toggleSortMode()"><i class="fas fa-sort"></i> <span>排序</span></button>
+                <button class="btn" id="iconModeBtn" onclick="toggleIconMode()"><i class="fas fa-border-all"></i> <span>图标</span></button>
+                <button class="btn" id="workspaceBtn" onclick="openWorkspaceModal()"><i class="fas fa-layer-group"></i> <span>页面</span></button>
+                <button class="btn" id="colModeBtn" onclick="openColModeMenu(this)"><i class="fas fa-table-columns"></i> <span>自动</span></button>
+            </div>
+        </div>
+        <button class="btn" id="toolbarToggleBtn" onclick="toggleToolbar()"><i class="fas fa-angle-up"></i> 折叠</button>
+    </div>
+    
+    <div id="searchResults" class="search-results"></div>
+    <div id="tree-root"></div>
+
+    <div class="batch-bar">
+        <label style="display: flex; align-items: center; font-weight: 500;"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll(this)" style="transform: scale(1.3); margin-right: 8px;"> 全选</label>
+        <span id="selectedCount" style="font-size: calc(13px * var(--text-scale, 1)); color: #666; margin-right: 10px;">已选 0</span>
+        <div style="flex-grow: 1;"></div>
+        <button class="btn" onclick="batchSelectSiblings()">选中分类</button>
+        <button class="btn" onclick="batchCopy()">复制</button>
+        <button class="btn" onclick="openBatchMoveModal()">移动</button>
+        <button class="btn danger" onclick="batchDelete()">删除</button>
+        <button class="btn" onclick="toggleEditMode()">取消</button>
+    </div>
+
+    <div class="context-menu-overlay" id="menuOverlay" onclick="hideContextMenu()" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:2999;display:none;"></div>
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="menuAction('edit')"><i class="fas fa-pen-to-square"></i> 编辑</div>
+        <div class="context-menu-item" onclick="menuAction('move')"><i class="fas fa-share-from-square"></i> 移动</div>
+        <div class="context-menu-item" style="color: #dc3545;" onclick="menuAction('delete')"><i class="fas fa-trash"></i> 删除</div>
+    </div>
+    
+    <div class="context-menu" id="colModeMenu" style="min-width: 80px; text-align: center;">
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(0)">自动</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(1)">1列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(2)">2列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(3)">3列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(4)">4列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(5)">5列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(6)">6列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(7)">7列</div>
+        <div class="context-menu-item" style="justify-content: center;" onclick="setColumnMode(8)">8列</div>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display:flex; align-items:center;">
+                    <span id="modalTitle">编辑</span>
+                    <button class="btn small" style="margin-left: 15px;" id="copyModalInfoBtn" onclick="copyPageInfoFromModal()"><i class="fas fa-copy"></i> 复制</button>
+                    <button class="btn small" style="margin-left: 8px;" id="pasteModalInfoBtn" onclick="openParsePasteModal()"><i class="fas fa-paste"></i> 粘贴</button>
+                </div>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('editModal')"></i>
+            </div>
+            <input type="hidden" id="editId"><input type="hidden" id="editType"><input type="hidden" id="customIconData">
+            
+            <!-- 图标编辑区 -->
+            <div class="form-group" id="iconEditGroup" style="display: none; padding-bottom: 10px; margin-bottom: 15px; border-bottom: 1px dashed var(--border-color); text-align: center;">
+                <div class="avatar-container" onclick="toggleImgPanel()" id="editAvatarContainer" title="点击可切换自定义图床">
+                    <img id="mainIcon" src="" alt="icon">
+                    <div id="letterIcon" class="letter-preview" style="display:none;"></div>
+                    <div id="blankIcon" class="blank-preview" style="display:none;"></div>
+                </div>
+                <div class="icon-type-radios">
+                    <label><input type="radio" name="iconType" value="auto" checked onchange="updateIconPreview()" style="margin-right:4px;"> 自动</label>
+                    <label><input type="radio" name="iconType" value="traditional" onchange="updateIconPreview()" style="margin-right:4px;"> 传统</label>
+                    <label><input type="radio" name="iconType" value="letter" onchange="updateIconPreview()" style="margin-right:4px;"> 名称首字</label>
+                    <label><input type="radio" name="iconType" value="urlLetter" onchange="updateIconPreview()" style="margin-right:4px;"> 网址首字</label>
+                    <label><input type="radio" name="iconType" value="blank" onchange="updateIconPreview()" style="margin-right:4px;"> 空白块</label>
+                    <label><input type="radio" name="iconType" value="custom" onchange="updateIconPreview()" style="margin-right:4px;"> 图床</label>
+                </div>
+                <div id="imgUrlPanel" style="display: none; gap:8px; justify-content: center; margin-bottom: 10px;">
+                    <input type="text" id="customImgUrl" class="form-control" placeholder="输入外部图床链接..." style="font-size:12px; padding:6px; height: 32px;">
+                    <button class="btn primary" onclick="startUrlCrop()" style="padding:4px 10px; height: 32px; font-size:12px; flex-shrink: 0;">读取裁切</button>
+                </div>
+            </div>
+
+            <div class="form-group" id="urlGroup" style="margin-bottom: 15px;">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">
+                    <span>网址列表 (自动补全 https://)</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button class="btn small" id="fetchInfoBtn" onclick="fetchPageInfo()"><i class="fas fa-magic"></i> 自动识别</button>
+                        <button class="btn small" id="urlSortToggleBtn" onclick="toggleUrlSortMode()"><i class="fas fa-sort"></i> 排序</button>
+                    </div>
+                </label>
+                <div id="urlListContainer" class="url-list-container"></div>
+                <div style="display: flex; gap: 8px; margin-top: 5px;">
+                    <button class="btn" style="flex:1; justify-content: center;" onclick="addUrlRow()"><i class="fas fa-plus"></i> 添加网址</button>
+                    <button class="btn" style="flex:1; justify-content: center;" onclick="openBatchAddUrlModal()"><i class="fas fa-layer-group"></i> 批量添加</button>
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">
+                    <span>名称</span>
+                    <label style="font-weight:normal; font-size:calc(12px * var(--text-scale, 1)); display:flex; align-items:center;">
+                        <input type="checkbox" id="autoTitleCheck" checked style="margin-right:4px;">覆盖现有名称
+                    </label>
+                </label>
+                <div class="input-wrapper">
+                    <textarea id="editName" class="form-control has-tools" rows="1" style="height:38px; resize:none;"></textarea>
+                    <div class="input-tools">
+                        <button class="note-tool-btn" onclick="copyInput('editName', this)"><i class="fas fa-copy"></i></button>
+                        <button class="note-tool-btn" onclick="clearInput('editName')"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group" id="noteGroup" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">备注</label>
+                <div class="input-wrapper">
+                    <textarea id="editNote" class="form-control has-tools" rows="2" placeholder="可选填备注信息..."></textarea>
+                    <div class="input-tools">
+                        <button class="note-tool-btn" onclick="copyInput('editNote', this)"><i class="fas fa-copy"></i></button>
+                        <button class="note-tool-btn" onclick="clearInput('editNote')"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group" id="parentSelectGroup" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">分类 (留空默认为根目录)</label>
+                <div class="form-input-group" style="display: flex; gap: 8px; position: relative;">
+                    <div style="flex-grow:1; position:relative;">
+                        <input type="text" id="parentSearchInput" class="form-control" placeholder="点击右侧按钮选择..." oninput="handleCategorySearch(this.value, 'parentDropdownList', 'selectedParentId', 'parentSearchInput')" autocomplete="off">
+                        <i class="fas fa-times clear-input-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; display: none;" onclick="clearCategoryInput('parentSearchInput', 'selectedParentId', 'parentDropdownList')"></i>
+                        <div id="parentDropdownList" class="dropdown-list" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 10; display: none; margin-top: 2px;"></div>
+                    </div>
+                    <button class="btn" onclick="openTreeSelectModal('selectedParentId', 'parentSearchInput')"><i class="fas fa-sitemap"></i></button>
+                </div>
+                <div id="editPositionGroup" style="display: none; flex-direction: row; gap: 15px; font-size: calc(13px * var(--text-scale, 1)); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+                    <label><input type="radio" name="editPos" value="keep" checked> 保持原排序</label>
+                    <label><input type="radio" name="editPos" value="top"> 移至列表顶部</label>
+                    <label><input type="radio" name="editPos" value="bottom"> 移至列表底部</label>
+                </div>
+                <div id="relativePositionGroup" style="display: flex; flex-direction: column; gap: 8px; font-size: calc(13px * var(--text-scale, 1)); margin-top: 8px; color: var(--text-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label id="relInsideLabel"><input type="radio" name="relPosition" value="inside" checked onchange="updatePositionOptions()"> 放入内部</label>
+                        <div id="insidePositionMode" style="display:flex; gap: 10px;">
+                            <label><input type="radio" name="insidePos" value="top"> 列表顶部</label>
+                            <label><input type="radio" name="insidePos" value="bottom" checked> 列表底部</label>
+                        </div>
+                    </div>
+                    <div id="siblingPositionGroup" style="display: flex; gap: 10px;">
+                        <label><input type="radio" name="relPosition" value="before" onchange="updatePositionOptions()"> 同级上方</label>
+                        <label><input type="radio" name="relPosition" value="after" onchange="updatePositionOptions()"> 同级下方</label>
+                    </div>
+                </div>
+                <input type="hidden" id="selectedParentId">
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px;">
+                <div>
+                    <button class="btn" onclick="closeModal('editModal')">取消</button>
+                    <button class="btn primary" onclick="saveData()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 图标裁剪弹窗 -->
+    <div id="iconCropModal" class="modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <span>裁剪图标</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('iconCropModal')"></i>
+            </div>
+            <div class="cropper-container-wrapper" style="height: 300px; background: #000; display: flex; align-items: center; justify-content: center;">
+                <img id="iconCropImage" src="" style="max-width: 100%; display: block;">
+            </div>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeModal('iconCropModal')">取消</button>
+                <button class="btn primary" onclick="confirmIconCrop()">完成裁剪</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 图标全局设置弹窗 -->
+    <div id="iconGlobalModal" class="modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <span>图标设置</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('iconGlobalModal')"></i>
+            </div>
+            <div class="form-group">
+                <label style="font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">全局图标形状</label>
+                <div style="display:flex; gap: 10px; margin-top: 10px; font-size: calc(13px * var(--text-scale, 1));">
+                    <label><input type="radio" name="globalIconShape" value="square" onchange="setGlobalIconShape('square')"> 方形</label>
+                    <label><input type="radio" name="globalIconShape" value="circle" onchange="setGlobalIconShape('circle')"> 圆形</label>
+                </div>
+            </div>
+            <hr style="border:0; border-top:1px dashed var(--border-color); margin:15px 0;">
+            <div class="form-group">
+                <label style="font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">批量统一修改图标类型</label>
+                <div style="display:flex; gap: 10px; margin-top: 10px; font-size: calc(13px * var(--text-scale, 1)); flex-wrap: wrap;">
+                    <label><input type="radio" name="batchIconTarget" value="nonAuto" checked> 仅非自动获取</label>
+                    <label><input type="radio" name="batchIconTarget" value="all"> 所有网页</label>
+                </div>
+                <div style="display:flex; gap: 10px; margin-top: 10px; font-size: calc(13px * var(--text-scale, 1)); flex-wrap: wrap;">
+                    <label><input type="radio" name="batchIconType" value="auto"> 自动获取</label>
+                    <label><input type="radio" name="batchIconType" value="traditional"> 传统</label>
+                    <label><input type="radio" name="batchIconType" value="letter" checked> 名称首字</label>
+                    <label><input type="radio" name="batchIconType" value="urlLetter"> 网址首字</label>
+                    <label><input type="radio" name="batchIconType" value="blank"> 空白块</label>
+                    <label><input type="radio" name="batchIconType" value="custom"> 统一图床</label>
+                </div>
+                <div id="batchIconUrlGroup" style="display:none; margin-top:10px;">
+                    <input type="text" id="batchIconUrlInput" class="form-control" placeholder="输入图床链接...">
+                </div>
+                <button class="btn primary" style="width:100%; margin-top: 15px; justify-content:center;" onclick="applyBatchIconType()">应用批量修改</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="parsePasteModal" class="modal"><div class="modal-content" style="max-width: 450px;"><div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"><span>智能解析粘贴内容</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('parsePasteModal')"></i></div><div class="form-group"><textarea id="parsePasteText" class="form-control" rows="8" placeholder="在此粘贴导出的合并格式 (带有 📄/🔗/🗒️)，或直接粘贴多行链接..."></textarea><div class="text-muted" style="margin-top: 8px; font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary);">系统会自动智能提取名称、网址和备注，并在确认后覆盖填充到表单中。</div></div><div style="text-align: right; margin-top: 15px;"><button class="btn" onclick="closeModal('parsePasteModal')">取消</button><button class="btn primary" onclick="confirmParsePaste()"><i class="fas fa-magic"></i> 确认解析</button></div></div></div>
+    <div id="batchAddUrlModal" class="modal"><div class="modal-content" style="max-width: 450px;"><div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"><span>批量添加网址</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('batchAddUrlModal')"></i></div><div class="form-group"><label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">请粘贴链接 (每行一个)</label><div class="text-muted" style="margin-bottom:8px; font-size:calc(12px * var(--text-scale, 1)); color:var(--text-secondary);">将自动忽略空行和非链接文本(如括号内容)，只提取每行的网址。</div><textarea id="batchUrlText" class="form-control" rows="8"></textarea></div><div style="text-align: right; margin-top: 15px;"><button class="btn" onclick="closeModal('batchAddUrlModal')">取消</button><button class="btn primary" onclick="confirmBatchAddUrls()">确认添加</button></div></div></div>
+    <div id="linkPreviewModal" class="modal"><div class="modal-content" style="max-width: 400px;"><div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"><span id="previewModalTitle">链接列表</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('linkPreviewModal')"></i></div><div id="linkPreviewList" class="preview-list"></div></div></div>
+    <div id="toolbarEditModal" class="modal"><div class="modal-content" style="max-width: 450px;"><div class="modal-header"><div style="display:flex; align-items:center; gap:10px;"><span>自定义工具栏</span><button class="btn small" id="toolbarColBtn" onclick="toggleToolbarColMode()">3列</button></div><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('toolbarEditModal')"></i></div><div class="toolbar-sort-controls"><button class="btn" id="toolbarSortStartBtn" onclick="startToolbarSort()" style="width:100%; justify-content: center;"><i class="fas fa-sort"></i> 调整顺序</button><div id="toolbarSortActions" style="display:none; gap:10px; flex:1;"><button class="btn primary" style="flex:1; justify-content:center;" onclick="confirmToolbarSort()"><i class="fas fa-check"></i> 确认</button><button class="btn" style="flex:1; justify-content:center;" onclick="cancelToolbarSort()"><i class="fas fa-times"></i> 取消</button></div></div><div class="text-muted" style="margin-bottom:10px;">勾选控制显示，点击上方按钮后可直接拖拽排序</div><div id="toolbarConfigList" class="toolbar-config-list"></div><div style="text-align: right; margin-top: 15px;"><button class="btn" onclick="closeModal('toolbarEditModal')">关闭</button></div></div></div>
+
+    <div id="treeSelectModal" class="modal"><div class="modal-content"><div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;"><span>选择位置</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('treeSelectModal')"></i></div><div id="treeSelectContent" class="tree-select-container" style="padding: 10px; max-height: 300px; overflow-y: auto;"></div></div></div>
+    <div id="moveModal" class="modal"><div class="modal-content"><div class="modal-header"><span>移动到</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('moveModal')"></i></div><div class="form-group"><div class="form-input-group" style="display: flex; gap: 8px; position: relative;"><div style="flex-grow:1; position:relative;"><input type="text" id="moveSearchInput" class="form-control" placeholder="输入搜索或点击右侧..." oninput="handleCategorySearch(this.value, 'moveDropdownList', 'selectedMoveTargetId', 'moveSearchInput')" autocomplete="off"><i class="fas fa-times clear-input-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: none;" onclick="clearCategoryInput('moveSearchInput', 'selectedMoveTargetId', 'moveDropdownList')"></i><div id="moveDropdownList" class="dropdown-list" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 10; display: none;"></div></div><button class="btn" onclick="openTreeSelectModal('selectedMoveTargetId', 'moveSearchInput')"><i class="fas fa-sitemap"></i></button></div><input type="hidden" id="selectedMoveTargetId"></div><div style="text-align: right; margin-top: 15px;"><button class="btn" onclick="closeModal('moveModal')">取消</button><button class="btn primary" onclick="confirmMove()">确定</button></div></div></div>
+    
+    <div id="workspaceModal" class="modal"> 
+        <div class="modal-content"> 
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"> 
+                <span>主页管理</span> 
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('workspaceModal')"></i> 
+            </div> 
+            <div class="ws-toolbar"> 
+                <button class="btn primary" onclick="openQuickAddWsModal()"><i class="fas fa-plus"></i> 新建</button> 
+                <button class="btn" id="wsColBtn" onclick="toggleWsColMode()"><i class="fas fa-table-columns"></i> 3列</button>
+                <button class="btn" id="wsManageBtn" onclick="toggleWsManageMode()"><i class="fas fa-pen-to-square"></i> 编辑</button>
+                <button class="btn" id="wsSortCatBtn" onclick="toggleWsSortMode('group')"><i class="fas fa-sort"></i> 分类排序</button> 
+                <button class="btn" id="wsSortItemBtn" onclick="toggleWsSortMode('item')"><i class="fas fa-sort"></i> 主页排序</button>
+                <button class="btn" id="wsEditToggleBtn" onclick="toggleWsEditMode()"><i class="fas fa-list-check"></i> 多选</button> 
+            </div> 
+            <div class="ws-batch-bar"> 
+                <label style="display: flex; align-items: center; font-weight: 500;"> 
+                    <input type="checkbox" id="wsSelectAllBox" onchange="wsToggleSelectAll(this)" style="transform: scale(1.3); margin-right: 8px;"> 全选 
+                </label> 
+                <div style="flex-grow:1"></div> 
+                <button class="btn" onclick="wsBatchChangeGroup()">修改分类</button>
+                <button class="btn danger" onclick="wsBatchDelete()">删除选中</button> 
+            </div> 
+            <div id="workspaceList" class="workspace-list"></div> 
+            <div class="text-muted" style="text-align:center; color: var(--text-secondary); font-size: calc(12px * var(--text-scale, 1)); margin-top: 10px;">点击主页名称即可切换。当前主题配置在所有主页通用。</div> 
+        </div> 
+    </div>
+
+    <div id="wsGroupSelectModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>选择/新增主页分类</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('wsGroupSelectModal')"></i>
+            </div>
+            <div class="form-group">
+                <input type="text" id="wsGroupSearchInput" class="form-control" placeholder="搜索现有分类或输入新分类名称..." oninput="renderWsGroupList(this.value)">
+                <div id="wsGroupList" class="export-list-container" style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--input-bg);"></div>
+            </div>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeModal('wsGroupSelectModal')">取消</button>
+                <button class="btn primary" onclick="confirmChangeWsGroup()">确定</button>
+            </div>
+            <input type="hidden" id="wsGroupTargetId">
+            <input type="hidden" id="wsGroupIsBatch">
+        </div>
+    </div>
+
+    <div id="quickAddWsModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>新建主页 / 分类</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('quickAddWsModal')"></i>
+            </div>
+            <div class="form-group" style="padding-bottom: 15px; border-bottom: 1px dashed var(--border-color); margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">新建主页 (默认分类)</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="qaWorkspaceName" class="form-control" placeholder="输入主页名称...">
+                    <button class="btn primary" onclick="qaCreateWorkspace()"><i class="fas fa-check"></i> 创建</button>
+                </div>
+            </div>
+            <div class="form-group" style="padding-bottom: 15px; border-bottom: 1px dashed var(--border-color); margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">新建主页分类</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="qaGroupName" class="form-control" placeholder="输入分类名称...">
+                    <button class="btn primary" onclick="qaCreateGroup()"><i class="fas fa-check"></i> 创建</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">新建分类并包含主页</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="qaComboGroupName" class="form-control" placeholder="分类名称...">
+                    <span style="color:var(--text-secondary)">/</span>
+                    <input type="text" id="qaComboWorkspaceName" class="form-control" placeholder="主页名称...">
+                </div>
+                <div style="text-align: right; margin-top: 10px;">
+                    <button class="btn primary" onclick="qaCreateCombo()" style="width: 100%; justify-content: center;"><i class="fas fa-check"></i> 创建组合</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ioModal" class="modal"> <div class="modal-content"> <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 15px; font-size: calc(18px * var(--text-scale, 1));"> <span>备份与恢复</span> <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('ioModal')"></i></div> <div class="form-group"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"> <label style="font-weight: 600; font-size: calc(13px * var(--text-scale, 1)); display: flex; align-items: center;">选择主页导出 <button id="toggleExportListBtn" class="btn small" onclick="toggleExportList()" style="margin-left: 10px; font-weight: normal;"><i class="fas fa-chevron-down"></i> 展开</button></label> <div style="display:flex; gap:10px; align-items:center;"> <button class="btn small" id="exportBatchToggleBtn" onclick="toggleExportBatchMode()">多选模式</button> <label id="exportSelectAllContainer" style="font-size:calc(12px * var(--text-scale, 1)); display:none; align-items:center;"> <input type="checkbox" id="exportSelectAllBox" onchange="toggleExportSelectAll(this)" style="transform: scale(1.1); margin-right:4px;"> 全选 </label> </div> </div> <div id="exportWorkspaceList" class="workspace-list export-list-container" style="display:none;"></div> </div> <div class="form-group"> <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">文本格式导出</label> <div class="format-selector" style="display: flex; gap: 15px; margin-bottom: 10px;"> <label style="font-size: calc(13px * var(--text-scale, 1)); cursor: pointer; display: flex; align-items: center; gap: 5px;"><input type="radio" name="exportFormat" value="tree" checked onchange="updateExportPreview()"> 树形结构 (📂/📄)</label> <label style="font-size: calc(13px * var(--text-scale, 1)); cursor: pointer; display: flex; align-items: center; gap: 5px;"><input type="radio" name="exportFormat" value="path" onchange="updateExportPreview()"> 路径结构</label> </div> <textarea id="exportTextArea" class="form-control" rows="5" readonly style="font-size: calc(12px * var(--text-scale, 1)); font-family: monospace;"></textarea> <div style="text-align: right; margin-top: 5px;"> <button class="btn primary" onclick="copyExportText()"><i class="fas fa-copy"></i> 复制</button> </div> </div> <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;"> <div class="form-group"> <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">文件备份</label> <div style="display: flex; gap: 10px; flex-wrap: wrap;"> <button class="btn" style="flex:1; justify-content: center;" onclick="exportJsonFile()"><i class="fas fa-download"></i> 导出选中</button> <button class="btn warning" style="flex:1; justify-content: center;" onclick="exportJsonFile(true)"><i class="fas fa-file-export"></i> 全部导出</button> </div><div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;"><button class="btn" style="flex:1; justify-content: center;" onclick="exportIconSettings()"><i class="fas fa-icons"></i> 导出全局图标配置</button></div> <div class="text-muted" style="margin-top:5px; color: var(--text-secondary); font-size: calc(12px * var(--text-scale, 1));">(支持导出 JSON 或 ZIP 结构目录打包，或单独的图标配置)</div> </div> <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;"> <div class="form-group"> <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">数据导入</label> <div style="display:flex; gap:10px; margin-bottom:10px;"> <button class="btn" onclick="document.getElementById('fileInput').click()"><i class="fas fa-file-import"></i> 选择文件</button> <input type="file" id="fileInput" accept=".json,.zip" style="display:none" onchange="importFromFile(this)"> </div> <textarea id="ioText" class="form-control" rows="3" placeholder="在此粘贴数据..."></textarea> <div style="text-align: right; margin-top: 5px;"> <button class="btn primary" onclick="importFromText()">导入到当前</button> </div> </div> </div> </div>
+
+    <div id="themeModal" class="modal"> <div class="modal-content"> <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"> <span>主题设置</span> <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('themeModal')"></i> </div><div class="form-group" style="margin-bottom: 15px;"> <div style="display: flex; gap: 10px; margin-bottom: 8px;"><button class="btn danger" onclick="performClearBg('all')" style="flex: 1; justify-content: center; padding: 6px 0;"> <i class="fas fa-trash-can"></i> 初始化 </button> <button class="btn" onclick="document.getElementById('themeImportInput').click()" style="flex: 1; justify-content: center; padding: 6px 0;"> <i class="fas fa-file-import"></i> 导入 </button> <button class="btn" onclick="exportThemeSettings()" style="flex: 1; justify-content: center; padding: 6px 0;"> <i class="fas fa-file-export"></i> 导出 </button> <input type="file" id="themeImportInput" accept=".json,.zip" style="display: none;" onchange="importThemeSettings(this)"> </div><div style="display: flex; justify-content: flex-end; align-items: center;"><label style="font-size: calc(12px * var(--text-scale, 1)); display: flex; align-items: center; cursor: pointer; color: var(--text-secondary);"><input type="checkbox" id="exportIncludePresets" checked style="margin-right: 5px;"> 包含代码预设</label></div></div> <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 10px; background: var(--input-bg); border-radius: 8px;"> <span style="font-weight: 600;"><i class="fas fa-moon"></i> 夜间模式</span> <label class="view-check-label"> <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode()"> <span style="margin-left: 5px;">开启</span> </label> </div> <div class="text-muted" style="margin-bottom:15px; text-align:center; color: var(--text-secondary); font-size: calc(12px * var(--text-scale, 1));" id="themeModeHint">当前配置：日间模式风格</div> <div class="theme-grid"> <div class="theme-option active" id="theme-minimal" onclick="setTheme('minimal')"> <i class="fas fa-stop"></i> <span>简约 (默认)</span> </div> <div class="theme-option" id="theme-neumorphism" onclick="setTheme('neumorphism')"> <i class="fas fa-circle-notch"></i> <span>拟态</span> </div> <div class="theme-option" id="theme-glass" onclick="setTheme('glass')"> <i class="fas fa-gem"></i> <span>毛玻璃</span> </div> </div> <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;"> <div class="form-group"> <div class="adjust-container" style="background: var(--input-bg); padding: 10px; border-radius: 8px; margin-bottom: 15px;"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"> <span class="section-label"><i class="fas fa-expand"></i> 缩放比例调节</span> <label style="font-size: calc(12px * var(--text-scale, 1)); display: flex; align-items: center; cursor: pointer; color: var(--text-secondary);"><input type="checkbox" id="systemTextScaleCheck" onchange="toggleSystemTextScale()" style="margin-right: 5px;"> 跟随系统</label></div> <div class="range-group" style="margin-bottom: 5px;"> <div class="range-header"> <span>文字大小</span> <span id="textScaleDisplay">100%</span> </div> <input type="range" id="textScaleRange" min="40" max="300" step="1" value="100" oninput="updateTextScale()"> </div> <div class="range-group" style="margin-bottom: 5px;"> <div class="range-header"> <span>界面大小</span> <span id="uiScaleDisplay">100%</span> </div> <input type="range" id="uiScaleRange" min="50" max="200" step="1" value="100" oninput="updateUiScale()"> </div> </div> <div class="adjust-container" style="background: var(--input-bg); padding: 10px; border-radius: 8px; margin-bottom: 15px;"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"> <span class="section-label"><i class="fas fa-layer-group"></i> 主题透明度与遮罩</span> <button class="param-lock-btn" id="lockContentBtn" onclick="toggleThemeLock('content')" title="锁定/解锁参数调节"> <i class="fas fa-lock"></i> </button> </div> <div class="range-group"> <div class="range-header"> <span>主题透明度 (透出背景图)</span> <span id="themeAlphaDisplay">0%</span> </div> <input type="range" id="themeAlphaRange" min="0" max="100" step="1" value="0" oninput="updateBgAdjustment()"> </div> <div class="range-group" style="margin-bottom: 5px;"> <div class="range-header"> <span>文字遮罩 (加深文字背景)</span> <span id="textMaskDisplay">0%</span> </div> <input type="range" id="textMaskRange" min="0" max="100" step="1" value="0" oninput="updateBgAdjustment()"> </div> </div> <div class="adjust-container" style="background: var(--input-bg); padding: 10px; border-radius: 8px; margin-bottom: 10px;"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"> <span class="section-label"><i class="fas fa-image"></i> 背景图片微调</span> <button class="param-lock-btn" id="lockImgBtn" onclick="toggleThemeLock('img')" title="锁定/解锁参数调节"> <i class="fas fa-lock"></i> </button> </div> <div class="range-group"> <div class="range-header"> <span>背景模糊度</span> <span id="blurValDisplay">0px</span> </div> <input type="range" id="bgBlurRange" min="0" max="20" step="1" value="0" oninput="updateBgAdjustment()"> </div> <div class="range-group"> <div class="range-header"> <span>背景图透明度</span> <span id="opacityValDisplay">100%</span> </div> <input type="range" id="bgOpacityRange" min="0" max="1" step="0.01" value="1" oninput="updateBgAdjustment()"> </div> <div class="range-group" style="margin-bottom: 5px;"> <div class="range-header"> <span>全局遮罩 (加深整体背景)</span> <span id="overlayValDisplay">0%</span> </div> <input type="range" id="bgOverlayRange" min="0" max="0.95" step="0.01" value="0" oninput="updateBgAdjustment()"> </div> </div> <label style="display:  block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">背景图片 (当前模式)</label> <div class="bg-preview-wrapper" id="bgPreviewBox"> <div id="bgPreviewImage"></div> <div id="bgPreviewOverlay"></div> <span class="bg-preview-text">无背景图</span> </div> <div class="bg-controls"> <button class="btn" onclick="document.getElementById('bgUploadInput').click()"><i class="fas fa-upload"></i> 上传并剪裁</button> <input type="file" id="bgUploadInput" accept="image/*" style="display: none;" onchange="handleBgUpload(this)"> <button class="btn danger" onclick="clearBackground()"><i class="fas fa-trash"></i> 清空</button> </div> <div class="form-input-group" style="display: flex; gap: 8px; margin-top: 10px;"> <input type="text" id="bgUrlInput" class="form-control" placeholder="输入图片 URL (图床链接)..."> <button class="btn primary" onclick="applyBgUrl()"><i class="fas fa-check"></i></button> </div> <div style="text-align: right; margin-top: 10px;"> <button class="btn small" onclick="resetBgParams()" style="height:24px; padding:0 8px;">恢复当前模式默认值</button> </div> </div> <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;"> <div class="form-group"> <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">自定义代码 (CSS/HTML/JS)</label> <div style="display: flex; gap: 5px; margin-bottom: 5px;"> <select id="cssPresetSelect" class="form-control" style="flex-grow: 1;" onchange="loadCssPreset()"> <option value="">-- 选择预设 --</option> </select> <button class="btn danger" onclick="deleteCssPreset()" title="删除选中预设"><i class="fas fa-trash"></i></button> <button class="btn danger" onclick="clearAllCssPresets()" title="清空所有预设"><i class="fas fa-trash-can"></i></button></div><div style="display: flex; gap: 8px; margin-bottom: 8px;"> <button class="btn small" onclick="downloadCurrentCss()"><i class="fas fa-download"></i> 下载当前</button> <button class="btn small" onclick="downloadAllCssPresets()"><i class="fas fa-file-archive"></i> 下载全部</button> <button class="btn small" onclick="document.getElementById('cssFileInput').click()"><i class="fas fa-file-import"></i> 导入代码</button> <input type="file" id="cssFileInput" accept=".css,.txt,.zip,.html,.js" multiple style="display:none" onchange="importCustomCodeFile(this)"></div><div style="position:relative;"> <textarea id="customCssInput" class="css-editor-area" rows="6" placeholder="在此输入 CSS 代码，或以 < 开头的 HTML/JS 代码..." oninput="document.getElementById('cssPresetSelect').value=''"></textarea> <div style="position:absolute; right:10px; top:20px; display:flex; gap:5px;"><i class="fas fa-copy" onclick="copyCss()" style="color:rgba(255,255,255,0.7); cursor:pointer; background:rgba(255,255,255,0.1); padding:4px 7px; border-radius:4px; font-size:calc(12px * var(--text-scale, 1));" title="复制内容"></i><i class="fas fa-times" onclick="document.getElementById('customCssInput').value=''; document.getElementById('cssPresetSelect').value='';" style="color:rgba(255,255,255,0.7); cursor:pointer; background:rgba(255,255,255,0.1); padding:4px 7px; border-radius:4px; font-size:calc(12px * var(--text-scale, 1));" title="清空内容"></i></div></div> <div style="display: flex; gap: 5px; margin-top: 5px; align-items: center;"> <input type="text" id="presetNameInput" class="form-control" placeholder="预设名称" style="flex-grow: 1;"> <button class="btn primary" onclick="saveCssPreset()"><i class="fas fa-save"></i> 保存</button> <button class="btn" onclick="applyCustomCssFromInput()">应用</button> <button class="btn" onclick="closeModal('themeModal')">关闭</button> </div> </div> </div> </div>
+    <div id="clearBgOptionsModal" class="modal"> <div class="modal-content" style="max-width: 400px;"> <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px;"> <span>清空背景设置</span> </div> <p style="color:var(--text-secondary); margin-bottom:20px; font-size:calc(14px * var(--text-scale, 1));">请选择需要清除的内容：</p> <button class="option-list-btn" onclick="performClearBg('image')"> <i class="fas fa-image" style="color: var(--primary-color);"></i> <span>仅清空当前模式的背景图片</span> </button> <button class="option-list-btn" onclick="performClearBg('all')"> <i class="fas fa-trash-can" style="color: #dc3545;"></i> <span>初始化主题 (恢复默认设置)</span> </button> <div style="margin-bottom: 15px; padding: 10px; background: var(--input-bg); border-radius: 8px;"> <label style="display: flex; align-items: center; font-size: calc(13px * var(--text-scale, 1)); color: var(--text-secondary); cursor: pointer;"> <input type="checkbox" id="clearPresetsCheckbox" checked style="margin-right: 8px;"> 同时清空代码预设 </label> </div> <div style="text-align: right; margin-top: 15px;"> <button class="btn" onclick="closeModal('clearBgOptionsModal')">取消</button> </div> </div> </div>
+    <div id="clearDataOptionsModal" class="modal"> <div class="modal-content" style="max-width: 400px;"> <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px;"> <span>清空/删除数据</span> </div> <p style="color:#dc3545; margin-bottom:10px; font-size:calc(14px * var(--text-scale, 1)); font-weight:bold;">⚠️ 警告：此操作不可撤销！</p> <div class="form-group"> <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));"> <span>选择要删除的主页</span> <label style="font-weight:normal; font-size:calc(12px * var(--text-scale, 1)); display:flex; align-items:center;"> <input type="checkbox" id="clearSelectAllBox" onchange="toggleSelectAllClear(this)" style="margin-right:4px;"> 全选 </label> </label> <div id="clearWorkspaceList" class="checkbox-list" style="margin-bottom: 15px; max-height:200px; overflow-y:auto; padding:5px;"></div> <button class="btn danger" style="width:100%; justify-content:center;" onclick="performClearSelectedWorkspaces()"><i class="fas fa-trash"></i> 删除选中</button> </div> <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;"> <button class="option-list-btn" onclick="performClearData('all')"> <i class="fas fa-bomb" style="color: #dc3545;"></i> <span>完全初始化 (删除所有主页及主题)</span> </button> <div style="text-align: right; margin-top: 15px;"> <button class="btn" onclick="closeModal('clearDataOptionsModal')">取消</button> </div> </div> </div>
+    <div id="cropperModal" class="modal"><div class="modal-content" style="max-width: 600px;"><div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"><span>剪裁图片</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('cropperModal')"></i></div><div class="cropper-container-wrapper"><img id="cropperImage" src="" style="max-width: 100%; display: block;"></div><div style="text-align: right; margin-top: 15px; display: flex; justify-content: space-between;"><button class="btn" onclick="cropper.reset()"><i class="fas fa-sync"></i> 重置</button><div><button class="btn" onclick="closeModal('cropperModal')">取消</button><button class="btn primary" onclick="confirmCrop()"><i class="fas fa-check"></i> 确定使用</button></div></div></div></div>
+    <div id="toolsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>工具箱</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('toolsModal')"></i>
+            </div>
+            <div class="form-group">
+                <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkDuplicates()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
+                <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkLinks()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
+                <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkAllIcons()"><i class="fas fa-icons"></i> 一键识别所有图标 (全站)</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="reportModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="reportTitle">检测报告</span>
+                <div style="display:flex; align-items:center; gap: 12px; margin-left: auto; margin-right: 15px;">
+                    <i class="fas fa-pause" id="pauseReportBtn" style="cursor: pointer; display: none; font-size: 18px; transition: 0.2s;" onclick="toggleCheckPause()" title="暂停/继续任务"></i>
+                    <i class="fas fa-copy" id="copyReportBtn" style="cursor: pointer; display: none; font-size: 18px; transition: color 0.2s, transform 0.2s;" onmouseover="this.style.color='var(--primary-color)';" onmouseout="this.style.color='';" onclick="copyReportContent()" title="复制报告内容"></i>
+                </div>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeReportModal()"></i>
+            </div>
+            <div id="reportSummary" style="margin-bottom: 10px; font-weight: bold;"></div>
+            <ul id="reportList" class="report-list"></ul>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeReportModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
