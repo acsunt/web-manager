@@ -38,18 +38,13 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -eu
-          ONLINE="网页管理-联网 v${VERSION}.html"
-          OFFLINE="网页管理-不联网 v${VERSION}.html"
+          export ONLINE="网页管理-联网 v${VERSION}.html"
+          export OFFLINE="网页管理-不联网 v${VERSION}.html"
           test -f "dist/${ONLINE}"
           test -f "dist/${OFFLINE}"
           ls -lh dist
-          NOTES="单文件下载：
+          export NOTES="单文件下载：
 
           - ${ONLINE}：需联网加载 Font Awesome / Cropper / Sortable / JSZip
           - ${OFFLINE}：依赖已内联，可离线双击打开"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --clobber
-            printf '%s\n' "$NOTES" | gh release edit "$TAG" --title "$TAG" --notes-file -
-          else
-            printf '%s\n' "$NOTES" | gh release create "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --title "$TAG" --notes-file -
-          fi
+          python3 scripts/publish-release.py
