@@ -37,18 +37,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
+          set -eu
           ONLINE="网页管理-联网 v${VERSION}.html"
           OFFLINE="网页管理-不联网 v${VERSION}.html"
-          NOTES=$(cat <<EOF
-          单文件下载：
+          test -f "dist/${ONLINE}"
+          test -f "dist/${OFFLINE}"
+          ls -lh dist
+          NOTES="单文件下载：
 
-          - \`${ONLINE}\`：需联网加载 Font Awesome / Cropper / Sortable / JSZip
-          - \`${OFFLINE}\`：依赖已内联，可离线双击打开
-          EOF
-          )
+          - ${ONLINE}：需联网加载 Font Awesome / Cropper / Sortable / JSZip
+          - ${OFFLINE}：依赖已内联，可离线双击打开"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --clobber
-            gh release edit "$TAG" --title "$TAG" --notes "$NOTES"
+            printf '%s\n' "$NOTES" | gh release edit "$TAG" --title "$TAG" --notes-file -
           else
-            gh release create "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --title "$TAG" --notes "$NOTES"
+            printf '%s\n' "$NOTES" | gh release create "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --title "$TAG" --notes-file -
           fi
