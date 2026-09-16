@@ -6,7 +6,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:all": "vitest run && playwright test"
+    "test:all": "vitest run && playwright test",
+    "version:check": "node scripts/check-version.mjs",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
