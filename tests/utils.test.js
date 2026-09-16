@@ -6,6 +6,7 @@ import {
   sanitizeData,
   isLocalUrl,
   normalizeWebUrl,
+  escapeHtml,
 } from '../utils.js';
 
 describe('normalizeUrls', () => {
@@ -149,5 +150,28 @@ describe('normalizeWebUrl', () => {
   it('空白返回空', () => {
     expect(normalizeWebUrl('')).toBe('');
     expect(normalizeWebUrl('   ')).toBe('');
+  });
+});
+
+describe('escapeHtml', () => {
+  it('转义 < > & " \'', () => {
+    expect(escapeHtml('<')).toBe('&lt;');
+    expect(escapeHtml('>')).toBe('&gt;');
+    expect(escapeHtml('&')).toBe('&amp;');
+    expect(escapeHtml('"')).toBe('&quot;');
+    expect(escapeHtml("'")).toBe('&#39;');
+  });
+
+  it('组合用户字符串按字面量转义', () => {
+    expect(escapeHtml('<img src=x onerror=alert(1)>')).toBe(
+      '&lt;img src=x onerror=alert(1)&gt;',
+    );
+    expect(escapeHtml(`a&b<"c"'d>`)).toBe('a&amp;b&lt;&quot;c&quot;&#39;d&gt;');
+  });
+
+  it('空值返回空字符串', () => {
+    expect(escapeHtml('')).toBe('');
+    expect(escapeHtml(null)).toBe('');
+    expect(escapeHtml(undefined)).toBe('');
   });
 });

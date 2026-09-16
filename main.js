@@ -9,7 +9,7 @@ import {
     sortNodesByPin,
 } from './tree.js';
 import { collectInlineHandlerNames, registerInlineHandlers, showToast } from './ui.js';
-import { countPages, countTotalPages, normalizeUrls, sanitizeData } from './utils.js';
+import { countPages, countTotalPages, escapeHtml, normalizeUrls, sanitizeData } from './utils.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
 let data = []; 
@@ -1097,24 +1097,71 @@ function handleSearchInput(val){
         searchRec(ws.data, '', wsDispName, ws.id);
     });
 
+    resultsDiv.innerHTML = '';
     if(matches.length>0){
-        resultsDiv.innerHTML=matches.map(m=>{
-            let icon='<i class="fas fa-file-lines"></i>'; 
-            if(m.node.type==='category') icon='<i class="fas fa-folder" style="color:#ffd43b"></i>'; 
-            else if(m.node.url || (m.node.urls && m.node.urls.length)) icon='<i class="fas fa-globe" style="color:#007bff"></i>';
-            
-            const urls = normalizeUrls(m.node); const mainUrl = urls.length > 0 ? urls[0].url : '';
-            const urlPreview=(m.node.type==='page'&&mainUrl)?`<span class="search-url-preview" style="margin-left:auto;color:#aaa;font-family:monospace; margin-right:5px;">${mainUrl}</span>`:'';
-            const noteHtml = (m.node.type === 'page' && m.node.note) ? `<div class="search-note-preview"><i class="fas fa-sticky-note" style="font-size:calc(10px * var(--text-scale, 1)); margin-right:4px; opacity:0.7;"></i>${m.node.note}</div>` : '';
-            
-            let subMatchHtml = '';
-            if (m.subMatch) {
-                const subName = m.subMatch.name || '链接';
-                subMatchHtml = `<div class="search-sub-match"><i class="fas fa-link" style="font-size:calc(10px * var(--text-scale, 1));margin-right:4px;"></i>匹配: <strong>${subName}</strong> - ${m.subMatch.url}</div>`;
-            }
+        matches.forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'search-item';
+            item.addEventListener('click', () => jumpToNode(m.node.id, m.wsId));
 
-            return `<div class="search-item" onclick="jumpToNode(${m.node.id}, '${m.wsId}')"><div style="font-weight:600;font-size:calc(14px * var(--text-scale, 1));margin-bottom:2px;display:flex;align-items:center;gap:6px;">${icon} ${m.node.name.replace(/\n/g,' ')}</div><div class="search-item-path" style="display:flex; align-items:center; width:100%;"><span style="flex-shrink:0;"><i class="fas fa-folder-open"></i> <span style="font-weight:bold;color:var(--primary-color);">[${m.wsName}]</span> ${m.path||'根目录'}</span><div style="flex-grow:1;"></div>${urlPreview}</div>${subMatchHtml}${noteHtml}</div>`
-        }).join('');
+            const title = document.createElement('div');
+            title.style.cssText = 'font-weight:600;font-size:calc(14px * var(--text-scale, 1));margin-bottom:2px;display:flex;align-items:center;gap:6px;';
+            const icon = document.createElement('i');
+            if (m.node.type === 'category') { icon.className = 'fas fa-folder'; icon.style.color = '#ffd43b'; }
+            else if (m.node.url || (m.node.urls && m.node.urls.length)) { icon.className = 'fas fa-globe'; icon.style.color = '#007bff'; }
+            else { icon.className = 'fas fa-file-lines'; }
+            const nameText = document.createElement('span');
+            nameText.textContent = String(m.node.name || '').replace(/\n/g, ' ');
+            title.append(icon, nameText);
+
+            const pathRow = document.createElement('div');
+            pathRow.className = 'search-item-path';
+            pathRow.style.cssText = 'display:flex; align-items:center; width:100%;';
+            const pathSpan = document.createElement('span');
+            pathSpan.style.flexShrink = '0';
+            const folderIcon = document.createElement('i');
+            folderIcon.className = 'fas fa-folder-open';
+            const wsLabel = document.createElement('span');
+            wsLabel.style.cssText = 'font-weight:bold;color:var(--primary-color);';
+            wsLabel.textContent = `[${m.wsName}]`;
+            pathSpan.append(folderIcon, document.createTextNode(' '), wsLabel, document.createTextNode(' ' + (m.path || '根目录')));
+            const spacer = document.createElement('div');
+            spacer.style.flexGrow = '1';
+            pathRow.append(pathSpan, spacer);
+
+            const urls = normalizeUrls(m.node);
+            const mainUrl = urls.length > 0 ? urls[0].url : '';
+            if (m.node.type === 'page' && mainUrl) {
+                const urlPreview = document.createElement('span');
+                urlPreview.className = 'search-url-preview';
+                urlPreview.style.cssText = 'margin-left:auto;color:#aaa;font-family:monospace; margin-right:5px;';
+                urlPreview.textContent = mainUrl;
+                pathRow.appendChild(urlPreview);
+            }
+            item.append(title, pathRow);
+
+            if (m.subMatch) {
+                const sub = document.createElement('div');
+                sub.className = 'search-sub-match';
+                const subIcon = document.createElement('i');
+                subIcon.className = 'fas fa-link';
+                subIcon.style.cssText = 'font-size:calc(10px * var(--text-scale, 1));margin-right:4px;';
+                const strong = document.createElement('strong');
+                strong.textContent = m.subMatch.name || '链接';
+                sub.append(subIcon, document.createTextNode('匹配: '), strong, document.createTextNode(' - ' + (m.subMatch.url || '')));
+                item.appendChild(sub);
+            }
+            if (m.node.type === 'page' && m.node.note) {
+                const note = document.createElement('div');
+                note.className = 'search-note-preview';
+                const noteIcon = document.createElement('i');
+                noteIcon.className = 'fas fa-sticky-note';
+                noteIcon.style.cssText = 'font-size:calc(10px * var(--text-scale, 1)); margin-right:4px; opacity:0.7;';
+                note.append(noteIcon, document.createTextNode(m.node.note));
+                item.appendChild(note);
+            }
+            resultsDiv.appendChild(item);
+        });
     }else{ resultsDiv.innerHTML='<div class="search-item" style="color:#999; cursor:default; text-align:center;">无搜索结果</div>'; }
 }
 
@@ -1323,7 +1370,7 @@ function openQuickAddWsModal() {
 
 function qaCreateWorkspace() {
     const rawVal = document.getElementById('qaWorkspaceName').value.trim() || '新主页'; const newId = 'ws_' + Date.now(); 
-    appData.workspaces.push({ id: newId, name: rawVal, group: '', data: [] }); save(); closeModal('quickAddWsModal'); showToast(`已创建主页: ${rawVal}`); renderWorkspaceList(); 
+    appData.workspaces.push({ id: newId, name: rawVal, group: '', data: [] }); save(); closeModal('quickAddWsModal'); showToast(`已创建主页: ${escapeHtml(rawVal)}`); renderWorkspaceList(); 
 }
 function qaCreateGroup() {
     const name = document.getElementById('qaGroupName').value.trim(); if (!name) return showToast('请输入主页分类名称');
@@ -1334,7 +1381,7 @@ function qaCreateCombo() {
     const gName = document.getElementById('qaComboGroupName').value.trim(); const wName = document.getElementById('qaComboWorkspaceName').value.trim() || '新主页';
     if (!gName) return showToast('请输入主页分类名称');
     if (!appData.workspaceGroups) appData.workspaceGroups = []; if (!appData.workspaceGroups.includes(gName)) { appData.workspaceGroups.push(gName); }
-    const newId = 'ws_' + Date.now(); appData.workspaces.push({ id: newId, name: wName, group: gName, data: [] }); save(); showToast(`已创建组合: [${gName}] ${wName}`); renderWorkspaceList(); closeModal('quickAddWsModal');
+    const newId = 'ws_' + Date.now(); appData.workspaces.push({ id: newId, name: wName, group: gName, data: [] }); save(); showToast(`已创建组合: [${escapeHtml(gName)}] ${escapeHtml(wName)}`); renderWorkspaceList(); closeModal('quickAddWsModal');
 }
 
 function changeWorkspaceGroup(id) { const ws = appData.workspaces.find(w => w.id === id); if (!ws) return; openWsGroupSelectModal(id, false); }
@@ -1395,7 +1442,7 @@ function switchWorkspace(id) {
     renderWorkspaceList(); 
     renderTree(); 
     const targetWs = appData.workspaces.find(w => w.id === id); 
-    showToast(`已切换到：<strong style="color:#ffc107">${targetWs.group ? targetWs.group + '/' : ''}${targetWs.name}</strong>`); 
+    showToast(`已切换到：<strong style="color:#ffc107">${escapeHtml(targetWs.group ? targetWs.group + '/' : '')}${escapeHtml(targetWs.name)}</strong>`); 
     closeModal('workspaceModal'); 
 }
 function renameWorkspace(id) { const ws = appData.workspaces.find(w => w.id === id); if (!ws) return; const newName = prompt("为其赋予一个新的主页名字:", ws.name); if (newName && newName.trim() !== "") { ws.name = newName.trim(); save(); renderWorkspaceList(); } }
@@ -1631,9 +1678,20 @@ function createNodeEl(node,level=0){
         
         const nameSpan=document.createElement('span');
         nameSpan.style.flexGrow='1'; nameSpan.style.marginLeft='5px'; nameSpan.style.fontWeight='600';
-        const pageCount=countPages(node);
-        const countHtml=`<span class="cat-count">(${pageCount})</span>`;
-        nameSpan.innerHTML=node.name.replace(/\n/g,'<br>')+countHtml+(node.isPinned?' <i class="fas fa-thumbtack" style="font-size:calc(12px * var(--text-scale, 1));color:#ffc107;"></i>':'');
+        const nameText=document.createElement('span');
+        nameText.className='cat-name-text';
+        nameText.textContent=node.name;
+        const countSpan=document.createElement('span');
+        countSpan.className='cat-count';
+        countSpan.textContent=`(${countPages(node)})`;
+        nameSpan.append(nameText, countSpan);
+        if(node.isPinned){
+            const pin=document.createElement('i');
+            pin.className='fas fa-thumbtack';
+            pin.style.fontSize='calc(12px * var(--text-scale, 1))';
+            pin.style.color='#ffc107';
+            nameSpan.append(' ', pin);
+        }
         
         const actions=document.createElement('div');
         actions.className='cat-actions'; actions.style.marginLeft='auto'; actions.style.gap='8px';
@@ -1688,16 +1746,30 @@ function createNodeEl(node,level=0){
         
         const nameDiv=document.createElement('div'); 
         nameDiv.className='page-name'; 
-        let nameHtml = node.name.replace(/\n/g,'<br>'); 
-        
-        let typeBadgeHtml = '';
         if (urls.length > 0) {
             const isLocal = mainUrl.toLowerCase().startsWith('file://') || /^[a-zA-Z]:[\\/]/.test(mainUrl);
-            if (isLocal) { typeBadgeHtml = `<span class="url-type-badge badge-local">本地</span>`; } else { typeBadgeHtml = `<span class="url-type-badge badge-web">网络</span>`; }
+            const typeBadge = document.createElement('span');
+            typeBadge.className = isLocal ? 'url-type-badge badge-local' : 'url-type-badge badge-web';
+            typeBadge.textContent = isLocal ? '本地' : '网络';
+            nameDiv.appendChild(typeBadge);
         }
-        if(node.isPinned) nameHtml += ' <i class="fas fa-thumbtack" style="font-size:calc(10px * var(--text-scale, 1));color:#ffc107;"></i>'; 
-        if(urls.length > 1) nameHtml += ` <span class="multi-url-badge">${urls.length}</span>`; 
-        nameDiv.innerHTML = typeBadgeHtml + nameHtml; 
+        const pageNameText=document.createElement('span');
+        pageNameText.className='page-name-text';
+        pageNameText.textContent=node.name;
+        nameDiv.appendChild(pageNameText);
+        if(node.isPinned){
+            const pin=document.createElement('i');
+            pin.className='fas fa-thumbtack';
+            pin.style.fontSize='calc(10px * var(--text-scale, 1))';
+            pin.style.color='#ffc107';
+            nameDiv.append(' ', pin);
+        }
+        if(urls.length > 1){
+            const multiBadge=document.createElement('span');
+            multiBadge.className='multi-url-badge';
+            multiBadge.textContent=String(urls.length);
+            nameDiv.append(' ', multiBadge);
+        }
         header.append(checkbox, nameDiv); 
         
         if (urls.length > 1) { 
@@ -1716,8 +1788,16 @@ function createNodeEl(node,level=0){
                 let iconClass = 'fas fa-link'; if (idx === 0) iconClass = 'fas fa-star'; 
                 let displayName = u.name || `链接 ${idx + 1}`; if (idx === 0 && !u.name) displayName = "主链接"; 
                 const isLocal = u.url.toLowerCase().startsWith('file://') || /^[a-zA-Z]:[\\/]/.test(u.url);
-                const typeSymbol = isLocal ? '<span class="url-type-badge badge-local" style="margin-right:6px;">本地</span>' : '<span class="url-type-badge badge-web" style="margin-right:6px;">网络</span>';
-                item.innerHTML = `<i class="${iconClass} sub-link-icon"></i> ${typeSymbol} <div style="flex-grow:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${displayName}</div>`; 
+                const subIcon = document.createElement('i');
+                subIcon.className = `${iconClass} sub-link-icon`;
+                const typeBadge = document.createElement('span');
+                typeBadge.className = isLocal ? 'url-type-badge badge-local' : 'url-type-badge badge-web';
+                typeBadge.style.marginRight = '6px';
+                typeBadge.textContent = isLocal ? '本地' : '网络';
+                const nameEl = document.createElement('div');
+                nameEl.style.cssText = 'flex-grow:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                nameEl.textContent = displayName;
+                item.append(subIcon, document.createTextNode(' '), typeBadge, document.createTextNode(' '), nameEl); 
                 item.title = u.url; 
                 item.onclick = (e) => { e.stopPropagation(); e.preventDefault(); handleUrlOpen(u.url, isOpenCurrentTab); }; 
                 subContainer.appendChild(item); 
@@ -1825,7 +1905,9 @@ function handleCategorySearch(val,dropdownId,hiddenInputId,displayInputId){
 
     if(matches.length > 0){
         matches.forEach(m => {
-            const item=document.createElement('div'); item.className='dropdown-item'; item.style.padding='8px 10px'; item.style.cursor='pointer'; item.style.fontSize='calc(13px * var(--text-scale, 1))'; item.innerHTML=`<i class="fas fa-folder" style="color:#ffd43b;margin-right:5px;"></i> ${m.name}`;
+            const item=document.createElement('div'); item.className='dropdown-item'; item.style.padding='8px 10px'; item.style.cursor='pointer'; item.style.fontSize='calc(13px * var(--text-scale, 1))';
+            const folderIcon=document.createElement('i'); folderIcon.className='fas fa-folder'; folderIcon.style.cssText='color:#ffd43b;margin-right:5px;';
+            item.append(folderIcon, document.createTextNode(' ' + m.name));
             item.onclick=()=>{ document.getElementById(hiddenInputId).value = `${m.wsId}|${m.id}`; document.getElementById(displayInputId).value = m.name; list.style.display='none'; }; list.appendChild(item);
         }); list.style.display='block';
     } else { list.style.display='none'; }
@@ -1848,7 +1930,9 @@ function openTreeSelectModal(targetInputId, displayInputId){
                 if (node.type === 'category') {
                     if (isExcludedMoveTarget(ws.id, node.id, targetInputId)) return;
 
-                    const div=document.createElement('div'); div.className='tree-select-item'; div.style.padding='8px'; div.style.cursor='pointer'; div.style.borderRadius='4px'; div.style.marginBottom='2px'; div.style.display='flex'; div.style.alignItems='center'; div.style.paddingLeft=(level*20+10)+'px'; div.innerHTML=`<i class="fas fa-folder" style="margin-right:8px;color:#ffd43b;"></i> ${node.name}`;
+                    const div=document.createElement('div'); div.className='tree-select-item'; div.style.padding='8px'; div.style.cursor='pointer'; div.style.borderRadius='4px'; div.style.marginBottom='2px'; div.style.display='flex'; div.style.alignItems='center'; div.style.paddingLeft=(level*20+10)+'px';
+                    const folderIcon=document.createElement('i'); folderIcon.className='fas fa-folder'; folderIcon.style.cssText='margin-right:8px;color:#ffd43b;';
+                    div.append(folderIcon, document.createTextNode(' ' + node.name));
                     div.onclick=()=>{ document.getElementById(targetInputId).value = `${ws.id}|${node.id}`; document.getElementById(displayInputId).value = `[${wsDispName}] ${node.name}`; closeModal('treeSelectModal'); };
                     container.appendChild(div); if(node.children) buildTreeHtml(node.children, level+1);
                 }
