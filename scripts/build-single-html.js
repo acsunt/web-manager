@@ -36,8 +36,8 @@ function formatSize(bytes) {
 
 function outputName(kind, version) {
     return kind === 'online'
-        ? `网页管理-联网 v${version}.html`
-        : `网页管理-不联网 v${version}.html`;
+        ? `wan-v${version}-yes.html`
+        : `wan-v${version}-no.html`;
 }
 
 async function fetchText(url) {
