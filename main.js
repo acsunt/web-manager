@@ -10,6 +10,14 @@ import {
 } from './tree.js';
 import { collectInlineHandlerNames, registerInlineHandlers, showToast } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
+import {
+    createDefaultAppData as createDefaultAppDataInWorkspace,
+    ensureWorkspaceGroups,
+    getCurrentWorkspaceTree,
+    migratePersistedAppData,
+    removeWorkspaceGroup,
+    removeWorkspacesByIds,
+} from './workspace.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
 let data = []; 
@@ -259,27 +267,10 @@ function endCategoryDrag() {
 function init() {
     document.body.style.opacity = '0';
     const saved = localStorage.getItem('webManagerDataProMax');
-    if (saved) {
-        try { 
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-                const defaultId = 'ws_' + Date.now();
-                appData = { workspaces: [ { id: defaultId, name: '主页', group: '', data: parsed } ], workspaceGroups: [], currentId: defaultId };
-                save(); 
-            } else if (parsed.workspaces) { 
-                appData = parsed; 
-                if (!appData.workspaceGroups) {
-                    appData.workspaceGroups = [];
-                    appData.workspaces.forEach(w => { if (w.group && !appData.workspaceGroups.includes(w.group)) appData.workspaceGroups.push(w.group); });
-                }
-            } else { appData = createDefaultAppData(); }
-        } catch(e) { appData = createDefaultAppData(); }
-    } else { appData = createDefaultAppData(); }
-    
-    if (!appData.workspaces.find(w => w.id === appData.currentId)) {
-        if (appData.workspaces.length > 0) { appData.currentId = appData.workspaces[0].id; } else { const def = createDefaultAppData(); appData.workspaces = def.workspaces; appData.workspaceGroups = def.workspaceGroups; appData.currentId = def.currentId; }
-    }
-    
+    const loaded = migratePersistedAppData(saved);
+    appData = loaded.appData;
+    if (loaded.didMigrateLegacyArray) save();
+
     updateDataPointer(); cleanDuplicates();
 
     const resolvedColumns = resolveColumnModes({
@@ -330,15 +321,9 @@ function init() {
     requestAnimationFrame(() => { document.body.style.opacity = '1'; document.documentElement.style.removeProperty('scroll-behavior'); });
 }
 
-function createDefaultAppData() {
-    const id = 'ws_' + Date.now();
-    return { workspaces: [{ id: id, name: '主页', group: '', data: [] }], workspaceGroups: [], currentId: id };
-}
+function createDefaultAppData() { return createDefaultAppDataInWorkspace(); }
 
-function updateDataPointer() {
-    const ws = appData.workspaces.find(w => w.id === appData.currentId);
-    if (ws) { data = ws.data; } else { data = []; }
-}
+function updateDataPointer() { data = getCurrentWorkspaceTree(appData); }
 
 function initToolbar() {
     const savedConfig = localStorage.getItem('webManagerToolbarConfig');
@@ -1313,7 +1298,7 @@ function renderWorkspaceList() {
     if(isWsSortItemMode) container.classList.add('ws-sort-item-active'); 
     if(isWsBatchMode) container.classList.add('ws-batch-active'); 
 
-    if(!appData.workspaceGroups) { appData.workspaceGroups = []; appData.workspaces.forEach(ws => { if (ws.group && !appData.workspaceGroups.includes(ws.group)) { appData.workspaceGroups.push(ws.group); } }); }
+    ensureWorkspaceGroups(appData);
 
     let totalPages = 0; let totalCats = 0;
     appData.workspaces.forEach(w => {
@@ -1420,10 +1405,8 @@ function renameWorkspaceGroup(oldName) {
 
 function deleteWorkspaceGroup(gName) {
     if (confirm(`【危险警告】\n\n确定要删除分类 "${gName}" 吗？\n注意：这会删除此分类下的 「所有主页及其包含数据」！`)) {
-        const idsToDelete = appData.workspaces.filter(ws => ws.group === gName).map(ws => ws.id); const isCurrentDeleted = idsToDelete.includes(appData.currentId);
-        appData.workspaces = appData.workspaces.filter(ws => ws.group !== gName); appData.workspaceGroups = appData.workspaceGroups.filter(g => g !== gName);
-        if (appData.workspaces.length === 0) { appData = createDefaultAppData(); appData.workspaces[0].name = "主页"; appData.currentId = appData.workspaces[0].id; data = appData.workspaces[0].data; } 
-        else if (isCurrentDeleted) { appData.currentId = appData.workspaces[0].id; updateDataPointer(); }
+        appData = removeWorkspaceGroup(appData, gName);
+        updateDataPointer();
         save(); renderTree(); renderWorkspaceList(); showToast("大分类及内容已删除");
     }
 }
@@ -1448,11 +1431,11 @@ function switchWorkspace(id) {
     closeModal('workspaceModal'); 
 }
 function renameWorkspace(id) { const ws = appData.workspaces.find(w => w.id === id); if (!ws) return; const newName = prompt("为其赋予一个新的主页名字:", ws.name); if (newName && newName.trim() !== "") { ws.name = newName.trim(); save(); renderWorkspaceList(); } }
-function deleteWorkspace(id) { const ws = appData.workspaces.find(w => w.id === id); if (confirm(`确定要删除主页 "${ws.name}" 及其所有数据吗？此操作不可撤销。`)) { const isCurrent = (id === appData.currentId); appData.workspaces = appData.workspaces.filter(w => w.id !== id); if (appData.workspaces.length === 0) { appData = createDefaultAppData(); appData.workspaces[0].name = "主页"; appData.currentId = appData.workspaces[0].id; data = appData.workspaces[0].data; } else if (isCurrent) { appData.currentId = appData.workspaces[0].id; updateDataPointer(); } save(); if (isCurrent || appData.workspaces.length === 1) { renderTree(); } renderWorkspaceList(); showToast("主页已被删除"); } }
+function deleteWorkspace(id) { const ws = appData.workspaces.find(w => w.id === id); if (confirm(`确定要删除主页 "${ws.name}" 及其所有数据吗？此操作不可撤销。`)) { const isCurrent = (id === appData.currentId); appData = removeWorkspacesByIds(appData, [id]); updateDataPointer(); save(); if (isCurrent || appData.workspaces.length === 1) { renderTree(); } renderWorkspaceList(); showToast("主页已被删除"); } }
 
 function wsToggleSelectAll(checkbox) { document.querySelectorAll('.ws-checkbox').forEach(cb => cb.checked = checkbox.checked); }
 function wsBatchChangeGroup() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先勾选需要操作的主页'); openWsGroupSelectModal('', true); }
-function wsBatchDelete() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先选择要删除主页'); if (confirm(`确定删除这 ${checked.length} 个主页吗？`)) { const idsToDelete = Array.from(checked).map(cb => cb.value); const isCurrentDeleted = idsToDelete.includes(appData.currentId); appData.workspaces = appData.workspaces.filter(w => !idsToDelete.includes(w.id)); if (appData.workspaces.length === 0) { appData = createDefaultAppData(); appData.workspaces[0].name = "主页"; appData.currentId = appData.workspaces[0].id; data = appData.workspaces[0].data; } else if (isCurrentDeleted) { appData.currentId = appData.workspaces[0].id; updateDataPointer(); } save(); renderTree(); renderWorkspaceList(); document.getElementById('wsSelectAllBox').checked = false; showToast("批量删除成功"); } }
+function wsBatchDelete() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先选择要删除主页'); if (confirm(`确定删除这 ${checked.length} 个主页吗？`)) { const idsToDelete = Array.from(checked).map(cb => cb.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); document.getElementById('wsSelectAllBox').checked = false; showToast("批量删除成功"); } }
 
 function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange']; sliders.forEach(id => { const el = document.getElementById(id); if(el) { const startAdjust = () => { document.body.classList.add('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.add('adjust-active'); }; const endAdjust = () => { document.body.classList.remove('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.remove('adjust-active'); }; el.addEventListener('mousedown', startAdjust); el.addEventListener('touchstart', startAdjust, {passive: true}); el.addEventListener('mouseup', endAdjust); el.addEventListener('touchend', endAdjust); } }); }
 function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (savedTheme) { try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...DEFAULT_THEME_CONFIG, darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...DEFAULT_THEME_CONFIG, ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); } } }
@@ -1646,7 +1629,7 @@ function updateClearSelectAllState() {
     selectAll.checked = workspaceChecks.length > 0 && selectedCount === workspaceChecks.length;
     selectAll.indeterminate = selectedCount > 0 && selectedCount < workspaceChecks.length;
 }
-function performClearSelectedWorkspaces() { const checks = document.querySelectorAll('.ws-clear-check:checked'); if (checks.length === 0) { alert("请先勾选需要删除的主页"); return; } if (confirm(`确定要删除这 ${checks.length} 个主页吗？`)) { const idsToDelete = Array.from(checks).map(c => c.value); const isCurrentDeleted = idsToDelete.includes(appData.currentId); appData.workspaces = appData.workspaces.filter(w => !idsToDelete.includes(w.id)); if (appData.workspaces.length === 0) { appData = createDefaultAppData(); appData.workspaces[0].name = "主页"; appData.currentId = appData.workspaces[0].id; data = appData.workspaces[0].data; } else if (isCurrentDeleted) { appData.currentId = appData.workspaces[0].id; updateDataPointer(); } save(); renderTree(); renderWorkspaceList(); showToast("选定主页已删除"); closeModal('clearDataOptionsModal'); } }
+function performClearSelectedWorkspaces() { const checks = document.querySelectorAll('.ws-clear-check:checked'); if (checks.length === 0) { alert("请先勾选需要删除的主页"); return; } if (confirm(`确定要删除这 ${checks.length} 个主页吗？`)) { const idsToDelete = Array.from(checks).map(c => c.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); showToast("选定主页已删除"); closeModal('clearDataOptionsModal'); } }
 function performClearData(type) { if (type === 'all') { if (confirm("确定要完全初始化系统吗？\n这将删除所有的资料、主页归属并重置所有主题参数。")) { appData = createDefaultAppData(); data = appData.workspaces[0].data; save(); themeConfig = { ...DEFAULT_THEME_CONFIG }; saveThemeConfig(); applyThemeSettings(); document.getElementById('darkModeToggle').checked = false; updateSliderValuesFromConfig(); updateBgPreviewUI(); renderTree(); renderWorkspaceList(); showToast("系统已完全重置", 1500); } } closeModal('clearDataOptionsModal'); }
 
 // ================= 树形视图渲染 =================

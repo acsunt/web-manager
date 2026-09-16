@@ -1,0 +1,21 @@
+[
+  {
+    "id": "cat-1",
+    "type": "category",
+    "name": "工作",
+    "children": [
+      {
+        "id": "page-1",
+        "type": "page",
+        "name": "文档",
+        "url": "https://example.com/docs"
+      }
+    ]
+  },
+  {
+    "id": "page-root",
+    "type": "page",
+    "name": "首页",
+    "url": "https://example.com"
+  }
+]
