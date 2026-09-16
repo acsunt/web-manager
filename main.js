@@ -9,7 +9,7 @@ import {
     sortNodesByPin,
 } from './tree.js';
 import { collectInlineHandlerNames, registerInlineHandlers, showToast } from './ui.js';
-import { countPages, countTotalPages, escapeHtml, normalizeUrls, sanitizeData } from './utils.js';
+import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
 let data = []; 
@@ -282,15 +282,16 @@ function init() {
     
     updateDataPointer(); cleanDuplicates();
 
-    if(localStorage.getItem('columnMode') !== null) {
-        listColumnMode = parseInt(localStorage.getItem('columnMode'));
-        iconColumnMode = parseInt(localStorage.getItem('columnMode'));
+    const resolvedColumns = resolveColumnModes({
+        columnMode: localStorage.getItem('columnMode'),
+        listColumnMode: localStorage.getItem('listColumnMode'),
+        iconColumnMode: localStorage.getItem('iconColumnMode'),
+    });
+    listColumnMode = resolvedColumns.listColumnMode;
+    iconColumnMode = resolvedColumns.iconColumnMode;
+    if (resolvedColumns.clearLegacyColumnMode) {
         localStorage.setItem('listColumnMode', listColumnMode);
-        localStorage.setItem('iconColumnMode', iconColumnMode);
         localStorage.removeItem('columnMode');
-    } else {
-        listColumnMode = localStorage.getItem('listColumnMode') !== null ? parseInt(localStorage.getItem('listColumnMode')) : 3;
-        iconColumnMode = localStorage.getItem('iconColumnMode') !== null ? parseInt(localStorage.getItem('iconColumnMode')) : 0;
     }
 
     wsColMode = localStorage.getItem('wsColMode') !== null ? parseInt(localStorage.getItem('wsColMode')) : 3; updateWsColBtn();
@@ -319,6 +320,7 @@ function init() {
     isIconMode = localStorage.getItem('webManagerIconMode') === 'true';
     iconShape = localStorage.getItem('webManagerIconShape') || 'square';
     applyIconMode();
+    applyColumnMode();
 
     loadThemeConfig(); applyThemeSettings(); initToolbar(); 
     renderTree(); document.body.classList.add('hide-urls');
@@ -2376,7 +2378,7 @@ function setColumnMode(val) {
 
 function applyColumnMode() { 
     const btn = document.getElementById('colModeBtn'); 
-    document.body.classList.remove('col-mode-1', 'col-mode-2', 'col-mode-3', 'col-mode-4', 'col-mode-5', 'col-mode-6', 'col-mode-7', 'col-mode-8'); 
+    document.body.classList.remove('col-mode-auto', 'col-mode-1', 'col-mode-2', 'col-mode-3', 'col-mode-4', 'col-mode-5', 'col-mode-6', 'col-mode-7', 'col-mode-8'); 
     
     let currentMode = isIconMode ? iconColumnMode : listColumnMode;
 
@@ -2385,6 +2387,7 @@ function applyColumnMode() {
         btn.innerHTML = `<i class="fas fa-columns"></i> <span>${currentMode}列</span>`; 
         btn.classList.add('active'); 
     } else { 
+        document.body.classList.add('col-mode-auto');
         btn.innerHTML = '<i class="fas fa-table-columns"></i> <span>自动</span>'; 
         btn.classList.remove('active'); 
     } 

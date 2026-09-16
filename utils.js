@@ -44,3 +44,30 @@ export function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+export const DEFAULT_LIST_COLUMN_MODE = 3;
+export const DEFAULT_ICON_COLUMN_MODE = 0;
+
+export function parseColumnMode(value, fallback) {
+    const n = parseInt(value, 10);
+    if (Number.isInteger(n) && n >= 0 && n <= 8) return n;
+    return fallback;
+}
+
+export function resolveColumnModes(storage = {}) {
+    const hasList = storage.listColumnMode != null;
+    const hasIcon = storage.iconColumnMode != null;
+    const legacy = storage.columnMode != null
+        ? parseColumnMode(storage.columnMode, null)
+        : null;
+
+    return {
+        listColumnMode: hasList
+            ? parseColumnMode(storage.listColumnMode, DEFAULT_LIST_COLUMN_MODE)
+            : (legacy ?? DEFAULT_LIST_COLUMN_MODE),
+        iconColumnMode: hasIcon
+            ? parseColumnMode(storage.iconColumnMode, DEFAULT_ICON_COLUMN_MODE)
+            : DEFAULT_ICON_COLUMN_MODE,
+        clearLegacyColumnMode: storage.columnMode != null,
+    };
+}

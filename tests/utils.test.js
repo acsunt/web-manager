@@ -7,6 +7,7 @@ import {
   isLocalUrl,
   normalizeWebUrl,
   escapeHtml,
+  resolveColumnModes,
 } from '../utils.js';
 
 describe('normalizeUrls', () => {
@@ -173,5 +174,57 @@ describe('escapeHtml', () => {
     expect(escapeHtml('')).toBe('');
     expect(escapeHtml(null)).toBe('');
     expect(escapeHtml(undefined)).toBe('');
+  });
+});
+
+describe('resolveColumnModes', () => {
+  it('无本地记录时：列表 3 列，图标自动', () => {
+    expect(resolveColumnModes({})).toEqual({
+      listColumnMode: 3,
+      iconColumnMode: 0,
+      clearLegacyColumnMode: false,
+    });
+  });
+
+  it('分别记住列表和图标列数', () => {
+    expect(resolveColumnModes({
+      listColumnMode: '4',
+      iconColumnMode: '6',
+    })).toEqual({
+      listColumnMode: 4,
+      iconColumnMode: 6,
+      clearLegacyColumnMode: false,
+    });
+  });
+
+  it('旧的单一列数只迁到列表，图标保持自动', () => {
+    expect(resolveColumnModes({ columnMode: '5' })).toEqual({
+      listColumnMode: 5,
+      iconColumnMode: 0,
+      clearLegacyColumnMode: true,
+    });
+  });
+
+  it('已有分项记录时忽略旧的单一列数', () => {
+    expect(resolveColumnModes({
+      columnMode: '2',
+      listColumnMode: '3',
+      iconColumnMode: '0',
+    })).toEqual({
+      listColumnMode: 3,
+      iconColumnMode: 0,
+      clearLegacyColumnMode: true,
+    });
+  });
+
+  it('非法值回退默认', () => {
+    expect(resolveColumnModes({
+      listColumnMode: 'abc',
+      iconColumnMode: '9',
+    })).toEqual({
+      listColumnMode: 3,
+      iconColumnMode: 0,
+      clearLegacyColumnMode: false,
+    });
   });
 });

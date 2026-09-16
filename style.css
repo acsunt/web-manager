@@ -140,7 +140,8 @@ body.theme-neumorphism .cat-btn:hover { background: var(--card-bg, var(--bg-colo
 .cat-count { font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary); margin-left: 6px; font-weight: normal; background: rgba(0,0,0,0.05); padding: 1px 6px; border-radius: 10px; display: none; }
 body.show-counts .cat-count { display: inline-block; }
 
-.pages-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: calc(10px * var(--ui-scale, 1)); padding: calc(5px * var(--ui-scale, 1)) 0; min-height: 10px; transition: 0.3s; }
+.pages-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(10px * var(--ui-scale, 1)); padding: calc(5px * var(--ui-scale, 1)) 0; min-height: 10px; transition: 0.3s; }
+body:not(.icon-mode).col-mode-auto .pages-container { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 
 /* ======== 列表模式的列数控制 ======== */
 body:not(.icon-mode).col-mode-1 .pages-container { grid-template-columns: repeat(1, 1fr); }
