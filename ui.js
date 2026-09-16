@@ -26,6 +26,19 @@ export function registerWindowHandlers(handlers) {
     Object.assign(window, handlers);
 }
 
+export function warnMissingInlineHandlers(handlers, expectedNames = new Set()) {
+    expectedNames.forEach((name) => {
+        if (name in handlers) return;
+        if (typeof window[name] !== 'undefined') return;
+        console.warn(`未找到界面事件函数: ${name}`);
+    });
+}
+
+export function registerInlineHandlers(handlers, expectedNames = new Set()) {
+    registerWindowHandlers(handlers);
+    warnMissingInlineHandlers(handlers, expectedNames);
+}
+
 export function collectInlineHandlerNames(root = document) {
     const eventAttributes = ['onclick', 'onchange', 'oninput', 'onblur', 'onfocus'];
     const names = new Set();

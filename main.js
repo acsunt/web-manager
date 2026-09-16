@@ -8,7 +8,7 @@ import {
     getAllPages,
     sortNodesByPin,
 } from './tree.js';
-import { collectInlineHandlerNames, registerWindowHandlers, showToast } from './ui.js';
+import { collectInlineHandlerNames, registerInlineHandlers, showToast } from './ui.js';
 import { countPages, countTotalPages, normalizeUrls, sanitizeData } from './utils.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
@@ -2685,8 +2685,140 @@ async function checkAllIcons() {
     document.getElementById('reportSummary').innerHTML=`<span style="color:#28a745"><i class="fas fa-check-circle"></i> 识别完成</span> <br><span style="font-size:13px; font-weight:normal;">成功: ${successCount} 个，失败: ${failCount} 个，已固化为图床链接。</span>`;
 }
 
-// 模块作用域不会自动暴露函数；仅注册 HTML 内联事件实际使用的接口。
-const inlineHandlerNames = collectInlineHandlerNames();
+// 模块作用域不会自动暴露函数；用显式表注册 HTML 内联事件，不再按名字 eval。
+const inlineHandlers = {
+    toggleEditMode,
+    openAddModal,
+    openToolsModal,
+    clearAllData,
+    openThemeModal,
+    toggleCountDisplay,
+    toggleLocalTagDisplay,
+    toggleUrlDisplay,
+    toggleNoteDisplay,
+    toggleBadgeDisplay,
+    toggleTestMode,
+    cycleTextAlign,
+    toggleOpenTarget,
+    toggleAutoRefresh,
+    openIconGlobalModal,
+    openImportExportModal,
+    openToolbarEditModal,
+    handleSearchInput,
+    handleSearchFocus,
+    handleSearchBlur,
+    clearSearch,
+    toggleExpandAll,
+    toggleSortMode,
+    toggleIconMode,
+    openWorkspaceModal,
+    openColModeMenu,
+    toggleToolbar,
+    toggleSelectAll,
+    batchSelectSiblings,
+    batchCopy,
+    openBatchMoveModal,
+    batchDelete,
+    hideContextMenu,
+    menuAction,
+    setColumnMode,
+    copyPageInfoFromModal,
+    openParsePasteModal,
+    closeModal,
+    toggleImgPanel,
+    updateIconPreview,
+    startUrlCrop,
+    fetchPageInfo,
+    toggleUrlSortMode,
+    addUrlRow,
+    openBatchAddUrlModal,
+    copyInput,
+    clearInput,
+    handleCategorySearch,
+    clearCategoryInput,
+    openTreeSelectModal,
+    updatePositionOptions,
+    saveData,
+    confirmIconCrop,
+    setGlobalIconShape,
+    applyBatchIconType,
+    applyBatchIconName,
+    confirmParsePaste,
+    confirmBatchAddUrls,
+    toggleToolbarColMode,
+    startToolbarSort,
+    confirmToolbarSort,
+    cancelToolbarSort,
+    confirmMove,
+    confirmDeleteCategory,
+    confirmBatchDelete,
+    openQuickAddWsModal,
+    toggleWsColMode,
+    toggleWsManageMode,
+    toggleWsSortMode,
+    toggleWsEditMode,
+    wsToggleSelectAll,
+    wsBatchChangeGroup,
+    wsBatchDelete,
+    renderWsGroupList,
+    confirmChangeWsGroup,
+    qaCreateWorkspace,
+    qaCreateGroup,
+    qaCreateCombo,
+    toggleExportList,
+    toggleExportBatchMode,
+    toggleExportSelectAll,
+    updateExportPreview,
+    copyExportText,
+    exportJsonFile,
+    exportIconSettings,
+    importFromFile,
+    performClearBg,
+    performClearSelectedWorkspaces,
+    performClearData,
+    exportThemeSettings,
+    importThemeSettings,
+    toggleDarkMode,
+    setTheme,
+    toggleSystemTextScale,
+    updateTextScale,
+    updateUiScale,
+    toggleThemeLock,
+    updateBgAdjustment,
+    handleBgUpload,
+    clearBackground,
+    applyBgUrl,
+    resetBgParams,
+    loadCssPreset,
+    deleteCssPreset,
+    clearAllCssPresets,
+    downloadCurrentCss,
+    downloadAllCssPresets,
+    importCustomCodeFile,
+    copyCss,
+    saveCssPreset,
+    applyCustomCssFromInput,
+    checkDuplicates,
+    checkLinks,
+    checkAllIcons,
+    toggleCheckPause,
+    copyReportContent,
+    closeReportModal,
+    confirmCrop,
+    toggleSelectAllClear,
+    saveToolbarCheckboxState,
+    copyRowName,
+    copyRowUrl,
+    setRowToTop,
+    keepOnlyThisRow,
+    removeUrlRow,
+    jumpToNode,
+    updateClearSelectAllState,
+    cropper: {
+        reset() { cropper?.reset(); },
+    },
+};
+const expectedInlineHandlerNames = collectInlineHandlerNames();
 [
     'saveToolbarCheckboxState',
     'copyRowName',
@@ -2696,18 +2828,8 @@ const inlineHandlerNames = collectInlineHandlerNames();
     'removeUrlRow',
     'jumpToNode',
     'updateClearSelectAllState',
-].forEach((name) => inlineHandlerNames.add(name));
-
-const inlineHandlers = {};
-inlineHandlerNames.forEach((name) => {
-    try {
-        const handler = eval(name);
-        if (typeof handler === 'function') inlineHandlers[name] = handler;
-    } catch (error) {
-        console.warn(`未找到界面事件函数: ${name}`, error);
-    }
-});
-registerWindowHandlers(inlineHandlers);
+].forEach((name) => expectedInlineHandlerNames.add(name));
+registerInlineHandlers(inlineHandlers, expectedInlineHandlerNames);
 
 // 页面依赖和事件均已注册后，再执行唯一初始化入口。
 init();
