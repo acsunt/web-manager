@@ -1,4 +1,13 @@
 import { fetchPageTitle, fetchProxyJson, request } from './api.js';
+import {
+    collectSelfAndDescendantIds as collectSelfAndDescendantIdsInTree,
+    cleanDuplicateIds,
+    deleteNode as deleteNodeInTree,
+    findNode as findNodeInTree,
+    findParent as findParentInTree,
+    getAllPages,
+    sortNodesByPin,
+} from './tree.js';
 import { collectInlineHandlerNames, registerWindowHandlers, showToast } from './ui.js';
 import { countPages, countTotalPages, normalizeUrls, sanitizeData } from './utils.js';
 
@@ -1398,7 +1407,7 @@ function wsBatchDelete() { const checked = document.querySelectorAll('.ws-checkb
 
 function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange']; sliders.forEach(id => { const el = document.getElementById(id); if(el) { const startAdjust = () => { document.body.classList.add('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.add('adjust-active'); }; const endAdjust = () => { document.body.classList.remove('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.remove('adjust-active'); }; el.addEventListener('mousedown', startAdjust); el.addEventListener('touchstart', startAdjust, {passive: true}); el.addEventListener('mouseup', endAdjust); el.addEventListener('touchend', endAdjust); } }); }
 function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (savedTheme) { try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...DEFAULT_THEME_CONFIG, darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...DEFAULT_THEME_CONFIG, ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); } } }
-function cleanDuplicates() { if(!data) return; const seen = new Set(); let isModified = false; function traverse(nodes) { if (!Array.isArray(nodes)) return; nodes.forEach(node => { if (!node.id || seen.has(String(node.id))) { node.id = Date.now() + Math.random(); isModified = true; } seen.add(String(node.id)); if (node.children) { traverse(node.children); } }); } traverse(data); if (isModified) { save(); } }
+function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
 function openToolsModal() { document.getElementById('toolsModal').classList.add('active'); }
 function toggleThemeLock(type) { if (type === 'img') { themeConfig.lockedImg = !themeConfig.lockedImg; } else if (type === 'content') { themeConfig.lockedContent = !themeConfig.lockedContent; } updateLockUI(); saveThemeConfig(); }
@@ -1595,8 +1604,6 @@ function performClearData(type) { if (type === 'all') { if (confirm("确定要�
 // 数据是唯一状态源；每次变更后从 data 重建 DOM，避免界面顺序与持久化结构脱节。
 function renderTree(){const root=document.getElementById('tree-root');root.innerHTML='';if(!data){return;}sortNodesByPin(data);const rootContainer=document.createElement('div');rootContainer.className='children-container';rootContainer.dataset.id='root';data.forEach(node=>rootContainer.appendChild(createNodeEl(node,0)));root.appendChild(rootContainer);updateSelectedCount();initSortable();updateTotalCountDisplay();}
 function updateTotalCountDisplay(){ const total = data ? countPages({children:data}) : 0; const floatDisplay = document.getElementById('totalFloatingCount'); if(floatDisplay) floatDisplay.innerText = `共 ${total} 个网页`; const btn = document.getElementById('countToggleBtn'); btn.innerHTML = `<i class="fas fa-hashtag"></i>`; }
-function sortNodesByPin(nodes){const pinned=nodes.filter(n=>n.isPinned);const unpinned=nodes.filter(n=>!n.isPinned);nodes.length=0;nodes.push(...pinned,...unpinned);nodes.forEach(n=>{if(n.children)sortNodesByPin(n.children);});}
-
 function createNodeEl(node,level=0){
     if(node.type==='category'){
         const container=document.createElement('div');
@@ -1769,18 +1776,7 @@ function initSortable(){
 function syncDomToData(){const seenIds=new Set();function readDomTree(container){const children=[];const catBlocks=Array.from(container.children).filter(el=>el.classList.contains('category-block'));catBlocks.forEach(block=>{const id=block.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode){const newNode={...originalNode,children:[]};const subContainer=block.querySelector(':scope > .children-container');if(subContainer)newNode.children=readDomTree(subContainer);children.push(newNode);}});const pageContainers=Array.from(container.children).filter(el=>el.classList.contains('pages-container'));pageContainers.forEach(pc=>{const pageCards=Array.from(pc.children).filter(el=>el.classList.contains('page-card'));pageCards.forEach(card=>{const id=card.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode)children.push(originalNode);});});return children;}const rootContainer=document.querySelector('#tree-root > .children-container');if(rootContainer){data=readDomTree(rootContainer);save();}}
 
 function collectSelfAndDescendantIds(id){
-    const ids = new Set();
-    const node = findNode(id);
-    if(!node) return ids;
-    ids.add(String(id));
-    (function walk(list){
-        if(!list) return;
-        list.forEach(n => {
-            ids.add(String(n.id));
-            if(n.children) walk(n.children);
-        });
-    })(node.children);
-    return ids;
+    return collectSelfAndDescendantIdsInTree(id, data);
 }
 
 function getExcludedCategoryIds(inputId){
@@ -1956,7 +1952,7 @@ function exportJsonFile(isAll = false){
 
 function copyInput(id,btn){const el=document.getElementById(id);if(el&&el.value){navigator.clipboard.writeText(el.value).then(()=>{const icon=btn.querySelector('i');const originalClass=icon.className;icon.className='fas fa-check';setTimeout(()=>icon.className=originalClass,1000);}).catch(()=>alert('复制失败'));}}
 function clearInput(id){document.getElementById(id).value='';document.getElementById(id).focus();}
-function getAllPages(nodes,path=''){let pages=[];nodes.forEach(n=>{const currentPath=path?(path+' > '+n.name):n.name;if(n.type==='page'){pages.push({...n,path:path||'根目录'});}else if(n.children){pages=pages.concat(getAllPages(n.children,currentPath));}});return pages;}
+
 
 function checkDuplicates(){
     closeModal('toolsModal'); let allPages = [];
@@ -2268,9 +2264,9 @@ function toggleEditMode() {
     if (!isEditMode) cancelSelection(); 
 }
 
-function findNode(id,list=data){for(let n of list){if(n.id==id)return n;if(n.children){const res=findNode(id,n.children);if(res)return res;}}return null;}
-function findParent(id,list=data,parent=null){for(let n of list){if(n.id==id)return parent;if(n.children){const res=findParent(id,n.children,n);if(res!==undefined)return res;}}return undefined;}
-function deleteNode(id,list=data){for(let i=0;i<list.length;i++){if(list[i].id==id){list.splice(i,1);return true;}if(list[i].children&&deleteNode(id,list[i].children)){return true;}}return false;}
+function findNode(id, list = data) { return findNodeInTree(id, list); }
+function findParent(id, list = data, parent = null) { return findParentInTree(id, list, parent); }
+function deleteNode(id, list = data) { return deleteNodeInTree(id, list); }
 function updateSelectedCount(){const count=document.querySelectorAll('.item-checkbox:checked').length;document.getElementById('selectedCount').innerText=`已选 ${count}`;}
 function toggleSelectAll(cb){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=cb.checked);updateSelectedCount();}
 function cancelSelection(){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=false);document.getElementById('selectAllBox').checked=false;updateSelectedCount();}
