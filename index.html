@@ -145,12 +145,7 @@
             </div>
             
             <div class="form-group" style="margin-bottom: 15px;">
-                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">
-                    <span>名称</span>
-                    <label style="font-weight:normal; font-size:calc(12px * var(--text-scale, 1)); display:flex; align-items:center;">
-                        <input type="checkbox" id="autoTitleCheck" checked style="margin-right:4px;">覆盖现有名称
-                    </label>
-                </label>
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">名称</label>
                 <div class="input-wrapper">
                     <textarea id="editName" class="form-control has-tools" rows="1" style="height:38px; resize:none;"></textarea>
                     <div class="input-tools">
@@ -158,6 +153,23 @@
                         <button class="note-tool-btn" onclick="clearInput('editName')"><i class="fas fa-times"></i></button>
                     </div>
                 </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">
+                    <span>识别到的名称</span>
+                    <label style="font-weight:normal; font-size:calc(12px * var(--text-scale, 1)); display:flex; align-items:center;">
+                        <input type="checkbox" id="autoTitleCheck" style="margin-right:4px;">覆盖现有名称
+                    </label>
+                </label>
+                <div class="input-wrapper">
+                    <textarea id="editRecognizedName" class="form-control has-tools" rows="1" placeholder="自动识别后回填，可手动修改..." style="height:38px; resize:none;"></textarea>
+                    <div class="input-tools">
+                        <button class="note-tool-btn" onclick="copyInput('editRecognizedName', this)"><i class="fas fa-copy"></i></button>
+                        <button class="note-tool-btn" onclick="clearInput('editRecognizedName')"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <div class="text-muted" style="margin-top:5px; color: var(--text-secondary); font-size: calc(11px * var(--text-scale, 1));">勾选「覆盖现有名称」后，保存时会用此识别名称替换上面「名称」字段。</div>
             </div>
             
             <div class="form-group" id="noteGroup" style="margin-bottom: 15px;">
@@ -262,6 +274,26 @@
                 </div>
                 <button class="btn primary" style="width:100%; margin-top: 15px; justify-content:center;" onclick="applyBatchIconType()">应用批量修改</button>
             </div>
+            <hr style="border:0; border-top:1px dashed var(--border-color); margin:15px 0;">
+            <div class="form-group">
+                <label style="font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">批量统一修改名称显示</label>
+                <div style="display:flex; gap: 10px; margin-top: 10px; font-size: calc(13px * var(--text-scale, 1)); flex-wrap: wrap;">
+                    <label><input type="radio" name="batchIconNameTarget" value="nonAuto" checked> 仅非自动获取</label>
+                    <label><input type="radio" name="batchIconNameTarget" value="all"> 所有网页</label>
+               </div>
+                <div style="display:flex; gap: 10px; margin-top: 10px; font-size: calc(13px * var(--text-scale, 1)); flex-wrap: wrap;">
+                    <label><input type="radio" name="batchIconNameSource" value="manual" checked onchange="document.getElementById('batchIconManualNameGroup').style.display = this.checked ? 'block' : 'none';"> 填写名称</label>
+                    <label><input type="radio" name="batchIconNameSource" value="recognized" onchange="document.getElementById('batchIconManualNameGroup').style.display = 'none';"> 识别到的名称</label>
+                    <label><input type="radio" name="batchIconNameSource" value="none" onchange="document.getElementById('batchIconManualNameGroup').style.display = 'none';"> 不变</label>
+               </div>
+                <div id="batchIconManualNameGroup" style="margin-top:10px;">
+                    <input type="text" id="batchIconManualNameInput" class="form-control" placeholder="输入要统一填写的名称（可包含 %d 作为序号占位符）...">
+                    <div class="text-muted" style="margin-top:5px; color: var(--text-secondary); font-size: calc(11px * var(--text-scale, 1));">提示：使用 <code>%d</code> 会替换为该网页在树中的序号，从 1 开始。</div>
+               </div>
+                <button class="btn primary" style="width:100%; margin-top: 15px; justify-content:center;" onclick="applyBatchIconName()">应用批量名称</button>
+           </div>
+
+            </div>
         </div>
     </div>
 
@@ -273,7 +305,72 @@
     <div id="treeSelectModal" class="modal"><div class="modal-content"><div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;"><span>选择位置</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('treeSelectModal')"></i></div><div id="treeSelectContent" class="tree-select-container" style="padding: 10px; max-height: 300px; overflow-y: auto;"></div></div></div>
     <div id="moveModal" class="modal"><div class="modal-content"><div class="modal-header"><span>移动到</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('moveModal')"></i></div><div class="form-group"><div class="form-input-group" style="display: flex; gap: 8px; position: relative;"><div style="flex-grow:1; position:relative;"><input type="text" id="moveSearchInput" class="form-control" placeholder="输入搜索或点击右侧..." oninput="handleCategorySearch(this.value, 'moveDropdownList', 'selectedMoveTargetId', 'moveSearchInput')" autocomplete="off"><i class="fas fa-times clear-input-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: none;" onclick="clearCategoryInput('moveSearchInput', 'selectedMoveTargetId', 'moveDropdownList')"></i><div id="moveDropdownList" class="dropdown-list" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 10; display: none;"></div></div><button class="btn" onclick="openTreeSelectModal('selectedMoveTargetId', 'moveSearchInput')"><i class="fas fa-sitemap"></i></button></div><input type="hidden" id="selectedMoveTargetId"></div><div style="text-align: right; margin-top: 15px;"><button class="btn" onclick="closeModal('moveModal')">取消</button><button class="btn primary" onclick="confirmMove()">确定</button></div></div></div>
     
-    <div id="workspaceModal" class="modal"> 
+    <!-- 删除分类确认 模态框 -->
+    <div id="deleteCategoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="font-size: 18px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="deleteCategoryTitle">删除分类</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('deleteCategoryModal')</i>
+           </div>
+            <p style="color:var(--text-secondary); margin-bottom:20px;">该分类下包含子内容，请选择操作：</p>
+            <input type="hidden" id="deleteCategoryId">
+            <div class="form-group">
+                <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmDeleteCategory('all')"><i class="fas fa-trash-can</i> 删除分类及所有内容</button>
+                <div style="display:flex; align-items:center; margin: 15px 0;">
+                    <hr style="flex:1; border:0; border-top:1px solid var(--border-color);">
+                    <span style="padding:0 10px; color:var(--text-secondary); font-size:12px;">或者</span>
+                    <hr style="flex:1; border:0; border-top:1px solid var(--border-color);">
+               </div>
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px;">将内容移动到：</label>
+                <div class="form-input-group" style="display: flex; gap: 8px; position: relative;">
+                    <div style="flex-grow:1; position:relative;">
+                        <input type="text" id="delMoveInput" class="form-control" placeholder="输入搜索或点击右侧选择..." oninput="handleCategorySearch(this.value, 'delMoveDropdownList', 'delMoveTargetId', 'delMoveInput')" autocomplete="off" style="cursor: pointer;" onclick="openTreeSelectModal('delMoveTargetId', 'delMoveInput')">
+                        <i class="fas fa-times clear-input-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; display: none;" onclick="clearCategoryInput('delMoveInput', 'delMoveTargetId', 'delMoveDropdownList')</i>
+                        <div id="delMoveDropdownList" class="dropdown-list" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 10; display: none; margin-top: 2px</div>
+                   </div>
+                    <button class="btn" onclick="openTreeSelectModal('delMoveTargetId', 'delMoveInput')"><i class="fas fa-sitemap</i</button>
+               </div>
+                <input type="hidden" id="delMoveTargetId">
+                <button class="btn primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="confirmDeleteCategory('move')"><i class="fas fa-arrow-right-to-bracket</i> 移动内容并删除分类</button>
+           </div>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeModal('deleteCategoryModal')">取消</button>
+           </div>
+       </div>
+   </div>
+
+    <!-- 批量删除增强 模态框 -->
+    <div id="batchDeleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="font-size: 18px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>批量删除</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('batchDeleteModal')</i>
+           </div>
+            <p id="batchDeleteSummary" style="color:var(--text-secondary); margin-bottom:15px; font-size:13px;">选中的项目中包含 <strong style="color:#dc3545">非空分类</strong>，请选择处理方式：</p>
+            <div class="form-group">
+                <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmBatchDelete('emptyOnly')"><i class="fas fa-filter</i> 仅删除空分类和普通网页</button>
+                <div class="text-muted" style="margin-bottom:15px; text-align:center; color: var(--text-secondary); font-size: 12px;">(保留非空分类</div>
+                <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmBatchDelete('all')"><i class="fas fa-trash-can</i> 删除所有选中项</button>
+                <div class="text-muted" style="margin-bottom:15px; text-align:center; color: var(--text-secondary); font-size: 12px;">(包括分类内的所有内容</div>
+                <hr style="border:0; border-top:1px solid var(--border-color); margin:15px 0;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px;">移动非空分类的内容到：</label>
+                <div class="form-input-group" style="display: flex; gap: 8px; position: relative;">
+                    <div style="flex-grow:1; position:relative;">
+                        <input type="text" id="batchDelMoveInput" class="form-control" placeholder="输入搜索或点击右侧选择..." oninput="handleCategorySearch(this.value, 'batchDelMoveDropdownList', 'batchDelMoveTargetId', 'batchDelMoveInput')" autocomplete="off" style="cursor: pointer;" onclick="openTreeSelectModal('batchDelMoveTargetId', 'batchDelMoveInput')">
+                        <i class="fas fa-times clear-input-btn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; display: none;" onclick="clearCategoryInput('batchDelMoveInput', 'batchDelMoveTargetId', 'batchDelMoveDropdownList')</i>
+                        <div id="batchDelMoveDropdownList" class="dropdown-list" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 10; display: none; margin-top: 2px</div>
+                   </div>
+                    <button class="btn" onclick="openTreeSelectModal('batchDelMoveTargetId', 'batchDelMoveInput')"><i class="fas fa-sitemap</i</button>
+               </div>
+                <input type="hidden" id="batchDelMoveTargetId">
+                <button class="btn primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="confirmBatchDelete('move')"><i class="fas fa-arrow-right-to-bracket</i> 移动内容并删除</button>
+           </div>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeModal('batchDeleteModal')">取消</button>
+           </div>
+       </div>
+   </div>
+<div id="workspaceModal" class="modal"> 
         <div class="modal-content"> 
             <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"> 
                 <span>主页管理</span> 

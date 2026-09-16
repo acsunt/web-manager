@@ -619,16 +619,15 @@ async function fetchPageInfo() {
     if (autoRadio.checked) updateIconPreview();
 
     try {
-        const title = await fetchPageTitle(targetUrl, { timeout: 3000 });
-        const autoCheck = document.getElementById('autoTitleCheck');
-        const nameInput = document.getElementById('editName');
-        if (title && (autoCheck.checked || !nameInput.value)) {
-            nameInput.value = title;
+        const title = await fetchPageTitleFor(targetUrl);
+        const recognizedInput = document.getElementById('editRecognizedName');
+        if (title && recognizedInput) {
+            recognizedInput.value = title;
             if(document.querySelector('input[name="iconType"]:checked').value === 'letter') updateIconPreview();
-            showToast('标题已自动提取');
+            showToast('标题已填入「识别到的名称」');
         }
     } catch (error) {
-        if (error.name === 'AbortError') showToast('获取标题超时 (3秒)');
+        if (error.name === 'AbortError') showToast('获取标题超时');
         else console.log('拉取标题失败(CORS或无内容)', error);
     } finally {
         btn.innerHTML = originalText;
@@ -736,7 +735,7 @@ function applyBatchIconType() {
     const type = document.querySelector('input[name="batchIconType"]:checked').value;
     const url = document.getElementById('batchIconUrlInput').value.trim();
     if (type === 'custom' && !url) { return showToast("请输入图床链接"); }
-    
+
     let count = 0;
     appData.workspaces.forEach(ws => {
         function traverse(nodes) {
@@ -744,13 +743,13 @@ function applyBatchIconType() {
                 if (n.type === 'page') {
                     let currentType = n.iconType || 'auto';
                     let shouldModify = false;
-                    
+
                     if (target === 'all') {
                         shouldModify = true;
                     } else {
                         if (currentType !== 'auto') shouldModify = true;
                     }
-                    
+
                     if (shouldModify) {
                         n.iconType = type;
                         if (type === 'custom') {
@@ -766,17 +765,193 @@ function applyBatchIconType() {
         }
         if (ws.data) traverse(ws.data);
     });
-    
+
     save();
     renderTree();
     showToast(`已成功修改 ${count} 个网页的图标配置`);
     closeModal('iconGlobalModal');
 }
 
+// ================= 名称识别共享逻辑 =================
+// 字典 + allorigins 解析 <title> + 域名首段兜底，被 checkAllIcons / applyBatchIconName / fetchPageInfo 共用。
+const COMMON_SITES_DICTIONARY = {
+    baidu: '百度', taobao: '淘宝', jd: '京东', qq: '腾讯',
+    bilibili: '哔哩哔哩', weibo: '新浪微博', zhihu: '知乎',
+    douyin: '抖音', github: 'GitHub', '163': '网易',
+    sohu: '搜狐', smzdm: '什么值得买', xiaohongshu: '小红书',
+    alipay: '支付宝', gitee: '码云', csdn: 'CSDN',
+    youtube: 'YouTube', google: 'Google', microsoft: '微软',
+    apple: 'Apple', twitter: 'Twitter', facebook: 'Facebook', tiktok: 'TikTok'
+};
+
+async function fetchPageTitleFor(url) {
+    let domain = '';
+    try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+    for (const key in COMMON_SITES_DICTIONARY) {
+        if (domain === key || domain.endsWith('.' + key)) return COMMON_SITES_DICTIONARY[key];
+    }
+    try {
+        const data = await fetchProxyJson(url, { timeout: 4000 });
+        const html = data && data.contents;
+        if (html) {
+            const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+            if (m && m[1]) {
+                const ta = document.createElement('textarea');
+                ta.innerHTML = m[1].trim();
+                return ta.value;
+            }
+        }
+    } catch (e) { /* 静默失败，继续兜底 */ }
+    const first = domain.split('.')[0];
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
+}
+
+function resolveBatchNameTemplate(template, index) {
+    if (!template) return '';
+    return String(template).replace(/%d/g, String(index));
+}
+
+async function applyBatchIconName() {
+    const target = document.querySelector('input[name="batchIconNameTarget"]:checked').value;
+    const source = document.querySelector('input[name="batchIconNameSource"]:checked').value;
+    const manualName = document.getElementById('batchIconManualNameInput').value.trim();
+
+    if (source === 'manual' && !manualName) {
+        return showToast('请输入要统一填写的名称');
+    }
+
+    const targets = [];
+    appData.workspaces.forEach(ws => {
+        function traverse(nodes) {
+            nodes.forEach(n => {
+                if (n.type !== 'page') {
+                    if (n.children) traverse(n.children);
+                    return;
+                }
+                const currentType = n.iconType || 'auto';
+                if (target === 'all' || currentType !== 'auto') {
+                    targets.push(n);
+                }
+            });
+        }
+        if (ws.data) traverse(ws.data);
+    });
+
+    if (targets.length === 0) return showToast('未找到符合条件的网页');
+
+    if (source === 'none') {
+        targets.forEach(n => { delete n.recognizedName; });
+        save();
+        renderTree();
+        showToast(`已清空 ${targets.length} 个网页的识别名称`);
+        closeModal('iconGlobalModal');
+        return;
+    }
+
+    closeModal('iconGlobalModal');
+    const reportModal = document.getElementById('reportModal');
+    const listEl = document.getElementById('reportList');
+    const summaryEl = document.getElementById('reportSummary');
+    document.getElementById('reportTitle').innerText = '批量统一修改名称显示';
+    const copyBtn = document.getElementById('copyReportBtn');
+    if (copyBtn) copyBtn.style.display = 'none';
+    const pauseBtn = document.getElementById('pauseReportBtn');
+    if (pauseBtn) pauseBtn.style.display = 'none';
+    listEl.innerHTML = '';
+    summaryEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在处理 (0/${targets.length})...`;
+    reportModal.classList.add('active');
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[<>]/g, c => ({ '<': '&lt;', '>': '&gt;' })[c]);
+
+    let successCount = 0;
+    let failCount = 0;
+    let index = 0;
+    const total = targets.length;
+    const CONCURRENCY = 5;
+
+    async function worker() {
+        while (index < total) {
+            const i = index++;
+            const page = targets[i];
+            const finalName = resolveBatchNameTemplate(manualName, i + 1);
+            const li = document.createElement('li');
+            li.className = 'report-item icon-result-item';
+
+            if (source === 'manual') {
+                page.name = finalName;
+                delete page.recognizedName;
+                successCount++;
+                li.innerHTML =
+                    '<div class="icon-result-info">' +
+                        '<div class="report-recognized-title" style="font-size:calc(13px * var(--text-scale, 1)); color:var(--primary-color); font-weight:600;">' + esc(finalName) + '</div>' +
+                        '<div class="report-loc" style="color:var(--text-color);">' + esc(page.name) + '</div>' +
+                        '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-success">已写入</span></div>' +
+                    '</div>';
+            } else {
+                const urls = normalizeUrls(page);
+                let mainUrl = urls.length > 0 ? urls[0].url.trim() : '';
+                if (!mainUrl) {
+                    failCount++;
+                    li.innerHTML =
+                        '<div class="icon-result-info">' +
+                            '<div class="report-loc">' + esc(page.name || '(无名称)') + '</div>' +
+                            '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-error">失败</span> 无可用网址</div>' +
+                        '</div>';
+                    listEl.appendChild(li);
+                    summaryEl.innerHTML = `正在处理 (${successCount + failCount}/${total})...`;
+                    continue;
+                }
+                if (!/^https?:\/\//i.test(mainUrl)) mainUrl = 'http://' + mainUrl;
+                try {
+                    const recognized = await fetchPageTitleFor(mainUrl);
+                    if (recognized) {
+                        page.recognizedName = recognized;
+                        successCount++;
+                        li.innerHTML =
+                            '<div class="icon-result-info">' +
+                                '<div class="report-recognized-title" style="font-size:calc(13px * var(--text-scale, 1)); color:var(--primary-color); font-weight:600;">' + esc(recognized) + '</div>' +
+                                '<div class="report-loc" style="color:var(--text-color);">' + esc(page.name || '(无名称)') + '</div>' +
+                                '<div class="report-url" style="color:var(--primary-color); margin-top:2px;">' + esc(mainUrl) + '</div>' +
+                                '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-success">已识别</span></div>' +
+                            '</div>';
+                    } else {
+                        failCount++;
+                        li.innerHTML =
+                            '<div class="icon-result-info">' +
+                                '<div class="report-loc">' + esc(page.name || '(无名称)') + '</div>' +
+                                '<div class="report-url" style="color:#dc3545; margin-top:2px;">' + esc(mainUrl) + '</div>' +
+                                '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-error">失败</span> 未能识别</div>' +
+                            '</div>';
+                    }
+                } catch (e) {
+                    failCount++;
+                    li.innerHTML =
+                        '<div class="icon-result-info">' +
+                            '<div class="report-loc">' + esc(page.name || '(无名称)') + '</div>' +
+                            '<div class="report-url" style="color:#dc3545; margin-top:2px;">' + esc(mainUrl) + '</div>' +
+                            '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-error">失败</span> ' + esc(e.message || e.name || '') + '</div>' +
+                        '</div>';
+                }
+            }
+            listEl.appendChild(li);
+            summaryEl.innerHTML = `正在处理 (${successCount + failCount}/${total})...`;
+        }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+    save();
+    renderTree();
+    summaryEl.innerHTML = `<i class="fas fa-check-circle" style="color:#28a745;"></i> 处理完成：成功 ${successCount}，失败 ${failCount}`;
+}
+
 // ================= 网页与分类的保存流程 =================
 // 新增和编辑共用此入口：先规范化网址并检查重复，再更新树结构和持久化数据。
 function saveData(){
-    const name=document.getElementById('editName').value; const note=document.getElementById('editNote').value; const parentId=document.getElementById('selectedParentId').value;
+    const recognizedRaw = (document.getElementById('editRecognizedName')?.value || '').trim();
+    const autoOverwrite = document.getElementById('autoTitleCheck').checked;
+    const nameRaw = document.getElementById('editName').value;
+    const name = (autoOverwrite && recognizedRaw) ? recognizedRaw : nameRaw;
+    const note=document.getElementById('editNote').value; const parentId=document.getElementById('selectedParentId').value;
     const relPos = document.querySelector('input[name="relPosition"]:checked').value; const addToTop = (document.querySelector('input[name="insidePos"]:checked').value === 'top'); const editPos = document.querySelector('input[name="editPos"]:checked') ? document.querySelector('input[name="editPos"]:checked').value : 'keep';
     
     let currentType = isAdding ? addType : document.getElementById('editType').value;
@@ -838,11 +1013,12 @@ function saveData(){
             }
         }
         
-        const newNode = { 
-            id:Date.now(), type:addType, name:name, children:addType==='category'?[]:undefined, 
-            urls:addType==='page'?newUrls:undefined, url:addType==='page'?(newUrls.length>0?newUrls[0].url:'') : undefined, 
+        const newNode = {
+            id:Date.now(), type:addType, name:name, children:addType==='category'?[]:undefined,
+            urls:addType==='page'?newUrls:undefined, url:addType==='page'?(newUrls.length>0?newUrls[0].url:'') : undefined,
             note:addType==='page'?note:undefined, isPinned:false, collapsed:false,
-            iconType: addType==='page'?iconType:undefined, customIcon: addType==='page'?customIcon:undefined
+            iconType: addType==='page'?iconType:undefined, customIcon: addType==='page'?customIcon:undefined,
+            recognizedName: addType==='page'?(recognizedRaw||undefined):undefined
         };
         if (insertIndex !== -1) { if (relPos === 'before') targetList.splice(insertIndex, 0, newNode); else targetList.splice(insertIndex + 1, 0, newNode); } else { if (addToTop) targetList.unshift(newNode); else targetList.push(newNode); }
         changeMsg = addType==='page' ? `已保存 (新增 ${newUrls.length} 个网址)` : '分类已添加';
@@ -853,6 +1029,7 @@ function saveData(){
             if(node.type==='page'){
                 node.urls = newUrls; node.url = newUrls.length > 0 ? newUrls[0].url : ''; node.note = note;
                 node.iconType = iconType; node.customIcon = customIcon;
+                node.recognizedName = recognizedRaw || undefined;
                 const newJson = JSON.stringify(newUrls);
                 if (oldJson !== newJson) changeMsg = (newUrls.length !== oldUrls.length) ? `网址数量变化: ${oldUrls.length} -> ${newUrls.length}` : '网址更新成功'; else changeMsg = '修改已保存';
             } else { changeMsg = '已保存'; }
@@ -1836,11 +2013,14 @@ async function checkLinks(){
 function menuAction(action){
     hideContextMenu(); const id=activeContextNodeId; const node=findNode(id); if(!node)return;
     if(action==='pin'){ node.isPinned=!node.isPinned; save(); renderTree(); }
-    else if(action==='edit'){ 
-        isAdding=false; currentEditId=id; document.getElementById('modalTitle').innerText='编辑'; document.getElementById('editType').value = node.type; 
-        document.getElementById('editName').value=node.name; document.getElementById('editNote').value=node.note||''; 
-        document.getElementById('urlGroup').style.display=node.type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=node.type==='page'?'block':'none'; 
-        document.getElementById('parentSelectGroup').style.display='block'; document.getElementById('parentDropdownList').style.display='none'; 
+    else if(action==='edit'){
+        isAdding=false; currentEditId=id; document.getElementById('modalTitle').innerText='编辑'; document.getElementById('editType').value = node.type;
+        document.getElementById('editName').value=node.name; document.getElementById('editNote').value=node.note||'';
+        const recognizedInput = document.getElementById('editRecognizedName');
+        if (recognizedInput) recognizedInput.value = node.recognizedName || '';
+        document.getElementById('autoTitleCheck').checked = false;
+        document.getElementById('urlGroup').style.display=node.type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=node.type==='page'?'block':'none';
+        document.getElementById('parentSelectGroup').style.display='block'; document.getElementById('parentDropdownList').style.display='none';
         
         document.getElementById('iconEditGroup').style.display=node.type==='page'?'block':'none';
         if(node.type === 'page') {
@@ -1872,8 +2052,20 @@ function menuAction(action){
     }else if(action==='move'){
         window.singleMoveId=id; document.getElementById('selectedMoveTargetId').value=''; document.getElementById('moveSearchInput').value=''; document.getElementById('moveDropdownList').style.display='none'; document.getElementById('moveModal').classList.add('active');
     }else if(action==='delete'){
-        if(node.type==='category'&&node.children&&node.children.length>0){
-            window.deletingCategoryId=id; document.getElementById('deleteCategoryId').value=id; document.getElementById('delMoveInput').value=''; document.getElementById('delMoveTargetId').value=''; document.getElementById('deleteCategoryModal').classList.add('active');
+        if(node.type==='category' && node.children && node.children.length>0){
+            // 仅当分类里有真实网页（非空叶子节点）时才走二次确认；否则直接 confirm 删除即可。
+            const pageCount = countTotalPages(node.children);
+            if(pageCount > 0){
+                window.deletingCategoryId=id;
+                document.getElementById('deleteCategoryId').value=id;
+                document.getElementById('delMoveInput').value='';
+                document.getElementById('delMoveTargetId').value='';
+                const titleEl = document.getElementById('deleteCategoryTitle');
+                if(titleEl) titleEl.innerText = `删除分类「${node.name}」（含 ${pageCount} 个网页）`;
+                document.getElementById('deleteCategoryModal').classList.add('active');
+            } else {
+                if(confirm(`分类 "${node.name}" 内没有网页，确认删除该分类吗？`)){ deleteNode(id); save(); renderTree(); }
+            }
         }else{
             if(confirm(`确定删除 "${node.name}" 吗？`)){ deleteNode(id); save(); renderTree(); }
         }
@@ -1911,20 +2103,46 @@ function confirmMove(){
 function confirmDeleteCategory(mode){
     const id = document.getElementById('deleteCategoryId').value; const node = findNode(id); if(!node) return;
     if(mode === 'all'){
-        if(confirm('确定删除该分类及其所有子内容吗？此操作不可恢复。')){ deleteNode(id); save(); renderTree(); closeModal('deleteCategoryModal'); }
-    } else if(mode === 'move'){
-        const rawTargetId = document.getElementById('delMoveTargetId').value; let targetWsId = appData.currentId, targetCatId = '';
-        if (rawTargetId && rawTargetId.includes('|')) { const parts = rawTargetId.split('|'); targetWsId = parts[0]; targetCatId = parts[1]; }
-        const targetWs = appData.workspaces.find(w => w.id === targetWsId); if (!targetWs) return alert('目标位置无效');
+        if(confirm('确定删除该分类及其所有子内容吗？此操作不可恢复。')){ deleteNode(id); save(); renderTree(); closeModal('deleteCategoryModal'); showToast('已删除分类及其内容'); }
+        return;
+    }
+    if(mode === 'move'){
+        const rawTargetId = document.getElementById('delMoveTargetId').value;
+        if(!rawTargetId){ return showToast('请先选择目标位置'); }
+
+        // 解析目标位置（支持跨主页：格式 "wsId|catId"，空 catId 表示根）。
+        let targetWsId = appData.currentId, targetCatId = '';
+        if(rawTargetId.includes('|')){ const parts = rawTargetId.split('|'); targetWsId = parts[0]; targetCatId = parts[1]; }
+        const targetWs = appData.workspaces.find(w => w.id === targetWsId); if(!targetWs) return showToast('目标主页不存在');
+
+        // 防呆：不能移到当前分类自己，也不能移到当前分类的子节点。
+        if(targetWsId === appData.currentId){
+            const targetNode = targetCatId ? findNode(targetCatId, targetWs.data) : null;
+            if(targetCatId === '' && targetWsId === appData.currentId){ /* 移到根目录，允许 */ }
+            else if(targetNode && (targetNode.id == id || targetNode.path && targetNode.path.includes(String(id)))){
+                return showToast('不能将内容移动到当前分类或其子节点中');
+            }
+        }
+
         let targetList = targetWs.data;
-        if (targetCatId) { const targetNode = findNode(targetCatId, targetWs.data); if (targetNode) targetList = targetNode.children; }
-        if(node.children && node.children.length > 0){ const childrenToMove = JSON.parse(JSON.stringify(node.children)); targetList.push(...childrenToMove); node.children = []; }
-        deleteNode(id); save(); renderTree(); closeModal('deleteCategoryModal'); showToast('内容已移动并删除分类');
-    } window.deletingCategoryId = null;
+        if(targetCatId){ const targetNode = findNode(targetCatId, targetWs.data); if(!targetNode) return showToast('目标分类不存在'); targetList = targetNode.children; }
+
+        if(node.children && node.children.length > 0){
+            const childrenToMove = JSON.parse(JSON.stringify(node.children));
+            targetList.push(...childrenToMove);
+            node.children = [];
+        }
+        deleteNode(id); save(); renderTree(); closeModal('deleteCategoryModal'); window.deletingCategoryId = null;
+        const wsName = targetWs.id === appData.currentId ? '当前主页' : (targetWs.group ? `${targetWs.group}/${targetWs.name}` : targetWs.name);
+        showToast(`已移动内容到 [${wsName}] 并删除分类`);
+    }
 }
 
-function openAddModal(type, preSelectedParentId=null, relativePos='inside') { 
-    isAdding=true; addType=type; document.getElementById('modalTitle').innerText=type==='category'?'新增分类':'新增网页'; document.getElementById('editName').value=''; document.getElementById('editNote').value=''; document.getElementById('urlGroup').style.display=type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=type==='page'?'block':'none'; 
+function openAddModal(type, preSelectedParentId=null, relativePos='inside') {
+    isAdding=true; addType=type; document.getElementById('modalTitle').innerText=type==='category'?'新增分类':'新增网页'; document.getElementById('editName').value=''; document.getElementById('editNote').value=''; document.getElementById('urlGroup').style.display=type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=type==='page'?'block':'none';
+    const recognizedInput = document.getElementById('editRecognizedName');
+    if (recognizedInput) recognizedInput.value = '';
+    document.getElementById('autoTitleCheck').checked = false;
     
     document.getElementById('iconEditGroup').style.display=type==='page'?'block':'none';
     if(type === 'page') {
@@ -2317,9 +2535,39 @@ async function checkAllIcons() {
     let failCount = 0;
     const total = targetPages.length;
     
-    document.getElementById('reportSummary').innerHTML=`<i class="fas fa-spinner fa-spin"></i> 正在识别中 (0/${total})...`; 
+    document.getElementById('reportSummary').innerHTML=`<i class="fas fa-spinner fa-spin"></i> 正在识别中 (0/${total})...`;
     document.getElementById('reportModal').classList.add('active');
-    
+
+    const placeholderSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#cccccc" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>');
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[<>]/g, c => ({ '<': '&lt;', '>': '&gt;' })[c]);
+
+    function appendIconResult(rec) {
+        const li = document.createElement('li');
+        li.className = 'report-item icon-result-item';
+        const badge = rec.status === 'success'
+            ? '<span class="report-badge badge-success" style="margin-right:5px;">已识别</span>'
+            : '<span class="report-badge badge-error" style="margin-right:5px;">失败</span>';
+        const safeTitle = esc(rec.title);
+        const safeName = esc(rec.pageName);
+        const safeUrl = esc(rec.mainUrl);
+        const titleLine = rec.title && rec.title !== rec.pageName
+            ? '<div class="report-recognized-title" style="font-size:calc(13px * var(--text-scale, 1)); color:var(--primary-color); font-weight:600; margin-bottom:2px;">' + safeTitle + '</div>'
+            : '';
+        const urlColor = rec.status === 'success' ? 'var(--primary-color)' : '#dc3545';
+        li.innerHTML =
+            '<div class="icon-result-row">' +
+                '<div class="icon-result-thumb"><img src="' + rec.iconSrc + '" onerror="this.onerror=null;this.src=\'' + placeholderSvg + '\'"></div>' +
+                '<div class="icon-result-info">' +
+                    titleLine +
+                    '<div class="report-loc" style="font-weight:bold; color:var(--text-color);">' + safeName + '</div>' +
+                    '<div class="report-url" style="color:' + urlColor + '; margin-top:2px;">' + safeUrl + '</div>' +
+                    '<div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;">' + badge + (rec.msg || '') + '</div>' +
+                '</div>' +
+            '</div>';
+        listEl.appendChild(li);
+    }
+
     const CONCURRENCY = 5;
     let index = 0;
     
@@ -2343,45 +2591,50 @@ async function checkAllIcons() {
 
             let status = 'error';
             let msg = '';
-            
+            let detectedTitle = '';
+
             if (domain) {
                 const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+                const iowenUrl = `https://api.iowen.cn/favicon/${domain}`;
                 try {
                     const data = await fetchProxyJson(faviconUrl, { timeout: 4000 });
                     if (data && data.contents && data.contents.startsWith('data:image')) {
                         page.iconType = 'custom';
                         page.customIcon = data.contents;
-                        status = 'success';
-                        successCount++;
                     } else {
                         page.iconType = 'custom';
                         page.customIcon = faviconUrl;
-                        status = 'success';
-                        successCount++;
                     }
-                } catch(e) { 
+                } catch (e) {
                     page.iconType = 'custom';
-                    page.customIcon = faviconUrl;
-                    status = 'success';
-                    successCount++;
+                    page.customIcon = iowenUrl;
+                }
+                status = 'success';
+                successCount++;
+
+                detectedTitle = await fetchPageTitleFor(mainUrl);
+                if (detectedTitle && detectedTitle.length <= 12) {
+                    page.name = detectedTitle;
                 }
             } else {
                 failCount++;
                 msg = '无效的URL无法识别';
             }
-            
+
             window.currentCheckProgress = `${successCount + failCount}/${total}`;
-            
-            if(!window.isCheckPaused) { 
-                document.getElementById('reportSummary').innerHTML=`<i class="fas fa-spinner fa-spin"></i> 正在识别中 (${window.currentCheckProgress})...`; 
+
+            if (!window.isCheckPaused) {
+                document.getElementById('reportSummary').innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在识别中 (${window.currentCheckProgress})...`;
             }
-            
-            if(status!=='success'){
-                const li=document.createElement('li'); 
-                li.className='report-item'; 
-                li.innerHTML=`<div class="report-url" style="color:#dc3545; margin-bottom:4px;">${mainUrl}</div><div class="report-loc" style="font-weight:bold; color:var(--text-color);">${page.name}</div><div style="font-size:calc(11px * var(--text-scale, 1));color:#999;margin-top:2px;"><span class="report-badge badge-error" style="margin-right:5px;">失败</span>${msg}</div>`;
-                listEl.appendChild(li);
-            }
+
+            appendIconResult({
+                mainUrl,
+                iconSrc: page.customIcon || placeholderSvg,
+                title: detectedTitle,
+                pageName: page.name,
+                status,
+                msg,
+            });
         }
     }
 
@@ -2395,10 +2648,7 @@ async function checkAllIcons() {
     save();
     renderTree();
     
-    document.getElementById('reportSummary').innerHTML=`<span style="color:#28a745"><i class="fas fa-check-circle"></i> 识别完成</span> <br><span style="font-size:13px; font-weight:normal;">成功: ${successCount} 个，失败: ${failCount} 个，已固化为图床链接。</span>`; 
-    if(failCount === 0) {
-        listEl.innerHTML='<li class="report-item" style="text-align:center;color:#999; border:none;">所有网络网页的图标均已成功提取并固化</li>';
-    }
+    document.getElementById('reportSummary').innerHTML=`<span style="color:#28a745"><i class="fas fa-check-circle"></i> 识别完成</span> <br><span style="font-size:13px; font-weight:normal;">成功: ${successCount} 个，失败: ${failCount} 个，已固化为图床链接。</span>`;
 }
 
 // 模块作用域不会自动暴露函数；仅注册 HTML 内联事件实际使用的接口。
