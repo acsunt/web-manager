@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build-single-html.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -12,6 +13,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "esbuild": "^0.25.9",
     "jsdom": "^26.1.0",
     "vitest": "^3.2.4"
   }

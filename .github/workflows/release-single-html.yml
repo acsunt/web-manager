@@ -1,0 +1,54 @@
+name: Release single HTML
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -e "const html=require('fs').readFileSync('index.html','utf8'); const m=html.match(/<title>[^<]*\\bv(\\d+\\.\\d+\\.\\d+)\\b/); if(!m) process.exit(1); process.stdout.write(m[1]);")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build single HTML files
+        run: npm run build
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          ONLINE="网页管理-联网 v${VERSION}.html"
+          OFFLINE="网页管理-不联网 v${VERSION}.html"
+          NOTES=$(cat <<EOF
+          单文件下载：
+
+          - \`${ONLINE}\`：需联网加载 Font Awesome / Cropper / Sortable / JSZip
+          - \`${OFFLINE}\`：依赖已内联，可离线双击打开
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --clobber
+            gh release edit "$TAG" --title "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" "dist/${ONLINE}" "dist/${OFFLINE}" --title "$TAG" --notes "$NOTES"
+          fi
