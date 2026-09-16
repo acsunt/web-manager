@@ -403,3 +403,16 @@ body.icon-shape-circle .avatar-container img, body.icon-shape-circle .avatar-con
 .avatar-container .blank-preview { background-color: var(--card-bg); border: 1px solid var(--border-color); }
 .icon-type-radios { display: flex; justify-content: center; gap: 12px; font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary); margin-bottom: 10px; flex-wrap: wrap; }
 .icon-type-radios label { display: flex; align-items: center; cursor: pointer; }
+
+/* ======== 删除分类弹窗 ======== */
+.delete-cat-hint { color: var(--text-secondary); margin: 0 0 18px 0; font-size: calc(14px * var(--text-scale, 1)); line-height: 1.5; }
+.delete-action-btn { width: 100%; justify-content: center; padding: 12px 16px; border-radius: 8px; font-size: calc(15px * var(--text-scale, 1)); font-weight: 500; }
+.delete-action-btn i { margin-right: 2px; }
+.or-divider { display: flex; align-items: center; margin: 18px 0; color: var(--text-secondary); font-size: calc(13px * var(--text-scale, 1)); }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; border-top: 1px solid var(--border-color); }
+.or-divider span { padding: 0 12px; white-space: nowrap; }
+.delete-move-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: calc(14px * var(--text-scale, 1)); color: var(--text-color); }
+.delete-move-picker { display: flex; gap: 8px; position: relative; margin-bottom: 10px; }
+.delete-move-input-wrap { flex-grow: 1; position: relative; }
+.delete-move-input-wrap .clear-input-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; display: none; color: #999; }
+.delete-move-input-wrap .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 20; display: none; margin-top: 2px; }

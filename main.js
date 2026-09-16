@@ -1768,23 +1768,64 @@ function initSortable(){
 
 function syncDomToData(){const seenIds=new Set();function readDomTree(container){const children=[];const catBlocks=Array.from(container.children).filter(el=>el.classList.contains('category-block'));catBlocks.forEach(block=>{const id=block.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode){const newNode={...originalNode,children:[]};const subContainer=block.querySelector(':scope > .children-container');if(subContainer)newNode.children=readDomTree(subContainer);children.push(newNode);}});const pageContainers=Array.from(container.children).filter(el=>el.classList.contains('pages-container'));pageContainers.forEach(pc=>{const pageCards=Array.from(pc.children).filter(el=>el.classList.contains('page-card'));pageCards.forEach(card=>{const id=card.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode)children.push(originalNode);});});return children;}const rootContainer=document.querySelector('#tree-root > .children-container');if(rootContainer){data=readDomTree(rootContainer);save();}}
 
+function collectSelfAndDescendantIds(id){
+    const ids = new Set();
+    const node = findNode(id);
+    if(!node) return ids;
+    ids.add(String(id));
+    (function walk(list){
+        if(!list) return;
+        list.forEach(n => {
+            ids.add(String(n.id));
+            if(n.children) walk(n.children);
+        });
+    })(node.children);
+    return ids;
+}
+
+function getExcludedCategoryIds(inputId){
+    const ids = new Set();
+    if(inputId === 'delMoveTargetId' && window.deletingCategoryId){
+        collectSelfAndDescendantIds(window.deletingCategoryId).forEach(id => ids.add(id));
+    }
+    if(inputId === 'selectedMoveTargetId' && window.singleMoveId){
+        const node = findNode(window.singleMoveId);
+        if(node && node.type === 'category') collectSelfAndDescendantIds(window.singleMoveId).forEach(id => ids.add(id));
+    }
+    if(inputId === 'batchDelMoveTargetId' && window.batchNonEmptyCats){
+        window.batchNonEmptyCats.forEach(cat => collectSelfAndDescendantIds(cat.id).forEach(id => ids.add(id)));
+    }
+    return ids;
+}
+
+function isExcludedMoveTarget(wsId, catId, inputId){
+    if(!catId) return false;
+    if(wsId && wsId !== appData.currentId) return false;
+    return getExcludedCategoryIds(inputId).has(String(catId));
+}
+
 function handleCategorySearch(val,dropdownId,hiddenInputId,displayInputId){
     document.getElementById(hiddenInputId).value=''; const list=document.getElementById(dropdownId); list.innerHTML='';
-    if(!val.trim()){ list.style.display='none'; document.querySelector(`i[onclick*="${hiddenInputId}"]`).style.display='none'; return; }
-    document.querySelector(`i[onclick*="${hiddenInputId}"]`).style.display='block';
+    const clearBtn = document.querySelector(`i[onclick*="${hiddenInputId}"]`);
+    if(!val.trim()){ list.style.display='none'; if(clearBtn) clearBtn.style.display='none'; return; }
+    if(clearBtn) clearBtn.style.display='block';
     const matches=[];
+    const keyword = val.toLowerCase();
 
     function findCats(nodes, wsName, wsId, pathPrefix = "") {
         nodes.forEach(n => {
             if(n.type === 'category') {
-                const fullName = `[${wsName}] ${pathPrefix}${n.name}`;
-                if(n.name.toLowerCase().includes(val.toLowerCase()) || wsName.toLowerCase().includes(val.toLowerCase())) { matches.push({ id: n.id, name: fullName, wsId: wsId }); }
-                if(n.children) findCats(n.children, wsName, wsId, pathPrefix + n.name + " > ");
+                const excluded = isExcludedMoveTarget(wsId, n.id, hiddenInputId);
+                if(!excluded){
+                    const fullName = `[${wsName}] ${pathPrefix}${n.name}`;
+                    if(n.name.toLowerCase().includes(keyword) || wsName.toLowerCase().includes(keyword)) { matches.push({ id: n.id, name: fullName, wsId: wsId }); }
+                    if(n.children) findCats(n.children, wsName, wsId, pathPrefix + n.name + " > ");
+                }
             }
         });
     }
 
-    appData.workspaces.forEach(ws => { const wsDispName = ws.group ? `${ws.group}/${ws.name}` : ws.name; if (wsDispName.toLowerCase().includes(val.toLowerCase()) || '根目录'.includes(val) || 'root'.includes(val.toLowerCase())) { matches.unshift({ id: '', name: `[${wsDispName}] 根目录`, wsId: ws.id }); } findCats(ws.data, wsDispName, ws.id); });
+    appData.workspaces.forEach(ws => { const wsDispName = ws.group ? `${ws.group}/${ws.name}` : ws.name; if (wsDispName.toLowerCase().includes(keyword) || '根目录'.includes(keyword) || 'root'.includes(keyword)) { matches.unshift({ id: '', name: `[${wsDispName}] 根目录`, wsId: ws.id }); } findCats(ws.data, wsDispName, ws.id); });
 
     if(matches.length > 0){
         matches.forEach(m => {
@@ -1800,7 +1841,7 @@ function openTreeSelectModal(targetInputId, displayInputId){
     const container=document.getElementById('treeSelectContent'); container.innerHTML='';
     appData.workspaces.forEach(ws => {
         const isCurrent = ws.id === appData.currentId; const wsDispName = ws.group ? `${ws.group}/${ws.name}` : ws.name;
-        const wsHeader = document.createElement('div'); wsHeader.className = 'tree-ws-header'; wsHeader.innerText = wsDispName + (isCurrent ? '当前' : ''); container.appendChild(wsHeader);
+        const wsHeader = document.createElement('div'); wsHeader.className = 'tree-ws-header'; wsHeader.innerText = wsDispName + (isCurrent ? ' (当前)' : ''); container.appendChild(wsHeader);
 
         const rootDiv=document.createElement('div'); rootDiv.className='tree-select-item'; rootDiv.style.padding='8px'; rootDiv.style.cursor='pointer'; rootDiv.style.borderRadius='4px'; rootDiv.style.marginBottom='2px'; rootDiv.style.display='flex'; rootDiv.style.alignItems='center'; rootDiv.innerHTML=`<i class="fas fa-home" style="margin-right:8px;"></i> 根目录`;
         rootDiv.onclick=()=>{ document.getElementById(targetInputId).value = `${ws.id}|`; document.getElementById(displayInputId).value = `[${wsDispName}] 根目录`; closeModal('treeSelectModal'); };
@@ -1809,9 +1850,7 @@ function openTreeSelectModal(targetInputId, displayInputId){
         function buildTreeHtml(nodes, level) {
             nodes.forEach(node => {
                 if (node.type === 'category') {
-                    if (window.deletingCategoryId && node.id == window.deletingCategoryId) return;
-                    if (window.singleMoveId && node.id == window.singleMoveId) return;
-                    if (window.deletingCategoryId && findParent(node.id, nodes, {id: window.deletingCategoryId})) return;
+                    if (isExcludedMoveTarget(ws.id, node.id, targetInputId)) return;
 
                     const div=document.createElement('div'); div.className='tree-select-item'; div.style.padding='8px'; div.style.cursor='pointer'; div.style.borderRadius='4px'; div.style.marginBottom='2px'; div.style.display='flex'; div.style.alignItems='center'; div.style.paddingLeft=(level*20+10)+'px'; div.innerHTML=`<i class="fas fa-folder" style="margin-right:8px;color:#ffd43b;"></i> ${node.name}`;
                     div.onclick=()=>{ document.getElementById(targetInputId).value = `${ws.id}|${node.id}`; document.getElementById(displayInputId).value = `[${wsDispName}] ${node.name}`; closeModal('treeSelectModal'); };
@@ -2060,8 +2099,12 @@ function menuAction(action){
                 document.getElementById('deleteCategoryId').value=id;
                 document.getElementById('delMoveInput').value='';
                 document.getElementById('delMoveTargetId').value='';
+                const delList = document.getElementById('delMoveDropdownList');
+                if(delList) delList.style.display='none';
+                const clearBtn = document.querySelector('i[onclick*="delMoveTargetId"]');
+                if(clearBtn) clearBtn.style.display='none';
                 const titleEl = document.getElementById('deleteCategoryTitle');
-                if(titleEl) titleEl.innerText = `删除分类「${node.name}」（含 ${pageCount} 个网页）`;
+                if(titleEl) titleEl.innerText = '删除分类';
                 document.getElementById('deleteCategoryModal').classList.add('active');
             } else {
                 if(confirm(`分类 "${node.name}" 内没有网页，确认删除该分类吗？`)){ deleteNode(id); save(); renderTree(); }
@@ -2115,13 +2158,8 @@ function confirmDeleteCategory(mode){
         if(rawTargetId.includes('|')){ const parts = rawTargetId.split('|'); targetWsId = parts[0]; targetCatId = parts[1]; }
         const targetWs = appData.workspaces.find(w => w.id === targetWsId); if(!targetWs) return showToast('目标主页不存在');
 
-        // 防呆：不能移到当前分类自己，也不能移到当前分类的子节点。
-        if(targetWsId === appData.currentId){
-            const targetNode = targetCatId ? findNode(targetCatId, targetWs.data) : null;
-            if(targetCatId === '' && targetWsId === appData.currentId){ /* 移到根目录，允许 */ }
-            else if(targetNode && (targetNode.id == id || targetNode.path && targetNode.path.includes(String(id)))){
-                return showToast('不能将内容移动到当前分类或其子节点中');
-            }
+        if(isExcludedMoveTarget(targetWsId, targetCatId, 'delMoveTargetId')){
+            return showToast('不能将内容移动到当前分类或其子分类中');
         }
 
         let targetList = targetWs.data;
@@ -2236,10 +2274,10 @@ function deleteNode(id,list=data){for(let i=0;i<list.length;i++){if(list[i].id==
 function updateSelectedCount(){const count=document.querySelectorAll('.item-checkbox:checked').length;document.getElementById('selectedCount').innerText=`已选 ${count}`;}
 function toggleSelectAll(cb){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=cb.checked);updateSelectedCount();}
 function cancelSelection(){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=false);document.getElementById('selectAllBox').checked=false;updateSelectedCount();}
-function closeModal(id){ if (id === 'toolbarEditModal' && isToolbarSorting) confirmToolbarSort(); document.getElementById(id).classList.remove('active'); }
+function closeModal(id){ if (id === 'toolbarEditModal' && isToolbarSorting) confirmToolbarSort(); document.getElementById(id).classList.remove('active'); if (id === 'deleteCategoryModal') window.deletingCategoryId = null; }
 function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
 function hideContextMenu(){document.getElementById('contextMenu').style.display='none';document.getElementById('menuOverlay').style.display='none';}
-document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){const list=document.getElementById('parentDropdownList');if(list)list.style.display='none';const moveList=document.getElementById('moveDropdownList');if(moveList)moveList.style.display='none';}});
+document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){['parentDropdownList','moveDropdownList','delMoveDropdownList','batchDelMoveDropdownList'].forEach(id=>{const list=document.getElementById(id);if(list)list.style.display='none';});}});
 window.addEventListener('scroll', function() { if(window.scrollSaveTimeout) clearTimeout(window.scrollSaveTimeout); window.scrollSaveTimeout = setTimeout(function() { localStorage.setItem('lastScrollPosition', window.scrollY); }, 200); });
 
 function save() { localStorage.setItem('webManagerDataProMax', JSON.stringify(appData)); }
