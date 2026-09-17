@@ -54,23 +54,6 @@ export async function downloadBlob(blob, filename) {
     URL.revokeObjectURL(objectUrl);
 }
 
-export function openExternalUrl(url, { currentTab = false } = {}) {
-    const value = url == null ? '' : String(url).trim();
-    if (!value) return false;
-    if (typeof window !== 'undefined' && typeof window.Android?.openUrl === 'function') {
-        try {
-            const ok = window.Android.openUrl(value);
-            if (ok !== false) return true;
-        } catch (e) { /* 网页没有原生桥 */ }
-    }
-    if (currentTab) {
-        window.location.href = value;
-        return true;
-    }
-    const opened = window.open(value, '_blank');
-    return Boolean(opened);
-}
-
 export function applySafeAreaInsets(insets = {}) {
     const root = document.documentElement;
     if (!root?.style) return;

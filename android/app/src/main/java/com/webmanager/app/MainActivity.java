@@ -95,9 +95,15 @@ public class MainActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (uri == null) return false;
-                String url = uri.toString();
-                if (url.startsWith("file:///android_asset/")) return false;
-                return openExternalUrl(url);
+                String scheme = uri.getScheme();
+                if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme)) {
+                    return false;
+                }
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception ignored) {
+                }
+                return true;
             }
         });
         appWebView.setWebChromeClient(new WebChromeClient() {
@@ -201,31 +207,6 @@ public class MainActivity extends AppCompatActivity {
     void evaluateJavascript(String script) {
         if (appWebView == null) return;
         appWebView.post(() -> appWebView.evaluateJavascript(script, null));
-    }
-
-    boolean openExternalUrl(String url) {
-        if (url == null) return false;
-        String trimmed = url.trim();
-        if (trimmed.isEmpty()) return false;
-        try {
-            Uri uri = Uri.parse(trimmed);
-            if (uri.getScheme() == null || uri.getScheme().isEmpty()) {
-                uri = Uri.parse("https://" + trimmed);
-            }
-            final Uri target = uri;
-            runOnUiThread(() -> {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, target);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Toast.makeText(this, "无法打开链接", Toast.LENGTH_SHORT).show();
-                }
-            });
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     void saveExportedFile(String base64, String mime, String filename) {

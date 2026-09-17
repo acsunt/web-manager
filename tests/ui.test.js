@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, openExternalUrl, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -114,33 +114,6 @@ describe('downloadBlob', () => {
     expect(binary.length).toBe(bytes.length);
     expect(binary.charCodeAt(0)).toBe(1);
     expect(binary.charCodeAt(binary.length - 1)).toBe(6);
-  });
-});
-
-describe('openExternalUrl', () => {
-  afterEach(() => {
-    delete window.Android;
-    vi.restoreAllMocks();
-  });
-
-  it('APK 有 openUrl 时交给系统浏览器，不走 window.open', () => {
-    window.Android = { openUrl: vi.fn(() => true) };
-    const open = vi.spyOn(window, 'open').mockImplementation(() => ({}));
-    expect(openExternalUrl('https://example.com')).toBe(true);
-    expect(window.Android.openUrl).toHaveBeenCalledWith('https://example.com');
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it('APK 当前页打开也走系统浏览器，避免 WebView 离开应用页', () => {
-    window.Android = { openUrl: vi.fn(() => true) };
-    expect(openExternalUrl('https://example.com', { currentTab: true })).toBe(true);
-    expect(window.Android.openUrl).toHaveBeenCalledWith('https://example.com');
-  });
-
-  it('网页新标签走 window.open', () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => ({}));
-    expect(openExternalUrl('https://example.com')).toBe(true);
-    expect(open).toHaveBeenCalledWith('https://example.com', '_blank');
   });
 });
 

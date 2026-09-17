@@ -72,17 +72,17 @@ describe('APK 版本号', () => {
     expect(main).not.toContain('navigator.clipboard.writeText');
   });
 
-  it('APK 打开链接走系统浏览器，不依赖 WebView 的 window.open', () => {
+  it('APK 打开网页留在应用 WebView，不跳系统浏览器', () => {
     const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
     const ui = readFileSync(join(rootDir, 'ui.js'), 'utf8');
     const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
     const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
-    expect(bridge).toContain('public boolean openUrl(String url)');
-    expect(activity).toContain('boolean openExternalUrl(String url)');
-    expect(activity).toContain('Intent.ACTION_VIEW');
-    expect(ui).toContain('window.Android?.openUrl');
-    expect(main).toContain('openExternalUrl');
-    expect(main).not.toContain('window.open');
+    expect(bridge).not.toContain('public boolean openUrl(String url)');
+    expect(activity).not.toContain('boolean openExternalUrl(String url)');
+    expect(activity).toContain('return false;');
+    expect(ui).not.toContain('window.Android?.openUrl');
+    expect(main).toContain("window.open(url, '_blank')");
+    expect(main).toContain('window.location.href = url');
   });
 
   it('APK 导出分块写文件，并支持多选导入', () => {

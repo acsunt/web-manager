@@ -116,11 +116,6 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
-    public boolean openUrl(String url) {
-        return activity.openExternalUrl(url);
-    }
-
-    @JavascriptInterface
     public void setSystemBarsAppearance(boolean light) {
         activity.setSystemBarsAppearance(light);
     }
