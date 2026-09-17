@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
+import { cleanDistArtifacts } from './dist-artifacts.js';
+import { uploadApkToRelease } from './upload-apk.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(rootDir, 'android');
@@ -78,6 +80,7 @@ async function main() {
     });
 
     const version = readVersion();
+    cleanDistArtifacts(distDir, version);
     copyHtmlIntoAssets(version);
     console.log(`APK versionName = ${version}（与网页标题一致）`);
     await runGradle();
@@ -90,6 +93,12 @@ async function main() {
     } else {
         throw new Error('Gradle 成功但未找到 app-debug.apk');
     }
+
+    if (process.env.SKIP_UPLOAD === '1') {
+        console.log('SKIP_UPLOAD=1，跳过上传 GitHub Release');
+        return;
+    }
+    uploadApkToRelease(version);
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

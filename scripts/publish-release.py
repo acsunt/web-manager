@@ -15,8 +15,11 @@ else:
 files = [
     pathlib.Path("dist") / os.environ["ONLINE"],
     pathlib.Path("dist") / os.environ["OFFLINE"],
-    pathlib.Path("dist") / os.environ["APK"],
 ]
+apk_name = os.environ.get("APK")
+apk_path = pathlib.Path("dist") / apk_name if apk_name else None
+if apk_path and apk_path.is_file():
+    files.append(apk_path)
 
 
 def api(method, url, data=None, content_type="application/json"):

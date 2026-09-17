@@ -31,7 +31,7 @@ describe('APK 版本号', () => {
     expect(theme).toContain('android:navigationBarColor">@android:color/transparent');
   });
 
-  it('仓库带 Gradle Wrapper，CI 不必本机安装 Gradle', () => {
+  it('仓库带 Gradle Wrapper，本地打包不必另装 Gradle', () => {
     expect(existsSync(join(rootDir, 'android', 'gradlew'))).toBe(true);
     expect(existsSync(join(rootDir, 'android', 'gradlew.bat'))).toBe(true);
     expect(existsSync(join(rootDir, 'android', 'gradle', 'wrapper', 'gradle-wrapper.jar'))).toBe(true);

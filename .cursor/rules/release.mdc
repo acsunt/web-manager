@@ -1,17 +1,20 @@
 ---
-description: 每次提交和推送都要写清新增、优化、修复，Release 会同时发布 HTML 和 APK
+description: HTML 由 GitHub 打包发布，APK 本地打进 dist 后上传同一 Release，并清掉旧产物
 alwaysApply: true
 ---
 
 # Release 说明和产物
 
-推到 `main` 后，GitHub Release 会同时上传：
+分工：
 
-- `wan-vX.Y.Z-yes.html`
-- `wan-vX.Y.Z-no.html`
-- `web-manager-vX.Y.Z.apk`
+- **HTML**：推到 `main` 后，GitHub Actions 打包并上传
+  - `wan-vX.Y.Z-yes.html`
+  - `wan-vX.Y.Z-no.html`
+- **APK**：本机 `npm run apk`，版本名跟 `index.html` 标题同一串数字，输出 `dist/web-manager-vX.Y.Z.apk`，然后自动上传到同一个 Release `vX.Y.Z`
 
-Release 正文只来自**提交说明**，不来自聊天记录。
+`dist/` 只保留当前版本的 HTML 和 APK；打包时自动删掉旧的 `wan-v*` / `web-manager-v*`。
+
+Release 正文只来自**提交说明**，不来自聊天记录。APK 上传后不要另写一套说明。
 
 ## 提交必须带这三段（没有的可省略，但不能一段都没有）
 
@@ -35,3 +38,8 @@ feat: 简短标题
 1. `index.html` 标题 PATCH +1（见版本号规则）
 2. 提交正文里写清新增 / 优化 / 修复
 3. `.githooks/pre-push` 会检查这两项；缺说明则推送失败
+
+## 推送后
+
+1. 等 GitHub 把 HTML Release 建好
+2. 本机运行 `npm run apk`：打 APK、清掉 `dist` 旧文件、上传 APK 到该 Release

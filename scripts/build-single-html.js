@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 import { escapeInlineScript, replaceOnce } from './html-inline.js';
+import { cleanDistArtifacts } from './dist-artifacts.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = join(rootDir, 'dist');
@@ -143,6 +144,7 @@ async function main() {
 
     const html = readFileSync(indexPath, 'utf8');
     const version = readVersion(html);
+    cleanDistArtifacts(distDir, version);
     const css = readFileSync(stylePath, 'utf8');
     const appJs = await bundleAppJs();
 
