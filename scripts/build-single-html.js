@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
+import { escapeInlineScript, replaceOnce } from './html-inline.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = join(rootDir, 'dist');
@@ -89,19 +90,12 @@ async function bundleAppJs() {
         bundle: true,
         format: 'iife',
         platform: 'browser',
-        target: ['es2020'],
+        target: ['es2017'],
         minify: true,
         write: false,
         logLevel: 'silent',
     });
     return result.outputFiles[0].text;
-}
-
-function replaceOnce(source, search, replacement, label) {
-    if (!source.includes(search)) {
-        throw new Error(`打包失败：找不到 ${label}`);
-    }
-    return source.replace(search, replacement);
 }
 
 async function buildHtml({ offline, html, css, appJs, vendorCss, vendorJs }) {
@@ -116,14 +110,14 @@ async function buildHtml({ offline, html, css, appJs, vendorCss, vendorJs }) {
     const jszipTag = `    <script src="${CDN.jszipJs}"></script>`;
 
     out = replaceOnce(out, localCssTag, `    <style>\n${css}\n    </style>`, 'style.css 引用');
-    out = replaceOnce(out, moduleTag, `<script>\n${appJs}\n</script>`, 'main.js 模块引用');
+    out = replaceOnce(out, moduleTag, `<script>\n${escapeInlineScript(appJs)}\n</script>`, 'main.js 模块引用');
 
     if (offline) {
         out = replaceOnce(out, faTag, `    <style>\n${vendorCss.fontAwesome}\n    </style>`, 'Font Awesome CSS');
         out = replaceOnce(out, cropperCssTag, `    <style>\n${vendorCss.cropper}\n    </style>`, 'Cropper CSS');
-        out = replaceOnce(out, sortableTag, `    <script>\n${vendorJs.sortable}\n    </script>`, 'Sortable JS');
-        out = replaceOnce(out, cropperJsTag, `    <script>\n${vendorJs.cropper}\n    </script>`, 'Cropper JS');
-        out = replaceOnce(out, jszipTag, `    <script>\n${vendorJs.jszip}\n    </script>`, 'JSZip JS');
+        out = replaceOnce(out, sortableTag, `    <script>\n${escapeInlineScript(vendorJs.sortable)}\n    </script>`, 'Sortable JS');
+        out = replaceOnce(out, cropperJsTag, `    <script>\n${escapeInlineScript(vendorJs.cropper)}\n    </script>`, 'Cropper JS');
+        out = replaceOnce(out, jszipTag, `    <script>\n${escapeInlineScript(vendorJs.jszip)}\n    </script>`, 'JSZip JS');
     }
 
     return out;
@@ -163,8 +157,16 @@ async function main() {
         vendorCss: {},
         vendorJs: {},
     });
+    assertSingleHtml(onlineHtml, { offline: false });
     const onlinePath = join(distDir, onlineName);
     writeFileSync(onlinePath, onlineHtml, 'utf8');
+
+    if (process.env.SKIP_OFFLINE === '1') {
+        printSizes([{ name: onlineName, bytes: Buffer.byteLength(onlineHtml) }]);
+        console.log(`已生成：`);
+        console.log(`  dist/${onlineName}`);
+        return;
+    }
 
     console.log('正在下载离线依赖（Font Awesome / Cropper / Sortable / JSZip）...');
     const vendorCss = {
@@ -186,6 +188,7 @@ async function main() {
         vendorCss,
         vendorJs,
     });
+    assertSingleHtml(offlineHtml, { offline: true });
     const offlinePath = join(distDir, offlineName);
     writeFileSync(offlinePath, offlineHtml, 'utf8');
 
@@ -199,7 +202,24 @@ async function main() {
     console.log(`  dist/${offlineName}`);
 }
 
-main().catch((error) => {
-    console.error(error.message || error);
-    process.exit(1);
-});
+function assertSingleHtml(html, { offline }) {
+    if (html.includes('src="./main.js"') || html.includes('href="./style.css"')) {
+        throw new Error('打包失败：单文件仍引用本地 main.js / style.css');
+    }
+    const scriptOpens = html.split('<script').length - 1;
+    const scriptCloses = html.split('</script>').length - 1;
+    if (scriptOpens !== scriptCloses) {
+        throw new Error(`打包失败：script 标签不成对 (${scriptOpens} / ${scriptCloses})`);
+    }
+    if (offline && html.includes('cdnjs.cloudflare.com')) {
+        throw new Error('打包失败：离线文件仍引用 CDN');
+    }
+}
+
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+    main().catch((error) => {
+        console.error(error.message || error);
+        process.exit(1);
+    });
+}

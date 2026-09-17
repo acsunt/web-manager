@@ -264,61 +264,71 @@ function endCategoryDrag() {
 
 // ================= 应用初始化与旧数据迁移 =================
 // 入口职责：恢复持久化数据、兼容旧版本结构、应用界面偏好，最后统一渲染。
+function revealApp() {
+    document.body.style.opacity = '1';
+    document.documentElement.style.removeProperty('scroll-behavior');
+}
+
 function init() {
     document.body.style.opacity = '0';
-    const saved = localStorage.getItem('webManagerDataProMax');
-    const loaded = migratePersistedAppData(saved);
-    appData = loaded.appData;
-    if (loaded.didMigrateLegacyArray) save();
+    try {
+        const saved = localStorage.getItem('webManagerDataProMax');
+        const loaded = migratePersistedAppData(saved);
+        appData = loaded.appData;
+        if (loaded.didMigrateLegacyArray) save();
 
-    updateDataPointer(); cleanDuplicates();
+        updateDataPointer(); cleanDuplicates();
 
-    const resolvedColumns = resolveColumnModes({
-        columnMode: localStorage.getItem('columnMode'),
-        listColumnMode: localStorage.getItem('listColumnMode'),
-        iconColumnMode: localStorage.getItem('iconColumnMode'),
-    });
-    listColumnMode = resolvedColumns.listColumnMode;
-    iconColumnMode = resolvedColumns.iconColumnMode;
-    if (resolvedColumns.clearLegacyColumnMode) {
-        localStorage.setItem('listColumnMode', listColumnMode);
-        localStorage.removeItem('columnMode');
+        const resolvedColumns = resolveColumnModes({
+            columnMode: localStorage.getItem('columnMode'),
+            listColumnMode: localStorage.getItem('listColumnMode'),
+            iconColumnMode: localStorage.getItem('iconColumnMode'),
+        });
+        listColumnMode = resolvedColumns.listColumnMode;
+        iconColumnMode = resolvedColumns.iconColumnMode;
+        if (resolvedColumns.clearLegacyColumnMode) {
+            localStorage.setItem('listColumnMode', listColumnMode);
+            localStorage.removeItem('columnMode');
+        }
+
+        wsColMode = localStorage.getItem('wsColMode') !== null ? parseInt(localStorage.getItem('wsColMode')) : 3; updateWsColBtn();
+        toolbarColMode = localStorage.getItem('toolbarColMode') !== null ? parseInt(localStorage.getItem('toolbarColMode')) : 3;
+        
+        const savedAlignState = localStorage.getItem('alignState');
+        if (savedAlignState !== null) { alignState = parseInt(savedAlignState, 10); } else if (localStorage.getItem('alignLeft') === 'true') { alignState = 1; }
+        applyAlignState(document.getElementById('alignToggleBtn'));
+
+        const isToolbarCollapsed = localStorage.getItem('toolbarCollapsed') === 'true';
+        if (isToolbarCollapsed) { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.add('collapsed'); if(btn) btn.innerHTML = '<i class="fas fa-angle-down"></i> 展开工具栏'; }
+        
+        const savedNoteVisible = localStorage.getItem('noteVisible');
+        if (savedNoteVisible === 'true') { isNoteVisible = true; document.getElementById('noteToggleBtn').classList.add('active'); } else { isNoteVisible = false; document.body.classList.add('hide-notes'); document.getElementById('noteToggleBtn').classList.remove('active'); }
+        const savedCountVisible = localStorage.getItem('countVisible');
+        if (savedCountVisible === 'true') { isCountVisible = true; document.body.classList.add('show-counts'); document.getElementById('countToggleBtn').classList.add('active'); }
+        const savedOpenCurrent = localStorage.getItem('isOpenCurrentTab');
+        if (savedOpenCurrent === 'true') { isOpenCurrentTab = true; document.getElementById('targetToggleBtn').classList.add('active'); } else { isOpenCurrentTab = false; document.getElementById('targetToggleBtn').classList.remove('active'); }
+        const savedAutoRefresh = localStorage.getItem('autoRefreshVisible');
+        if (savedAutoRefresh === 'true') { isAutoRefresh = true; const btn = document.getElementById('autoRefreshToggleBtn'); if(btn) btn.classList.add('active'); } else { isAutoRefresh = false; const btn = document.getElementById('autoRefreshToggleBtn'); if(btn) btn.classList.remove('active'); }
+        const savedBadgeVisible = localStorage.getItem('badgeVisible');
+        if (savedBadgeVisible === 'true') { isBadgeVisible = true; document.body.classList.add('show-badges'); document.getElementById('badgeToggleBtn').classList.add('active'); }
+        const savedLocalTagVisible = localStorage.getItem('localTagVisible');
+        if (savedLocalTagVisible === 'true') { isLocalTagVisible = true; const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.add('active'); document.body.classList.remove('hide-local-tags'); } else { isLocalTagVisible = false; document.body.classList.add('hide-local-tags'); const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.remove('active'); }
+
+        isIconMode = localStorage.getItem('webManagerIconMode') === 'true';
+        iconShape = localStorage.getItem('webManagerIconShape') || 'square';
+        applyIconMode();
+        applyColumnMode();
+
+        loadThemeConfig(); applyThemeSettings(); initToolbar(); 
+        renderTree(); document.body.classList.add('hide-urls');
+        
+        const savedScroll = localStorage.getItem('lastScrollPosition');
+        if(savedScroll) { document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, parseInt(savedScroll)); }
+        requestAnimationFrame(revealApp);
+    } catch (e) {
+        console.error(e);
+        revealApp();
     }
-
-    wsColMode = localStorage.getItem('wsColMode') !== null ? parseInt(localStorage.getItem('wsColMode')) : 3; updateWsColBtn();
-    toolbarColMode = localStorage.getItem('toolbarColMode') !== null ? parseInt(localStorage.getItem('toolbarColMode')) : 3;
-    
-    const savedAlignState = localStorage.getItem('alignState');
-    if (savedAlignState !== null) { alignState = parseInt(savedAlignState, 10); } else if (localStorage.getItem('alignLeft') === 'true') { alignState = 1; }
-    applyAlignState(document.getElementById('alignToggleBtn'));
-
-    const isToolbarCollapsed = localStorage.getItem('toolbarCollapsed') === 'true';
-    if (isToolbarCollapsed) { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.add('collapsed'); if(btn) btn.innerHTML = '<i class="fas fa-angle-down"></i> 展开工具栏'; }
-    
-    const savedNoteVisible = localStorage.getItem('noteVisible');
-    if (savedNoteVisible === 'true') { isNoteVisible = true; document.getElementById('noteToggleBtn').classList.add('active'); } else { isNoteVisible = false; document.body.classList.add('hide-notes'); document.getElementById('noteToggleBtn').classList.remove('active'); }
-    const savedCountVisible = localStorage.getItem('countVisible');
-    if (savedCountVisible === 'true') { isCountVisible = true; document.body.classList.add('show-counts'); document.getElementById('countToggleBtn').classList.add('active'); }
-    const savedOpenCurrent = localStorage.getItem('isOpenCurrentTab');
-    if (savedOpenCurrent === 'true') { isOpenCurrentTab = true; document.getElementById('targetToggleBtn').classList.add('active'); } else { isOpenCurrentTab = false; document.getElementById('targetToggleBtn').classList.remove('active'); }
-    const savedAutoRefresh = localStorage.getItem('autoRefreshVisible');
-    if (savedAutoRefresh === 'true') { isAutoRefresh = true; const btn = document.getElementById('autoRefreshToggleBtn'); if(btn) btn.classList.add('active'); } else { isAutoRefresh = false; const btn = document.getElementById('autoRefreshToggleBtn'); if(btn) btn.classList.remove('active'); }
-    const savedBadgeVisible = localStorage.getItem('badgeVisible');
-    if (savedBadgeVisible === 'true') { isBadgeVisible = true; document.body.classList.add('show-badges'); document.getElementById('badgeToggleBtn').classList.add('active'); }
-    const savedLocalTagVisible = localStorage.getItem('localTagVisible');
-    if (savedLocalTagVisible === 'true') { isLocalTagVisible = true; const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.add('active'); document.body.classList.remove('hide-local-tags'); } else { isLocalTagVisible = false; document.body.classList.add('hide-local-tags'); const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.remove('active'); }
-
-    isIconMode = localStorage.getItem('webManagerIconMode') === 'true';
-    iconShape = localStorage.getItem('webManagerIconShape') || 'square';
-    applyIconMode();
-    applyColumnMode();
-
-    loadThemeConfig(); applyThemeSettings(); initToolbar(); 
-    renderTree(); document.body.classList.add('hide-urls');
-    
-    const savedScroll = localStorage.getItem('lastScrollPosition');
-    if(savedScroll) { document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, parseInt(savedScroll)); }
-    requestAnimationFrame(() => { document.body.style.opacity = '1'; document.documentElement.style.removeProperty('scroll-behavior'); });
 }
 
 function createDefaultAppData() { return createDefaultAppDataInWorkspace(); }
