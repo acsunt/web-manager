@@ -61,6 +61,17 @@ describe('APK 版本号', () => {
     expect(htmlScript).not.toContain('正在下载离线依赖');
   });
 
+  it('APK 复制走原生剪贴板，不依赖 file:// 下的 Clipboard API', () => {
+    const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
+    const ui = readFileSync(join(rootDir, 'ui.js'), 'utf8');
+    const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
+    expect(bridge).toContain('public boolean copyText(String text)');
+    expect(bridge).toContain('ClipboardManager');
+    expect(ui).toContain('window.Android?.copyText');
+    expect(main).toContain('copyTextToClipboard');
+    expect(main).not.toContain('navigator.clipboard.writeText');
+  });
+
   it('分类新增编辑不显示识别名称，HTML 与 APK 共用同一源码', () => {
     const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
     expect(html).toContain('id="recognizedNameGroup"');

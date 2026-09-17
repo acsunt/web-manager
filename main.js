@@ -12,7 +12,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -449,16 +449,29 @@ function addUrlRow(urlVal = '', nameVal = '') {
     container.appendChild(row);
 }
 
-function copyRowName(btn) { const row = btn.closest('.url-row'); const input = row.querySelector('.url-name-input'); if(input && input.value) navigator.clipboard.writeText(input.value).then(() => showToast('名称已复制', 1000)); else showToast('名称为空', 1000); }
-function copyRowUrl(btn) { const row = btn.closest('.url-row'); const input = row.querySelector('.url-value-input'); if(input && input.value) navigator.clipboard.writeText(input.value).then(() => showToast('链接已复制', 1000)); else showToast('链接为空', 1000); }
+async function copyRowName(btn) {
+    const row = btn.closest('.url-row');
+    const input = row.querySelector('.url-name-input');
+    if (!input || !input.value) return showToast('名称为空', 1000);
+    const ok = await copyTextToClipboard(input.value);
+    showToast(ok ? '名称已复制' : '复制失败', 1000);
+}
+async function copyRowUrl(btn) {
+    const row = btn.closest('.url-row');
+    const input = row.querySelector('.url-value-input');
+    if (!input || !input.value) return showToast('链接为空', 1000);
+    const ok = await copyTextToClipboard(input.value);
+    showToast(ok ? '链接已复制' : '复制失败', 1000);
+}
 
-function copyPageInfoFromModal() {
+async function copyPageInfoFromModal() {
     const name = document.getElementById('editName').value.trim(); const note = document.getElementById('editNote').value.trim();
     let text = `📄 ${name}\n`;
     const rows = document.querySelectorAll('#urlListContainer .url-row');
     rows.forEach(row => { const u = row.querySelector('.url-value-input').value.trim(); const n = row.querySelector('.url-name-input').value.trim(); if(u) text += `    🔗 ${u}${n ? ' ('+n+')' : ''}\n`; });
     if (note) text += `    🗒️ ${note.replace(/\n/g, '\n    ')}\n`;
-    navigator.clipboard.writeText(text).then(()=>showToast('信息已完整复制'));
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? '信息已完整复制' : '复制失败');
 }
 
 function openParsePasteModal() { document.getElementById('parsePasteText').value = ''; document.getElementById('parsePasteModal').classList.add('active'); setTimeout(() => document.getElementById('parsePasteText').focus(), 100); }
@@ -1278,7 +1291,7 @@ function closeReportModal() {
     closeModal('reportModal');
 }
 
-function copyReportContent() {
+async function copyReportContent() {
     if (!window.currentReportData || window.currentReportData.length === 0) return showToast("无内容可复制");
     const grouped = {};
     window.currentReportData.forEach(item => { const pathInfo = item.path || '默认分类'; if (!grouped[pathInfo]) grouped[pathInfo] = []; grouped[pathInfo].push(item); });
@@ -1288,10 +1301,8 @@ function copyReportContent() {
         grouped[path].forEach(item => { textArray.push(item.name); textArray.push(item.url); textArray.push(""); });
     }
     let text = textArray.join('\n').replace(/\n\n\n/g, '\n\n').trim();
-    navigator.clipboard.writeText(text).then(() => { showToast("报告组合内容已复制到剪贴板", 1500); }).catch(err => {
-        const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); showToast("报告组合内容已复制到剪贴板", 1500); } catch(e) { alert("复制失败，请尝试手动复制"); } document.body.removeChild(ta);
-    });
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? "报告组合内容已复制到剪贴板" : "复制失败", 1500);
 }
 
 function initWsSortable(type) { 
@@ -1535,7 +1546,12 @@ function updateBgPreviewUI() { const mode = themeConfig.darkMode ? 'night' : 'da
 function updateBgAdjustment() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; settings.bgBlur = document.getElementById('bgBlurRange').value; settings.bgOpacity = document.getElementById('bgOpacityRange').value; settings.bgOverlay = document.getElementById('bgOverlayRange').value; settings.contentTransparency = document.getElementById('themeAlphaRange').value; settings.contentMask = document.getElementById('textMaskRange').value; document.getElementById('blurValDisplay').innerText = settings.bgBlur + 'px'; document.getElementById('opacityValDisplay').innerText = Math.round(settings.bgOpacity * 100) + '%'; document.getElementById('overlayValDisplay').innerText = Math.round(settings.bgOverlay * 100) + '%'; document.getElementById('themeAlphaDisplay').innerText = settings.contentTransparency + '%'; document.getElementById('textMaskDisplay').innerText = settings.contentMask + '%'; applyThemeSettings(); const previewImg = document.getElementById('bgPreviewImage'); const previewOverlay = document.getElementById('bgPreviewOverlay'); if (previewImg) { previewImg.style.filter = `blur(${settings.bgBlur}px)`; previewImg.style.opacity = settings.bgOpacity; } if (previewOverlay) { const overlayBaseColor = getComputedStyle(document.body).getPropertyValue('--bg-overlay-color').trim(); previewOverlay.style.backgroundColor = `rgba(${overlayBaseColor}, ${settings.bgOverlay})`; } if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
 function resetBgParams() { const mode = themeConfig.darkMode ? 'night' : 'day'; const currentTheme = themeConfig[mode].theme; themeConfig[mode] = { ...DEFAULT_THEME_CONFIG[mode], theme: currentTheme }; updateSliderValuesFromConfig(); updateBgAdjustment(); updateBgPreviewUI(); }
 
-function copyCss() { const text = document.getElementById('customCssInput').value; if (!text) return showToast('CSS 内容为空', 1000); navigator.clipboard.writeText(text).then(() => showToast('CSS 已复制', 1000)).catch(() => showToast('复制失败', 1000)); }
+async function copyCss() {
+    const text = document.getElementById('customCssInput').value;
+    if (!text) return showToast('CSS 内容为空', 1000);
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? 'CSS 已复制' : '复制失败', 1000);
+}
 function downloadCurrentCss() { const css = document.getElementById('customCssInput').value; if (!css) return alert("当前 CSS 内容为空"); const blob = new Blob([css], {type: "text/css"}); let filename = "custom_style.css"; const presetName = document.getElementById('presetNameInput').value.trim(); if (presetName) { filename = `custom_style_${presetName}.css`; } downloadBlob(blob, filename); }
 function downloadAllCssPresets() { const keys = Object.keys(themeConfig.presets); if (keys.length === 0) return alert("没有保存的预设"); const zip = new JSZip(); keys.forEach(name => { zip.file(name + ".css", themeConfig.presets[name]); }); zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, "css_presets.zip"); }); }
 
@@ -2062,7 +2078,12 @@ function generateTextExport(nodes,level=0){ let str=""; const indent="    ".repe
 function generatePathExport(nodes,pathPrefix=""){ let result=""; let currentPath=pathPrefix; const pages=nodes.filter(n=>n.type==='page'); if(pages.length>0&&currentPath){ result+=currentPath+"\n"; pages.forEach(p=>{ const safeName=p.name.replace(/\n/g,'\\n'); result+=safeName+"\n"; const urls = normalizeUrls(p); urls.forEach(u => { result += u.url + (u.name ? ` | ${u.name}` : '') + "\n"; }); if(p.note){result+="🗒️ "+p.note.replace(/\n/g,'\\n')+"\n";} }); result+="\n"; } const cats=nodes.filter(n=>n.type==='category'); cats.forEach(c=>{ const safeName=c.name.replace(/\n/g,'\\n'); const newPath=currentPath?(currentPath+" > "+safeName):safeName; result+=generatePathExport(c.children,newPath); }); return result; }
 
 function updateExportPreview(){ const format=document.querySelector('input[name="exportFormat"]:checked').value; let fullText = ""; if (isExportBatchMode) { const checks = document.querySelectorAll('.export-checkbox:checked'); checks.forEach(c => { const ws = appData.workspaces.find(w => w.id === c.value); if(ws) { const wsDispName = ws.group ? `${ws.group}/${ws.name}` : ws.name; fullText += `=== 主页: ${wsDispName} ===\n`; fullText += (format === 'tree' ? generateTextExport(ws.data) : generatePathExport(ws.data)); fullText += "\n"; } }); } else { const ws = appData.workspaces.find(w => w.id === exportSelectedId); if (ws) { const wsDispName = ws.group ? `${ws.group}/${ws.name}` : ws.name; fullText = `=== 主页: ${wsDispName} ===\n`; fullText += (format === 'tree' ? generateTextExport(ws.data) : generatePathExport(ws.data)); fullText += "\n"; } } document.getElementById('exportTextArea').value = fullText; }
-function copyExportText(){ const text = document.getElementById('exportTextArea').value; if (!text) return showToast("内容为空", 1000); const tempTA = document.createElement('textarea'); tempTA.value = text; tempTA.setAttribute('readonly', ''); tempTA.style.position = 'fixed'; tempTA.style.left = '-9999px'; document.body.appendChild(tempTA); tempTA.select(); tempTA.setSelectionRange(0, 99999); try { document.execCommand('copy'); showToast("已复制", 1000); } catch (err) { alert('复制失败，请手动复制'); } document.body.removeChild(tempTA); }
+async function copyExportText(){
+    const text = document.getElementById('exportTextArea').value;
+    if (!text) return showToast("内容为空", 1000);
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? "已复制" : "复制失败", 1000);
+}
 
 function exportJsonFile(isAll = false){ 
     let ids = []; 
@@ -2092,7 +2113,20 @@ function exportJsonFile(isAll = false){
 }
 
 
-function copyInput(id,btn){const el=document.getElementById(id);if(el&&el.value){navigator.clipboard.writeText(el.value).then(()=>{const icon=btn.querySelector('i');const originalClass=icon.className;icon.className='fas fa-check';setTimeout(()=>icon.className=originalClass,1000);}).catch(()=>alert('复制失败'));}}
+async function copyInput(id,btn){
+    const el=document.getElementById(id);
+    if(!el||!el.value) return;
+    const ok = await copyTextToClipboard(el.value);
+    if(ok){
+        const icon=btn.querySelector('i');
+        if(!icon) return;
+        const originalClass=icon.className;
+        icon.className='fas fa-check';
+        setTimeout(()=>icon.className=originalClass,1000);
+        return;
+    }
+    showToast('复制失败', 1000);
+}
 function clearInput(id){document.getElementById(id).value='';document.getElementById(id).focus();}
 
 
@@ -2376,7 +2410,17 @@ function batchPin(){
     nodes.forEach(node=>{ node.isPinned=shouldPin; });
     save();renderTree();cancelSelection();
 }
-function batchCopy(){const checks=document.querySelectorAll('.item-checkbox:checked');if(checks.length===0)return alert('请选择要复制的内容');const ids=Array.from(checks).map(c=>c.dataset.id);const topLevelSelected=[];ids.forEach(id=>{const p=findParent(id);if(p&&ids.includes(String(p.id)))return;topLevelSelected.push(findNode(id));});const text=generateTextExport(topLevelSelected);const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('已复制');}
+async function batchCopy(){
+    const checks=document.querySelectorAll('.item-checkbox:checked');
+    if(checks.length===0)return alert('请选择要复制的内容');
+    const ids=Array.from(checks).map(c=>c.dataset.id);
+    const topLevelSelected=[];
+    ids.forEach(id=>{const p=findParent(id);if(p&&ids.includes(String(p.id)))return;topLevelSelected.push(findNode(id));});
+    const text=generateTextExport(topLevelSelected);
+    const ok = await copyTextToClipboard(text);
+    if(ok) alert('已复制');
+    else showToast('复制失败', 1000);
+}
 
 function batchSelectSiblings(){
     const checks = document.querySelectorAll('.item-checkbox:checked');

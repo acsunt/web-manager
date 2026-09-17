@@ -1,5 +1,8 @@
 package com.webmanager.app;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
@@ -57,6 +60,21 @@ final class PageInfoBridge {
     @JavascriptInterface
     public void setSystemBarsAppearance(boolean light) {
         activity.setSystemBarsAppearance(light);
+    }
+
+    @JavascriptInterface
+    public boolean copyText(String text) {
+        try {
+            final String value = text == null ? "" : text;
+            activity.runOnUiThread(() -> {
+                ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard == null) return;
+                clipboard.setPrimaryClip(ClipData.newPlainText("web-manager", value));
+            });
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     void cancelAll() {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, defaultThemeScale, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -117,6 +117,41 @@ describe('defaultThemeScale', () => {
   it('APK 默认关掉系统字号、界面大小 85%', () => {
     window.Android = {};
     expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 0.85 });
+  });
+});
+
+describe('copyTextToClipboard', () => {
+  afterEach(() => {
+    delete window.Android;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    delete document.execCommand;
+  });
+
+  it('APK 有 copyText 时走原生剪贴板', async () => {
+    window.Android = { copyText: vi.fn(() => true) };
+    await expect(copyTextToClipboard('分类名')).resolves.toBe(true);
+    expect(window.Android.copyText).toHaveBeenCalledWith('分类名');
+  });
+
+  it('网页走 Clipboard API', async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    await expect(copyTextToClipboard('网页名')).resolves.toBe(true);
+    expect(writeText).toHaveBeenCalledWith('网页名');
+  });
+
+  it('Clipboard API 失败时回退 execCommand', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => { throw new Error('denied'); }) } });
+    document.execCommand = vi.fn(() => true);
+    await expect(copyTextToClipboard('兜底')).resolves.toBe(true);
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+  });
+
+  it('全部失败时返回 false', async () => {
+    vi.stubGlobal('navigator', {});
+    document.execCommand = vi.fn(() => { throw new Error('no copy'); });
+    await expect(copyTextToClipboard('失败')).resolves.toBe(false);
   });
 });
 

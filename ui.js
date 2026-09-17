@@ -45,6 +45,37 @@ export function isNativeApp() {
     return typeof window !== 'undefined' && typeof window.Android === 'object' && window.Android !== null;
 }
 
+export async function copyTextToClipboard(text) {
+    const value = text == null ? '' : String(text);
+    if (typeof window !== 'undefined' && typeof window.Android?.copyText === 'function') {
+        try {
+            const ok = window.Android.copyText(value);
+            if (ok !== false) return true;
+        } catch (e) { /* 网页没有原生桥 */ }
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return true;
+        } catch (e) { /* APK file:// WebView 常不支持 Clipboard API */ }
+    }
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    try {
+        return !!document.execCommand('copy');
+    } catch (e) {
+        return false;
+    } finally {
+        ta.remove();
+    }
+}
+
 export function defaultThemeScale() {
     if (isNativeApp()) {
         return { systemTextSize: false, textScale: 1, uiScale: 0.85 };
