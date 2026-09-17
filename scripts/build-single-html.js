@@ -6,6 +6,7 @@ import { escapeInlineScript, replaceOnce } from './html-inline.js';
 import { cleanDistArtifacts } from './dist-artifacts.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+// 本地打包默认输出仓库根目录 dist/，不要改到别的目录。
 const distDir = join(rootDir, 'dist');
 const indexPath = join(rootDir, 'index.html');
 const stylePath = join(rootDir, 'style.css');

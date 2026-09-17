@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, defaultThemeScale, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -102,6 +102,21 @@ describe('applySafeAreaInsets', () => {
     applySafeAreaInsets({ top: 24, right: 0, bottom: 48, left: 0 });
     expect(document.documentElement.style.getPropertyValue('--safe-top')).toBe('24px');
     expect(document.documentElement.style.getPropertyValue('--safe-bottom')).toBe('48px');
+  });
+});
+
+describe('defaultThemeScale', () => {
+  afterEach(() => {
+    delete window.Android;
+  });
+
+  it('网页默认跟系统字号、界面大小 100%', () => {
+    expect(defaultThemeScale()).toEqual({ systemTextSize: true, textScale: 1, uiScale: 1 });
+  });
+
+  it('APK 默认关掉系统字号、界面大小 85%', () => {
+    window.Android = {};
+    expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 0.85 });
   });
 });
 

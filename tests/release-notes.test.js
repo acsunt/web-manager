@@ -58,20 +58,24 @@ describe('Release 说明', () => {
 });
 
 describe('Release 工作流', () => {
-  it('GitHub 只打包 HTML，APK 由本地上传', () => {
-    const workflow = readFileSync(join(rootDir, '.github/workflows/release-single-html.yml'), 'utf8');
-    expect(workflow).toContain('npm run build');
-    expect(workflow).not.toContain('npm run apk');
-    expect(workflow).not.toContain('setup-android');
-    expect(workflow).toContain('scripts/release-notes.mjs');
-    expect(workflow).toContain('wan-v${VERSION}-yes.html');
+  it('GitHub 不再打包 HTML，产物由本地 npm run apk 上传', () => {
+    const upload = readFileSync(join(rootDir, 'scripts/upload-apk.js'), 'utf8');
+    expect(upload).toContain('wan-v${version}-yes.html');
+    expect(upload).toContain('wan-v${version}-no.html');
+    expect(upload).toContain('web-manager-v${version}.apk');
+    expect(upload).toContain("['release', 'create'");
+    expect(upload).toContain('uploadDistToRelease');
   });
 
-  it('本地 APK 脚本清旧产物并上传 Release', () => {
+  it('本地 APK 脚本顺带打包 HTML，并使用本机已有的 gradle-8.14.3-all', () => {
     const src = readFileSync(join(rootDir, 'scripts/build-apk.js'), 'utf8');
+    const wrapper = readFileSync(join(rootDir, 'android/gradle/wrapper/gradle-wrapper.properties'), 'utf8');
     expect(src).toContain("join(androidDir, 'gradlew')");
+    expect(src).toContain('build-single-html.js');
     expect(src).toContain('cleanDistArtifacts');
-    expect(src).toContain('uploadApkToRelease');
-    expect(src).not.toContain('gradle-8.14.3-all');
+    expect(src).toContain('uploadDistToRelease');
+    expect(src).toContain('gradle-8.14.3-all');
+    expect(wrapper).toContain('gradle-8.14.3-all.zip');
+    expect(wrapper).not.toContain('gradle-8.14.3-bin.zip');
   });
 });

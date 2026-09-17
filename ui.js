@@ -41,6 +41,17 @@ export function applySafeAreaInsets(insets = {}) {
     root.style.setProperty('--safe-left', toPx(insets.left));
 }
 
+export function isNativeApp() {
+    return typeof window !== 'undefined' && typeof window.Android === 'object' && window.Android !== null;
+}
+
+export function defaultThemeScale() {
+    if (isNativeApp()) {
+        return { systemTextSize: false, textScale: 1, uiScale: 0.85 };
+    }
+    return { systemTextSize: true, textScale: 1, uiScale: 1 };
+}
+
 export function syncNativeSystemBars(darkMode) {
     if (typeof window === 'undefined' || typeof window.Android?.setSystemBarsAppearance !== 'function') return;
     try {

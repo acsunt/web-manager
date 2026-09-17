@@ -4,10 +4,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { cleanDistArtifacts } from './dist-artifacts.js';
-import { uploadApkToRelease } from './upload-apk.js';
+import { uploadDistToRelease } from './upload-apk.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(rootDir, 'android');
+// 本地打包默认输出仓库根目录 dist/，不要改到别的目录。
 const distDir = join(rootDir, 'dist');
 const assetsDir = join(androidDir, 'app', 'src', 'main', 'assets');
 const VERSION_RE = /<title>[^<]*\bv(\d+\.\d+\.\d+)\b/;
@@ -41,6 +42,9 @@ function copyHtmlIntoAssets(version) {
 function gradleCommand() {
     return platform() === 'win32' ? join(androidDir, 'gradlew.bat') : join(androidDir, 'gradlew');
 }
+
+// 本机已缓存 gradle-8.14.3-all。android/gradle/wrapper/gradle-wrapper.properties
+// 必须指向 gradle-8.14.3-all.zip，不要改成 -bin.zip，否则会再下一份发行包。
 
 function gradleEnv() {
     const env = { ...process.env };
@@ -98,7 +102,7 @@ async function main() {
         console.log('SKIP_UPLOAD=1，跳过上传 GitHub Release');
         return;
     }
-    uploadApkToRelease(version);
+    uploadDistToRelease(version);
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

@@ -36,4 +36,22 @@ describe('APK 版本号', () => {
     expect(existsSync(join(rootDir, 'android', 'gradlew.bat'))).toBe(true);
     expect(existsSync(join(rootDir, 'android', 'gradle', 'wrapper', 'gradle-wrapper.jar'))).toBe(true);
   });
+
+  it('Wrapper 使用本机已有的 gradle-8.14.3-all，不另下 bin 发行包', () => {
+    const wrapper = readFileSync(join(rootDir, 'android', 'gradle', 'wrapper', 'gradle-wrapper.properties'), 'utf8');
+    const apkScript = readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8');
+    expect(wrapper).toContain('gradle-8.14.3-all.zip');
+    expect(wrapper).not.toContain('gradle-8.14.3-bin.zip');
+    expect(apkScript).toContain('gradle-8.14.3-all');
+  });
+
+  it('本地打包默认输出 dist/', () => {
+    const apkScript = readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8');
+    const htmlScript = readFileSync(join(rootDir, 'scripts', 'build-single-html.js'), 'utf8');
+    expect(apkScript).toContain("join(rootDir, 'dist')");
+    expect(apkScript).toContain('web-manager-v${version}.apk');
+    expect(htmlScript).toContain("join(rootDir, 'dist')");
+    expect(htmlScript).toContain('dist/${onlineName}');
+    expect(htmlScript).toContain('dist/${offlineName}');
+  });
 });

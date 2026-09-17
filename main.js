@@ -8,7 +8,7 @@ import {
     getAllPages,
     sortNodesByPin,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -103,7 +103,8 @@ let toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG];
 const DEFAULT_CSS_TEMPLATE = `/* 基础 CSS 示例 (安全版) */\nbody {\n    /* --bg-color: #f2f4f6; */\n}\n`;
 
 const DEFAULT_THEME_CONFIG = { darkMode: false, customCss: '', presets: {}, lockedImg: true, lockedContent: true, systemTextSize: true, textScale: 1, uiScale: 1, day: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 }, night: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 } };
-let themeConfig = { ...DEFAULT_THEME_CONFIG };
+function createDefaultThemeConfig() { return { ...DEFAULT_THEME_CONFIG, ...defaultThemeScale() }; }
+let themeConfig = createDefaultThemeConfig();
 
 // ================= 全局拖拽与悬停监听 =================
 document.addEventListener('touchmove', (e) => {
@@ -1441,7 +1442,7 @@ function wsBatchChangeGroup() { const checked = document.querySelectorAll('.ws-c
 function wsBatchDelete() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先选择要删除主页'); if (confirm(`确定删除这 ${checked.length} 个主页吗？`)) { const idsToDelete = Array.from(checked).map(cb => cb.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); document.getElementById('wsSelectAllBox').checked = false; showToast("批量删除成功"); } }
 
 function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange']; sliders.forEach(id => { const el = document.getElementById(id); if(el) { const startAdjust = () => { document.body.classList.add('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.add('adjust-active'); }; const endAdjust = () => { document.body.classList.remove('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.remove('adjust-active'); }; el.addEventListener('mousedown', startAdjust); el.addEventListener('touchstart', startAdjust, {passive: true}); el.addEventListener('mouseup', endAdjust); el.addEventListener('touchend', endAdjust); } }); }
-function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (savedTheme) { try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...DEFAULT_THEME_CONFIG, darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...DEFAULT_THEME_CONFIG, ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); } } }
+function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (!savedTheme) { themeConfig = createDefaultThemeConfig(); return; } try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...createDefaultThemeConfig(), darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...createDefaultThemeConfig(), ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); themeConfig = createDefaultThemeConfig(); } }
 function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
 function openToolsModal() { document.getElementById('toolsModal').classList.add('active'); }
@@ -1463,7 +1464,7 @@ function importThemeSettings(input) {
         if (Array.isArray(newConfig) || (newConfig.type && (newConfig.type === 'category' || newConfig.type === 'page')) || newConfig.children) { showToast("❌ 这是网页数据，不是主题文件！", 2500); input.value = ''; return; } 
         if(confirm('确定要覆盖当前的主题设置吗？')) { 
             if (!newConfig.day) newConfig.day = { ...DEFAULT_THEME_CONFIG.day }; if (!newConfig.night) newConfig.night = { ...DEFAULT_THEME_CONFIG.night }; 
-            themeConfig = { ...DEFAULT_THEME_CONFIG, ...newConfig }; saveThemeConfig(); applyThemeSettings(); showToast("主题导入成功", 1000); closeModal('themeModal'); 
+            themeConfig = { ...createDefaultThemeConfig(), ...newConfig }; saveThemeConfig(); applyThemeSettings(); showToast("主题导入成功", 1000); closeModal('themeModal'); 
         } 
     }; 
     if (file.name.toLowerCase().endsWith('.zip')) { 
@@ -1595,7 +1596,7 @@ function performClearBg(type) {
     } else if (type === 'all') { 
         if(confirm('确定要将主题恢复为默认设置吗？')) { 
             const keepPresets = !document.getElementById('clearPresetsCheckbox').checked; let existingPresets = {}; if (keepPresets) existingPresets = JSON.parse(JSON.stringify(themeConfig.presets));
-            themeConfig = { ...DEFAULT_THEME_CONFIG }; themeConfig.presets = existingPresets; 
+            themeConfig = createDefaultThemeConfig(); themeConfig.presets = existingPresets; 
             document.getElementById('darkModeToggle').checked = false; document.getElementById('customCssInput').value = DEFAULT_CSS_TEMPLATE; updatePresetDropdown(); showToast("主题已初始化", 1500); 
         } else { return; } 
     } applyThemeSettings(); saveThemeConfig(); updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); closeModal('clearBgOptionsModal'); 
@@ -1634,7 +1635,7 @@ function updateClearSelectAllState() {
     selectAll.indeterminate = selectedCount > 0 && selectedCount < workspaceChecks.length;
 }
 function performClearSelectedWorkspaces() { const checks = document.querySelectorAll('.ws-clear-check:checked'); if (checks.length === 0) { alert("请先勾选需要删除的主页"); return; } if (confirm(`确定要删除这 ${checks.length} 个主页吗？`)) { const idsToDelete = Array.from(checks).map(c => c.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); showToast("选定主页已删除"); closeModal('clearDataOptionsModal'); } }
-function performClearData(type) { if (type === 'all') { if (confirm("确定要完全初始化系统吗？\n这将删除所有的资料、主页归属并重置所有主题参数。")) { appData = createDefaultAppData(); data = appData.workspaces[0].data; save(); themeConfig = { ...DEFAULT_THEME_CONFIG }; saveThemeConfig(); applyThemeSettings(); document.getElementById('darkModeToggle').checked = false; updateSliderValuesFromConfig(); updateBgPreviewUI(); renderTree(); renderWorkspaceList(); showToast("系统已完全重置", 1500); } } closeModal('clearDataOptionsModal'); }
+function performClearData(type) { if (type === 'all') { if (confirm("确定要完全初始化系统吗？\n这将删除所有的资料、主页归属并重置所有主题参数。")) { appData = createDefaultAppData(); data = appData.workspaces[0].data; save(); themeConfig = createDefaultThemeConfig(); saveThemeConfig(); applyThemeSettings(); document.getElementById('darkModeToggle').checked = false; updateSliderValuesFromConfig(); updateBgPreviewUI(); renderTree(); renderWorkspaceList(); showToast("系统已完全重置", 1500); } } closeModal('clearDataOptionsModal'); }
 
 // ================= 树形视图渲染 =================
 // 数据是唯一状态源；每次变更后从 data 重建 DOM，避免界面顺序与持久化结构脱节。

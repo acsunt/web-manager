@@ -1,5 +1,5 @@
 ---
-description: HTML 由 GitHub 打包发布，APK 本地打进 dist 后上传同一 Release，并清掉旧产物
+description: HTML 和 APK 都由本机 npm run apk 打进 dist 后上传同一 Release，并清掉旧产物
 alwaysApply: true
 ---
 
@@ -7,14 +7,22 @@ alwaysApply: true
 
 分工：
 
-- **HTML**：推到 `main` 后，GitHub Actions 打包并上传
-  - `wan-vX.Y.Z-yes.html`
-  - `wan-vX.Y.Z-no.html`
-- **APK**：本机 `npm run apk`，版本名跟 `index.html` 标题同一串数字，输出 `dist/web-manager-vX.Y.Z.apk`，然后自动上传到同一个 Release `vX.Y.Z`
+- **本机 `npm run apk`**：先打单文件 HTML，再打 APK，然后把三份都上传到同一 Release `vX.Y.Z`
+  - `dist/wan-vX.Y.Z-yes.html`
+  - `dist/wan-vX.Y.Z-no.html`
+  - `dist/web-manager-vX.Y.Z.apk`（版本名跟 `index.html` 标题同一串数字）
+- **GitHub Actions**：不要再打包 HTML，也不要另写一套 Release 说明
+
+本地打包默认输出到仓库根目录的 `dist/`，不要改到别的目录：
+
+- `npm run build` → `dist/wan-vX.Y.Z-yes.html`、`dist/wan-vX.Y.Z-no.html`
+- `npm run apk` → 先打上述 HTML，再打 `dist/web-manager-vX.Y.Z.apk`
 
 `dist/` 只保留当前版本的 HTML 和 APK；打包时自动删掉旧的 `wan-v*` / `web-manager-v*`。
 
-Release 正文只来自**提交说明**，不来自聊天记录。APK 上传后不要另写一套说明。
+Release 正文只来自**提交说明**，不来自聊天记录。上传后不要另写一套说明。
+
+本机已有完整 `gradle-8.14.3-all`。`android/gradle/wrapper/gradle-wrapper.properties` 必须用 `gradle-8.14.3-all.zip`，不要改成 `-bin.zip`，否则会再下一份发行包。
 
 ## 提交必须带这三段（没有的可省略，但不能一段都没有）
 
@@ -41,5 +49,4 @@ feat: 简短标题
 
 ## 推送后
 
-1. 等 GitHub 把 HTML Release 建好
-2. 本机运行 `npm run apk`：打 APK、清掉 `dist` 旧文件、上传 APK 到该 Release
+1. 本机运行 `npm run apk`：打 HTML、打 APK、清掉 `dist` 旧文件、把 HTML 和 APK 一起上传到该 Release
