@@ -8,3 +8,12 @@ playwright-report/
 blob-report/
 playwright/.cache/
 dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/index.html
+*.apk
+*.aab
+*.keystore
+*.jks

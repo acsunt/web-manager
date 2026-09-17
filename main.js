@@ -1,4 +1,4 @@
-import { fetchPageTitle, fetchProxyJson, request } from './api.js';
+import { fetchPageTitleFor, fetchRecognizedPageInfo, nativeRecognitionConcurrency } from './api.js';
 import {
     collectSelfAndDescendantIds as collectSelfAndDescendantIdsInTree,
     cleanDuplicateIds,
@@ -8,7 +8,7 @@ import {
     getAllPages,
     sortNodesByPin,
 } from './tree.js';
-import { collectInlineHandlerNames, registerInlineHandlers, showToast } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -625,12 +625,22 @@ async function fetchPageInfo() {
     if (autoRadio.checked) updateIconPreview();
 
     try {
-        const title = await fetchPageTitleFor(targetUrl);
+        const recognized = await fetchRecognizedPageInfo(targetUrl);
+        const title = recognized?.title || '';
         const recognizedInput = document.getElementById('editRecognizedName');
         if (title && recognizedInput) {
             recognizedInput.value = title;
             if(document.querySelector('input[name="iconType"]:checked').value === 'letter') updateIconPreview();
             showToast('标题已填入「识别到的名称」');
+        }
+        const iconType = document.querySelector('input[name="iconType"]:checked')?.value;
+        if (recognized?.icon && (iconType === 'auto' || iconType === 'custom')) {
+            document.getElementById('customIconData').value = recognized.icon;
+            if (iconType === 'auto') {
+                const customRadio = document.querySelector('input[name="iconType"][value="custom"]');
+                if (customRadio) customRadio.checked = true;
+            }
+            updateIconPreview();
         }
     } catch (error) {
         if (error.name === 'AbortError') showToast('获取标题超时');
@@ -779,38 +789,7 @@ function applyBatchIconType() {
 }
 
 // ================= 名称识别共享逻辑 =================
-// 字典 + allorigins 解析 <title> + 域名首段兜底，被 checkAllIcons / applyBatchIconName / fetchPageInfo 共用。
-const COMMON_SITES_DICTIONARY = {
-    baidu: '百度', taobao: '淘宝', jd: '京东', qq: '腾讯',
-    bilibili: '哔哩哔哩', weibo: '新浪微博', zhihu: '知乎',
-    douyin: '抖音', github: 'GitHub', '163': '网易',
-    sohu: '搜狐', smzdm: '什么值得买', xiaohongshu: '小红书',
-    alipay: '支付宝', gitee: '码云', csdn: 'CSDN',
-    youtube: 'YouTube', google: 'Google', microsoft: '微软',
-    apple: 'Apple', twitter: 'Twitter', facebook: 'Facebook', tiktok: 'TikTok'
-};
-
-async function fetchPageTitleFor(url) {
-    let domain = '';
-    try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
-    for (const key in COMMON_SITES_DICTIONARY) {
-        if (domain === key || domain.endsWith('.' + key)) return COMMON_SITES_DICTIONARY[key];
-    }
-    try {
-        const data = await fetchProxyJson(url, { timeout: 4000 });
-        const html = data && data.contents;
-        if (html) {
-            const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-            if (m && m[1]) {
-                const ta = document.createElement('textarea');
-                ta.innerHTML = m[1].trim();
-                return ta.value;
-            }
-        }
-    } catch (e) { /* 静默失败，继续兜底 */ }
-    const first = domain.split('.')[0];
-    return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
-}
+// 真正分叉在 api.js：有原生桥走 WebView，没有就走字典 + allorigins。
 
 function resolveBatchNameTemplate(template, index) {
     if (!template) return '';
@@ -862,7 +841,14 @@ async function applyBatchIconName() {
     const copyBtn = document.getElementById('copyReportBtn');
     if (copyBtn) copyBtn.style.display = 'none';
     const pauseBtn = document.getElementById('pauseReportBtn');
-    if (pauseBtn) pauseBtn.style.display = 'none';
+    window.isCheckPaused = false;
+    window.isCheckAborted = false;
+    window.currentCheckProgress = '';
+    if (pauseBtn) {
+        pauseBtn.style.display = source === 'recognize' ? 'inline-block' : 'none';
+        pauseBtn.className = 'fas fa-pause';
+        pauseBtn.style.color = '';
+    }
     listEl.innerHTML = '';
     summaryEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 正在处理 (0/${targets.length})...`;
     reportModal.classList.add('active');
@@ -873,10 +859,13 @@ async function applyBatchIconName() {
     let failCount = 0;
     let index = 0;
     const total = targets.length;
-    const CONCURRENCY = 5;
+    const CONCURRENCY = nativeRecognitionConcurrency();
 
     async function worker() {
         while (index < total) {
+            if (window.isCheckAborted) break;
+            while (window.isCheckPaused && !window.isCheckAborted) { await new Promise(r => setTimeout(r, 300)); }
+            if (window.isCheckAborted) break;
             const i = index++;
             const page = targets[i];
             const finalName = resolveBatchNameTemplate(manualName, i + 1);
@@ -1249,7 +1238,11 @@ function toggleCheckPause() {
     }
 }
 
-function closeReportModal() { window.isCheckAborted = true; closeModal('reportModal'); }
+function closeReportModal() {
+    window.isCheckAborted = true;
+    try { window.Android?.cancelAllPageInfo?.(); } catch (e) { /* 网页没有原生桥 */ }
+    closeModal('reportModal');
+}
 
 function copyReportContent() {
     if (!window.currentReportData || window.currentReportData.length === 0) return showToast("无内容可复制");
@@ -1456,7 +1449,7 @@ function toggleThemeLock(type) { if (type === 'img') { themeConfig.lockedImg = !
 
 function updateLockUI() { const lockImgBtn = document.getElementById('lockImgBtn'); const lockContentBtn = document.getElementById('lockContentBtn'); const imgInputs = [ document.getElementById('bgBlurRange'), document.getElementById('bgOpacityRange'), document.getElementById('bgOverlayRange') ]; const contentInputs = [ document.getElementById('themeAlphaRange'), document.getElementById('textMaskRange') ]; if (themeConfig.lockedImg) { lockImgBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockImgBtn.classList.add('locked'); lockImgBtn.title = "点击解锁"; imgInputs.forEach(r => r.disabled = true); } else { lockImgBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockImgBtn.classList.remove('locked'); lockImgBtn.title = "点击锁定"; imgInputs.forEach(r => r.disabled = false); } if (themeConfig.lockedContent) { lockContentBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockContentBtn.classList.add('locked'); lockContentBtn.title = "点击解锁"; contentInputs.forEach(r => r.disabled = true); } else { lockContentBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockContentBtn.classList.remove('locked'); lockContentBtn.title = "点击锁定"; contentInputs.forEach(r => r.disabled = false); } }
 
-function exportThemeSettings() { const configToExport = JSON.parse(JSON.stringify(themeConfig)); const hasDayImg = configToExport.day.bgType === 'image' && configToExport.day.bgValue && configToExport.day.bgValue.startsWith('data:image'); const hasNightImg = configToExport.night.bgType === 'image' && configToExport.night.bgValue && configToExport.night.bgValue.startsWith('data:image'); const includePresets = document.getElementById('exportIncludePresets').checked; if (hasDayImg || hasNightImg || includePresets) { const zip = new JSZip(); if (hasDayImg) { const mimeMatch = configToExport.day.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_day.${ext}`; zip.file(filename, configToExport.day.bgValue.split(',')[1], {base64: true}); configToExport.day.bgValue = filename; } if (hasNightImg) { const mimeMatch = configToExport.night.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_night.${ext}`; zip.file(filename, configToExport.night.bgValue.split(',')[1], {base64: true}); configToExport.night.bgValue = filename; } if (includePresets && configToExport.presets && Object.keys(configToExport.presets).length > 0) { const presetsMeta = {}; const cssFolder = zip.folder("presets/css"); const htmlFolder = zip.folder("presets/html"); Object.keys(configToExport.presets).forEach(presetName => { const content = configToExport.presets[presetName]; const isHtml = content.trim().startsWith('<'); if (isHtml) { htmlFolder.file(`${presetName}.html`, content); presetsMeta[presetName] = { type: 'html', file: `presets/html/${presetName}.html` }; } else { cssFolder.file(`${presetName}.css`, content); presetsMeta[presetName] = { type: 'css', file: `presets/css/${presetName}.css` }; } }); zip.file("presets.json", JSON.stringify(presetsMeta, null, 2)); delete configToExport.presets; } zip.file("theme_config.json", JSON.stringify(configToExport, null, 2)); zip.generateAsync({type:"blob"}).then(function(content) { const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = "web_manager_theme.zip"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }); } else { const blob = new Blob([JSON.stringify(configToExport, null, 2)], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "web_manager_theme.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); } }
+function exportThemeSettings() { const configToExport = JSON.parse(JSON.stringify(themeConfig)); const hasDayImg = configToExport.day.bgType === 'image' && configToExport.day.bgValue && configToExport.day.bgValue.startsWith('data:image'); const hasNightImg = configToExport.night.bgType === 'image' && configToExport.night.bgValue && configToExport.night.bgValue.startsWith('data:image'); const includePresets = document.getElementById('exportIncludePresets').checked; if (hasDayImg || hasNightImg || includePresets) { const zip = new JSZip(); if (hasDayImg) { const mimeMatch = configToExport.day.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_day.${ext}`; zip.file(filename, configToExport.day.bgValue.split(',')[1], {base64: true}); configToExport.day.bgValue = filename; } if (hasNightImg) { const mimeMatch = configToExport.night.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_night.${ext}`; zip.file(filename, configToExport.night.bgValue.split(',')[1], {base64: true}); configToExport.night.bgValue = filename; } if (includePresets && configToExport.presets && Object.keys(configToExport.presets).length > 0) { const presetsMeta = {}; const cssFolder = zip.folder("presets/css"); const htmlFolder = zip.folder("presets/html"); Object.keys(configToExport.presets).forEach(presetName => { const content = configToExport.presets[presetName]; const isHtml = content.trim().startsWith('<'); if (isHtml) { htmlFolder.file(`${presetName}.html`, content); presetsMeta[presetName] = { type: 'html', file: `presets/html/${presetName}.html` }; } else { cssFolder.file(`${presetName}.css`, content); presetsMeta[presetName] = { type: 'css', file: `presets/css/${presetName}.css` }; } }); zip.file("presets.json", JSON.stringify(presetsMeta, null, 2)); delete configToExport.presets; } zip.file("theme_config.json", JSON.stringify(configToExport, null, 2)); zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, "web_manager_theme.zip"); }); } else { const blob = new Blob([JSON.stringify(configToExport, null, 2)], {type: "application/json"}); downloadBlob(blob, "web_manager_theme.json"); } }
 
 function openThemeModal() { document.getElementById('darkModeToggle').checked = themeConfig.darkMode; const input = document.getElementById('customCssInput'); if(!input.value.trim()) input.value = themeConfig.customCss || DEFAULT_CSS_TEMPLATE; updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); updateLockUI(); document.getElementById('themeModal').classList.add('active'); }
 function updateSliderValuesFromConfig() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; document.getElementById('bgBlurRange').value = settings.bgBlur; document.getElementById('bgOpacityRange').value = settings.bgOpacity; document.getElementById('bgOverlayRange').value = settings.bgOverlay; document.getElementById('themeAlphaRange').value = settings.contentTransparency; document.getElementById('textMaskRange').value = settings.contentMask; if (themeConfig.systemTextSize) { document.getElementById('systemTextScaleCheck').checked = true; document.getElementById('textScaleRange').disabled = true; document.getElementById('uiScaleRange').disabled = true; document.getElementById('textScaleRange').value = 100; document.getElementById('uiScaleRange').value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; } else { document.getElementById('systemTextScaleCheck').checked = false; document.getElementById('textScaleRange').disabled = false; document.getElementById('uiScaleRange').disabled = false; const textVal = Math.round((themeConfig.textScale || 1) * 100); document.getElementById('textScaleRange').value = textVal; document.getElementById('textScaleDisplay').innerText = textVal + '%'; const uiVal = Math.round((themeConfig.uiScale || 1) * 100); document.getElementById('uiScaleRange').value = uiVal; document.getElementById('uiScaleDisplay').innerText = uiVal + '%'; } const hint = document.getElementById('themeModeHint'); hint.innerText = themeConfig.darkMode ? '当前配置：夜间模式风格' : '当前配置：日间模式风格'; hint.style.color = themeConfig.darkMode ? '#4dabf7' : '#e67700'; document.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active')); const currentTheme = settings.theme || 'minimal'; const activeEl = document.getElementById('theme-' + currentTheme); if(activeEl) activeEl.classList.add('active'); }
@@ -1509,8 +1502,8 @@ function updateBgAdjustment() { const mode = themeConfig.darkMode ? 'night' : 'd
 function resetBgParams() { const mode = themeConfig.darkMode ? 'night' : 'day'; const currentTheme = themeConfig[mode].theme; themeConfig[mode] = { ...DEFAULT_THEME_CONFIG[mode], theme: currentTheme }; updateSliderValuesFromConfig(); updateBgAdjustment(); updateBgPreviewUI(); }
 
 function copyCss() { const text = document.getElementById('customCssInput').value; if (!text) return showToast('CSS 内容为空', 1000); navigator.clipboard.writeText(text).then(() => showToast('CSS 已复制', 1000)).catch(() => showToast('复制失败', 1000)); }
-function downloadCurrentCss() { const css = document.getElementById('customCssInput').value; if (!css) return alert("当前 CSS 内容为空"); const blob = new Blob([css], {type: "text/css"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); let filename = "custom_style.css"; const presetName = document.getElementById('presetNameInput').value.trim(); if (presetName) { filename = `custom_style_${presetName}.css`; } a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
-function downloadAllCssPresets() { const keys = Object.keys(themeConfig.presets); if (keys.length === 0) return alert("没有保存的预设"); const zip = new JSZip(); keys.forEach(name => { zip.file(name + ".css", themeConfig.presets[name]); }); zip.generateAsync({type:"blob"}).then(function(content) { const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = "css_presets.zip"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }); }
+function downloadCurrentCss() { const css = document.getElementById('customCssInput').value; if (!css) return alert("当前 CSS 内容为空"); const blob = new Blob([css], {type: "text/css"}); let filename = "custom_style.css"; const presetName = document.getElementById('presetNameInput').value.trim(); if (presetName) { filename = `custom_style_${presetName}.css`; } downloadBlob(blob, filename); }
+function downloadAllCssPresets() { const keys = Object.keys(themeConfig.presets); if (keys.length === 0) return alert("没有保存的预设"); const zip = new JSZip(); keys.forEach(name => { zip.file(name + ".css", themeConfig.presets[name]); }); zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, "css_presets.zip"); }); }
 
 function importCustomCodeFile(input) {
     if (!input.files || input.files.length === 0) return;
@@ -1584,6 +1577,7 @@ function applyThemeSettings() {
     root.style.setProperty('--theme-base-rgb', `${r}, ${g}, ${b}`); root.style.setProperty('--theme-bg-alpha', mainAlpha); root.style.setProperty('--text-mask-alpha', maskAlpha); 
     if (currentTheme === 'glass') { if (transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); } else { const dynamicBlur = 12 * (1 - (transVal / 100)); document.body.style.setProperty('--backdrop-filter', `blur(${dynamicBlur}px)`); } } else { document.body.style.removeProperty('--backdrop-filter', 'none'); } 
     if (transVal > 0) { const rgba = `rgba(${r}, ${g}, ${b}, ${mainAlpha})`; document.body.style.setProperty('--card-bg', rgba); document.body.style.setProperty('--root-cat-bg', rgba); document.body.style.setProperty('--root-header-bg', rgba); document.body.style.setProperty('--sub-cat-header-bg', rgba); document.body.style.setProperty('--input-bg', rgba); } else { document.body.style.removeProperty('--card-bg'); document.body.style.removeProperty('--root-cat-bg'); document.body.style.removeProperty('--root-header-bg'); document.body.style.removeProperty('--sub-cat-header-bg'); document.body.style.removeProperty('--input-bg'); } 
+    syncNativeSystemBars(!!themeConfig.darkMode);
     
     setTimeout(() => { if (!document.body.classList.contains('is-dragging')) { document.body.style.transition = ''; } }, 50);
 }
@@ -2012,7 +2006,7 @@ function exportJsonFile(isAll = false){
     
     if (ids.length === 1) { 
         const ws = workspacesToExport[0]; const wsCount = countTotalPages(ws.data); const wsDispName = ws.group ? `${ws.group}_${ws.name}`.replace(/\//g, '_') : ws.name;
-        const content = JSON.stringify(ws.data, null, 2); const blob = new Blob([content], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${wsDispName} (${wsCount}).json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); 
+        const content = JSON.stringify(ws.data, null, 2); const blob = new Blob([content], {type: "application/json"}); downloadBlob(blob, `${wsDispName} (${wsCount}).json`); 
     } else { 
         const zip = new JSZip(); let groupOrder = appData.workspaceGroups || []; let existingGroupsInExport = [...new Set(workspacesToExport.map(w => w.group || ''))];
         existingGroupsInExport.sort((a,b) => { if (a === '') return -1; if (b === '') return 1; const idxA = groupOrder.indexOf(a); const idxB = groupOrder.indexOf(b); if (idxA!==-1 && idxB!==-1) return idxA - idxB; if (idxA!==-1) return -1; if (idxB!==-1) return 1; return a.localeCompare(b); });
@@ -2024,7 +2018,7 @@ function exportJsonFile(isAll = false){
             const wsDispName = ws.name.replace(/\//g, '_'); const content = JSON.stringify(ws.data, null, 2); const paddedIndex = String(wsIndexMap[g]).padStart(3, '0'); const folderName = groupFolderMap[g];
             zip.folder(folderName).file(`${paddedIndex}_${wsDispName} (${wsCount}).json`, content); wsIndexMap[g]++;
         }); 
-        zip.generateAsync({type:"blob"}).then(function(content) { const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = `workspaces_backup_trees (${totalOverallCount}页).zip`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }); 
+        zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, `workspaces_backup_trees (${totalOverallCount}页).zip`); }); 
     } 
 }
 
@@ -2511,13 +2505,8 @@ function exportIconSettings() {
         icons: iconData
     };
 
-    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type: "application/json"}); 
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(blob); 
-    a.download = "icon_settings.json"; 
-    document.body.appendChild(a); 
-    a.click(); 
-    document.body.removeChild(a);
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type: "application/json"});
+    downloadBlob(blob, "icon_settings.json");
     showToast("图标配置已导出");
 }
 
@@ -2682,7 +2671,7 @@ async function checkAllIcons() {
         listEl.appendChild(li);
     }
 
-    const CONCURRENCY = 5;
+    const CONCURRENCY = nativeRecognitionConcurrency();
     let index = 0;
     
     async function worker() {
@@ -2708,25 +2697,17 @@ async function checkAllIcons() {
             let detectedTitle = '';
 
             if (domain) {
-                const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
-                const iowenUrl = `https://api.iowen.cn/favicon/${domain}`;
-                try {
-                    const data = await fetchProxyJson(faviconUrl, { timeout: 4000 });
-                    if (data && data.contents && data.contents.startsWith('data:image')) {
-                        page.iconType = 'custom';
-                        page.customIcon = data.contents;
-                    } else {
-                        page.iconType = 'custom';
-                        page.customIcon = faviconUrl;
-                    }
-                } catch (e) {
+                const recognized = await fetchRecognizedPageInfo(mainUrl);
+                detectedTitle = recognized?.title || '';
+                if (recognized?.icon) {
                     page.iconType = 'custom';
-                    page.customIcon = iowenUrl;
+                    page.customIcon = recognized.icon;
+                    status = 'success';
+                    successCount++;
+                } else {
+                    failCount++;
+                    msg = '未能识别图标';
                 }
-                status = 'success';
-                successCount++;
-
-                detectedTitle = await fetchPageTitleFor(mainUrl);
                 if (detectedTitle && detectedTitle.length <= 12) {
                     page.name = detectedTitle;
                 }
@@ -2894,6 +2875,7 @@ const inlineHandlers = {
     removeUrlRow,
     jumpToNode,
     updateClearSelectAllState,
+    applySafeAreaInsets,
     cropper: {
         reset() { cropper?.reset(); },
     },

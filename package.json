@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-single-html.js",
+    "apk": "node scripts/build-apk.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

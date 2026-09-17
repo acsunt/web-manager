@@ -11,7 +11,16 @@ export function closeDialog(id) {
     document.getElementById(id)?.classList.remove('active');
 }
 
-export function downloadBlob(blob, filename) {
+export async function downloadBlob(blob, filename) {
+    if (typeof window !== 'undefined' && typeof window.Android?.saveFile === 'function') {
+        const buffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        window.Android.saveFile(btoa(binary), blob.type || 'application/octet-stream', filename);
+        return;
+    }
+
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
@@ -20,6 +29,23 @@ export function downloadBlob(blob, filename) {
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
+}
+
+export function applySafeAreaInsets(insets = {}) {
+    const root = document.documentElement;
+    if (!root?.style) return;
+    const toPx = (value) => `${Math.max(0, Number(value) || 0)}px`;
+    root.style.setProperty('--safe-top', toPx(insets.top));
+    root.style.setProperty('--safe-right', toPx(insets.right));
+    root.style.setProperty('--safe-bottom', toPx(insets.bottom));
+    root.style.setProperty('--safe-left', toPx(insets.left));
+}
+
+export function syncNativeSystemBars(darkMode) {
+    if (typeof window === 'undefined' || typeof window.Android?.setSystemBarsAppearance !== 'function') return;
+    try {
+        window.Android.setSystemBarsAppearance(!darkMode);
+    } catch (e) { /* 网页没有原生桥 */ }
 }
 
 export function registerWindowHandlers(handlers) {

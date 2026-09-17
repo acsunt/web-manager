@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+def versionFile = rootProject.file('../index.html')
+if (!versionFile.exists()) {
+    throw new GradleException('找不到 ../index.html，无法读取 APK 版本号')
+}
+def versionMatcher = (versionFile.getText('UTF-8') =~ /<title>[^<]*\bv(\d+\.\d+\.\d+)\b/)
+if (!versionMatcher.find()) {
+    throw new GradleException('index.html 的 <title> 缺少 vMAJOR.MINOR.PATCH')
+}
+def appVersionName = versionMatcher.group(1)
+def versionParts = appVersionName.split('\\.').collect { it.toInteger() }
+def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
+
+android {
+    namespace 'com.webmanager.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.webmanager.app'
+        minSdk 24
+        targetSdk 35
+        versionCode appVersionCode
+        versionName appVersionName
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    constraints {
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { collectInlineHandlerNames, registerInlineHandlers } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -51,5 +51,78 @@ describe('registerInlineHandlers', () => {
     registerInlineHandlers({ toggleEditMode() {} }, new Set(['toggleEditMode', 'missingHandler']));
     expect(warnSpy).toHaveBeenCalledWith('未找到界面事件函数: missingHandler');
     warnSpy.mockRestore();
+  });
+});
+
+describe('downloadBlob', () => {
+  afterEach(() => {
+    delete window.Android;
+  });
+
+  it('网页没有原生桥时走 a.download', async () => {
+    const { downloadBlob } = await import('../ui.js');
+    const click = vi.fn();
+    const originalCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      const el = originalCreate(tag);
+      if (tag === 'a') el.click = click;
+      return el;
+    });
+    const createObjectURL = vi.fn(() => 'blob:test');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL });
+    await downloadBlob(new Blob(['hi'], { type: 'text/plain' }), 'a.txt');
+    expect(click).toHaveBeenCalled();
+    createSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('APK 有 saveFile 时把文件交给原生', async () => {
+    const { downloadBlob } = await import('../ui.js');
+    window.Android = { saveFile: vi.fn() };
+    const blob = {
+      type: 'text/plain',
+      arrayBuffer: async () => new Uint8Array([104, 105]).buffer,
+    };
+    await downloadBlob(blob, 'a.txt');
+    expect(window.Android.saveFile).toHaveBeenCalled();
+    expect(window.Android.saveFile.mock.calls[0][2]).toBe('a.txt');
+  });
+});
+
+describe('applySafeAreaInsets', () => {
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--safe-top');
+    document.documentElement.style.removeProperty('--safe-right');
+    document.documentElement.style.removeProperty('--safe-bottom');
+    document.documentElement.style.removeProperty('--safe-left');
+  });
+
+  it('把系统栏高度写进 CSS 变量', () => {
+    applySafeAreaInsets({ top: 24, right: 0, bottom: 48, left: 0 });
+    expect(document.documentElement.style.getPropertyValue('--safe-top')).toBe('24px');
+    expect(document.documentElement.style.getPropertyValue('--safe-bottom')).toBe('48px');
+  });
+});
+
+describe('syncNativeSystemBars', () => {
+  afterEach(() => {
+    delete window.Android;
+  });
+
+  it('网页没有原生桥时不抛错', () => {
+    expect(() => syncNativeSystemBars(true)).not.toThrow();
+  });
+
+  it('夜间模式让系统栏用浅色图标', () => {
+    window.Android = { setSystemBarsAppearance: vi.fn() };
+    syncNativeSystemBars(true);
+    expect(window.Android.setSystemBarsAppearance).toHaveBeenCalledWith(false);
+  });
+
+  it('日间模式让系统栏用深色图标', () => {
+    window.Android = { setSystemBarsAppearance: vi.fn() };
+    syncNativeSystemBars(false);
+    expect(window.Android.setSystemBarsAppearance).toHaveBeenCalledWith(true);
   });
 });

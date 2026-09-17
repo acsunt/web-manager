@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFaviconUrl, fetchPageTitle, request } from '../api.js';
+import {
+  createFaviconUrl,
+  fetchPageTitle,
+  fetchPageTitleFor,
+  fetchRecognizedPageInfo,
+  hasNativePageInfoBridge,
+  lookupCommonSiteTitle,
+  nativeRecognitionConcurrency,
+  request,
+} from '../api.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -46,5 +55,72 @@ describe('fetchPageTitle', () => {
     }));
 
     await expect(fetchPageTitle('https://example.com')).resolves.toBe('Foo & Bar');
+  });
+});
+
+describe('网页 / 原生识别分叉', () => {
+  afterEach(() => {
+    delete window.Android;
+    delete window.__onNativePageInfo;
+    delete window.__nativePageInfoPending;
+  });
+
+  it('常见站走字典，不打代理', async () => {
+    expect(lookupCommonSiteTitle('https://www.baidu.com/s')).toBe('百度');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(fetchPageTitleFor('https://github.com/foo')).resolves.toBe('GitHub');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('没有原生桥时并发仍是 5', () => {
+    expect(hasNativePageInfoBridge(window)).toBe(false);
+    expect(nativeRecognitionConcurrency(window)).toBe(5);
+  });
+
+  it('有原生桥时走回调结果，并发改为 2', async () => {
+    window.Android = {
+      fetchPageInfo(_url, requestId) {
+        queueMicrotask(() => {
+          window.__onNativePageInfo(requestId, JSON.stringify({
+            title: '真实标题',
+            icon: 'data:image/png;base64,aaa',
+          }));
+        });
+      },
+    };
+
+    expect(hasNativePageInfoBridge(window)).toBe(true);
+    expect(nativeRecognitionConcurrency(window)).toBe(2);
+    await expect(fetchPageTitleFor('https://example.com', window)).resolves.toBe('真实标题');
+    await expect(fetchRecognizedPageInfo('https://example.com', window)).resolves.toEqual({
+      title: '真实标题',
+      icon: 'data:image/png;base64,aaa',
+    });
+  });
+
+  it('本地路径不调用原生桥', async () => {
+    const fetchPageInfo = vi.fn();
+    window.Android = { fetchPageInfo };
+    await expect(fetchRecognizedPageInfo('file:///C:/page.html', window)).resolves.toEqual({
+      title: '',
+      icon: '',
+    });
+    expect(fetchPageInfo).not.toHaveBeenCalled();
+  });
+
+  it('原生失败时回退网页方案', async () => {
+    window.Android = {
+      fetchPageInfo() {
+        throw new Error('bridge down');
+      },
+    };
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({
+        contents: '<html><head><title>代理标题</title></head></html>',
+      }),
+    }));
+    await expect(fetchPageTitleFor('https://example.org/a', window)).resolves.toBe('代理标题');
   });
 });
