@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 import { escapeInlineScript, replaceOnce } from './html-inline.js';
 import { cleanDistArtifacts } from './dist-artifacts.js';
+import { CDN, loadOfflineVendor } from './offline-vendor.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 // 本地打包默认输出仓库根目录 dist/，不要改到别的目录。
@@ -11,14 +12,6 @@ const distDir = join(rootDir, 'dist');
 const indexPath = join(rootDir, 'index.html');
 const stylePath = join(rootDir, 'style.css');
 const mainPath = join(rootDir, 'main.js');
-
-const CDN = {
-    fontAwesomeCss: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-    cropperCss: 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css',
-    sortableJs: 'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js',
-    cropperJs: 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js',
-    jszipJs: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-};
 
 const VERSION_RE = /<title>[^<]*\bv(\d+\.\d+\.\d+)\b/;
 
@@ -41,48 +34,6 @@ function outputName(kind, version) {
     return kind === 'online'
         ? `wan-v${version}-yes.html`
         : `wan-v${version}-no.html`;
-}
-
-async function fetchText(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`下载失败 ${response.status} ${url}`);
-    }
-    return response.text();
-}
-
-async function fetchBuffer(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`下载失败 ${response.status} ${url}`);
-    }
-    return Buffer.from(await response.arrayBuffer());
-}
-
-function mimeForFont(file) {
-    if (file.endsWith('.woff2')) return 'font/woff2';
-    if (file.endsWith('.woff')) return 'font/woff';
-    if (file.endsWith('.ttf')) return 'font/ttf';
-    return 'application/octet-stream';
-}
-
-async function inlineFontAwesomeCss() {
-    const cssUrl = CDN.fontAwesomeCss;
-    const cssDir = cssUrl.replace(/[^/]+$/, '');
-    let css = await fetchText(cssUrl);
-    const fontUrls = [...new Set([...css.matchAll(/url\((['"]?)(\.\.\/webfonts\/[^)'"]+)\1\)/g)].map((match) => match[2]))];
-
-    for (const relative of fontUrls) {
-        const absolute = new URL(relative, cssDir).href;
-        const file = relative.split('/').pop();
-        const buffer = await fetchBuffer(absolute);
-        const dataUrl = `data:${mimeForFont(file)};base64,${buffer.toString('base64')}`;
-        css = css.replaceAll(`url("${relative}")`, `url("${dataUrl}")`);
-        css = css.replaceAll(`url('${relative}')`, `url('${dataUrl}')`);
-        css = css.replaceAll(`url(${relative})`, `url(${dataUrl})`);
-    }
-
-    return css;
 }
 
 async function bundleAppJs() {
@@ -171,16 +122,10 @@ async function main() {
         return;
     }
 
-    console.log('正在下载离线依赖（Font Awesome / Cropper / Sortable / JSZip）...');
-    const vendorCss = {
-        fontAwesome: await inlineFontAwesomeCss(),
-        cropper: await fetchText(CDN.cropperCss),
-    };
-    const vendorJs = {
-        sortable: await fetchText(CDN.sortableJs),
-        cropper: await fetchText(CDN.cropperJs),
-        jszip: await fetchText(CDN.jszipJs),
-    };
+    console.log('正在读取本地离线依赖 vendor/（Font Awesome / Cropper / Sortable / JSZip）...');
+    const vendor = loadOfflineVendor();
+    const vendorCss = vendor.css;
+    const vendorJs = vendor.js;
 
     const offlineName = outputName('offline', version);
     const offlineHtml = await buildHtml({

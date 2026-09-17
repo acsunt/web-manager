@@ -54,4 +54,10 @@ describe('APK 版本号', () => {
     expect(htmlScript).toContain('dist/${onlineName}');
     expect(htmlScript).toContain('dist/${offlineName}');
   });
+
+  it('离线依赖从 vendor/ 读取，不在打包时下载', () => {
+    const htmlScript = readFileSync(join(rootDir, 'scripts', 'build-single-html.js'), 'utf8');
+    expect(htmlScript).toContain('loadOfflineVendor');
+    expect(htmlScript).not.toContain('正在下载离线依赖');
+  });
 });

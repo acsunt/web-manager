@@ -34,16 +34,84 @@ export function deleteNode(id, list) {
     return false;
 }
 
-export function sortNodesByPin(nodes) {
-    if (!Array.isArray(nodes)) return nodes;
-    const pinned = nodes.filter((node) => node.isPinned);
-    const unpinned = nodes.filter((node) => !node.isPinned);
-    nodes.length = 0;
-    nodes.push(...pinned, ...unpinned);
+export function nodesForDisplay(nodes) {
+    if (!Array.isArray(nodes)) return [];
+    const pinned = [];
+    const unpinned = [];
     nodes.forEach((node) => {
-        if (node.children) sortNodesByPin(node.children);
+        if (node && node.isPinned) pinned.push(node);
+        else unpinned.push(node);
     });
-    return nodes;
+    return pinned.concat(unpinned);
+}
+
+export function reorderWithinPinZone(list, orderedIds) {
+    if (!Array.isArray(list) || !Array.isArray(orderedIds)) return list;
+    const zoneIds = orderedIds.map(String);
+    const zoneSet = new Set(zoneIds);
+    const idToNode = new Map(list.map((node) => [String(node.id), node]));
+    for (const id of zoneIds) {
+        if (!idToNode.has(id)) return list;
+    }
+    const slotCount = list.filter((node) => zoneSet.has(String(node.id))).length;
+    if (slotCount !== zoneIds.length) return list;
+    let i = 0;
+    for (let index = 0; index < list.length; index++) {
+        if (zoneSet.has(String(list[index].id))) {
+            list[index] = idToNode.get(zoneIds[i++]);
+        }
+    }
+    return list;
+}
+
+export function insertIntoPinZone(list, node, indexInZone = 0) {
+    if (!Array.isArray(list) || !node) return list;
+    const zonePinned = !!node.isPinned;
+    const existingZone = list.filter((item) => !!item.isPinned === zonePinned);
+    const parsedIndex = Number(indexInZone);
+    const zoneIndex = Number.isFinite(parsedIndex) ? Math.max(0, parsedIndex) : 0;
+    let insertAt;
+    if (existingZone.length === 0) {
+        insertAt = zonePinned ? 0 : list.length;
+    } else if (zoneIndex <= 0) {
+        insertAt = list.indexOf(existingZone[0]);
+    } else if (zoneIndex >= existingZone.length) {
+        insertAt = list.indexOf(existingZone[existingZone.length - 1]) + 1;
+    } else {
+        insertAt = list.indexOf(existingZone[zoneIndex]);
+    }
+    list.splice(insertAt, 0, node);
+    return list;
+}
+
+export function insertByOrderedPeers(list, node, orderedPeerIds) {
+    if (!Array.isArray(list) || !node) return list;
+    const ids = Array.isArray(orderedPeerIds) ? orderedPeerIds.map(String) : [];
+    const nodeId = String(node.id);
+    const pos = ids.indexOf(nodeId);
+    if (pos > 0) {
+        const afterIndex = list.findIndex((item) => String(item.id) === ids[pos - 1]);
+        if (afterIndex > -1) {
+            list.splice(afterIndex + 1, 0, node);
+            return list;
+        }
+    }
+    if (pos >= 0 && pos < ids.length - 1) {
+        const beforeIndex = list.findIndex((item) => String(item.id) === ids[pos + 1]);
+        if (beforeIndex > -1) {
+            list.splice(beforeIndex, 0, node);
+            return list;
+        }
+    }
+    const pinZone = list.filter((item) => !!item.isPinned === !!node.isPinned);
+    return insertIntoPinZone(list, node, node.isPinned ? 0 : pinZone.length);
+}
+
+export function canCategoryDrop(mode, dragNode, targetNode) {
+    if (!dragNode || !targetNode) return false;
+    if (mode === 'inside' || mode === 'after-parent') return true;
+    if (mode === 'before' || mode === 'after') return !!dragNode.isPinned === !!targetNode.isPinned;
+    return false;
 }
 
 export function cleanDuplicateIds(nodes) {

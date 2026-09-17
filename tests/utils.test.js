@@ -112,6 +112,24 @@ describe('sanitizeData', () => {
     expect(sanitizeData(undefined)).toEqual([]);
     expect(sanitizeData({ type: 'category' })).toEqual([]);
   });
+
+  it('导入时保留并归一化 isPinned，缺标记的不补', () => {
+    const nodes = [
+      { type: 'page', name: '置顶页', isPinned: true },
+      { type: 'page', name: '普通页' },
+      {
+        type: 'category',
+        name: '分类',
+        isPinned: 'yes',
+        children: [{ type: 'page', name: '子页', isPinned: 0 }],
+      },
+    ];
+    sanitizeData(nodes);
+    expect(nodes[0].isPinned).toBe(true);
+    expect(nodes[1].isPinned).toBeUndefined();
+    expect(nodes[2].isPinned).toBe(true);
+    expect(nodes[2].children[0].isPinned).toBe(false);
+  });
 });
 
 describe('isLocalUrl', () => {

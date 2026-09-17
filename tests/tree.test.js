@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canCategoryDrop,
   cleanDuplicateIds,
   collectSelfAndDescendantIds,
   deleteNode,
   findNode,
   findParent,
   getAllPages,
-  sortNodesByPin,
+  insertByOrderedPeers,
+  insertIntoPinZone,
+  nodesForDisplay,
+  reorderWithinPinZone,
 } from '../tree.js';
 
 function sampleTree() {
@@ -88,24 +92,113 @@ describe('deleteNode', () => {
   });
 });
 
-describe('sortNodesByPin', () => {
-  it('置顶节点始终在前，并递归处理子树', () => {
+describe('nodesForDisplay', () => {
+  it('只排显示顺序，不改原数组，且两边保持相对顺序', () => {
     const tree = [
-      {
-        id: 'a',
-        name: 'A',
-        children: [
-          { id: 'a2', name: 'A2' },
-          { id: 'a1', name: 'A1', isPinned: true },
-        ],
-      },
+      { id: 'a', name: 'A' },
       { id: 'b', name: 'B', isPinned: true },
+      { id: 'c', name: 'C' },
+      { id: 'd', name: 'D', isPinned: true },
     ];
 
-    sortNodesByPin(tree);
+    expect(nodesForDisplay(tree).map((node) => node.id)).toEqual(['b', 'd', 'a', 'c']);
+    expect(tree.map((node) => node.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
 
-    expect(tree.map((node) => node.id)).toEqual(['b', 'a']);
-    expect(tree[1].children.map((node) => node.id)).toEqual(['a1', 'a2']);
+  it('根层分类和网页混排时，也只按置顶区分，不按类型重排', () => {
+    const tree = [
+      { id: 'page-plain', type: 'page' },
+      { id: 'cat-pinned', type: 'category', isPinned: true },
+      { id: 'page-pinned', type: 'page', isPinned: true },
+      { id: 'cat-plain', type: 'category' },
+    ];
+    expect(nodesForDisplay(tree).map((node) => node.id)).toEqual([
+      'cat-pinned',
+      'page-pinned',
+      'page-plain',
+      'cat-plain',
+    ]);
+    expect(tree.map((node) => node.id)).toEqual([
+      'page-plain',
+      'cat-pinned',
+      'page-pinned',
+      'cat-plain',
+    ]);
+  });
+
+  it('非数组返回空数组', () => {
+    expect(nodesForDisplay(null)).toEqual([]);
+    expect(nodesForDisplay(undefined)).toEqual([]);
+  });
+});
+
+describe('reorderWithinPinZone', () => {
+  it('只在同类槽位里换序，另一区相对位置不变', () => {
+    const tree = [
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B', isPinned: true },
+      { id: 'c', name: 'C' },
+      { id: 'd', name: 'D', isPinned: true },
+    ];
+
+    reorderWithinPinZone(tree, ['d', 'b']);
+    expect(tree.map((node) => node.id)).toEqual(['a', 'd', 'c', 'b']);
+
+    reorderWithinPinZone(tree, ['c', 'a']);
+    expect(tree.map((node) => node.id)).toEqual(['c', 'd', 'a', 'b']);
+  });
+
+  it('id 对不上时不改数组', () => {
+    const tree = [
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B', isPinned: true },
+    ];
+    reorderWithinPinZone(tree, ['missing']);
+    expect(tree.map((node) => node.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('insertIntoPinZone', () => {
+  it('置顶项插到已有置顶区，不会挤到普通区', () => {
+    const tree = [
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B', isPinned: true },
+      { id: 'c', name: 'C' },
+    ];
+    insertIntoPinZone(tree, { id: 'x', name: 'X', isPinned: true }, 0);
+    expect(tree.map((node) => node.id)).toEqual(['a', 'x', 'b', 'c']);
+  });
+
+  it('普通项插到普通区末尾', () => {
+    const tree = [
+      { id: 'b', name: 'B', isPinned: true },
+      { id: 'a', name: 'A' },
+    ];
+    insertIntoPinZone(tree, { id: 'c', name: 'C' }, 1);
+    expect(tree.map((node) => node.id)).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('insertByOrderedPeers', () => {
+  it('按显示邻居插回数据里的同类槽位', () => {
+    const tree = [
+      { id: 'cat', name: '分类', type: 'category' },
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B', isPinned: true },
+    ];
+    insertByOrderedPeers(tree, { id: 'c', name: 'C' }, ['c', 'a']);
+    expect(tree.map((node) => node.id)).toEqual(['cat', 'c', 'a', 'b']);
+  });
+});
+
+describe('canCategoryDrop', () => {
+  it('同级前后只能在同一置顶区', () => {
+    const pinned = { id: 'p', isPinned: true };
+    const plain = { id: 'n' };
+    expect(canCategoryDrop('before', pinned, pinned)).toBe(true);
+    expect(canCategoryDrop('after', pinned, plain)).toBe(false);
+    expect(canCategoryDrop('inside', pinned, plain)).toBe(true);
+    expect(canCategoryDrop('after-parent', plain, pinned)).toBe(true);
   });
 });
 

@@ -1,12 +1,16 @@
 import { fetchPageTitleFor, fetchRecognizedPageInfo, nativeRecognitionConcurrency } from './api.js';
 import {
+    canCategoryDrop,
     collectSelfAndDescendantIds as collectSelfAndDescendantIdsInTree,
     cleanDuplicateIds,
     deleteNode as deleteNodeInTree,
     findNode as findNodeInTree,
     findParent as findParentInTree,
     getAllPages,
-    sortNodesByPin,
+    insertByOrderedPeers,
+    insertIntoPinZone,
+    nodesForDisplay,
+    reorderWithinPinZone,
 } from './tree.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
@@ -225,6 +229,14 @@ function updateCategoryDrag(touch) {
             else { mode = 'inside'; lineX = rect.left + 20; }
         }
 
+        const dragNode = findNode(treeDragState.id);
+        const targetNode = findNode(hoverBlock.dataset.id);
+        if (!canCategoryDrop(mode, dragNode, targetNode)) {
+            treeDragIndicator.style.display = 'none';
+            treeDragState.targetMode = null; treeDragState.targetId = null;
+            return;
+        }
+
         treeDragIndicator.style.display = 'block';
         let line = treeDragIndicator.querySelector('#tree-indicator-line'); let dot = treeDragIndicator.querySelector('#tree-indicator-dot');
         line.style.top = lineY + 'px'; line.style.left = lineX + 'px';
@@ -246,15 +258,36 @@ function endCategoryDrag() {
     let mode = treeDragState.targetMode; let targetId = treeDragState.targetId; let dragId = treeDragState.id;
     if (mode && targetId && targetId != dragId) {
         let dragNode = findNode(dragId); let targetNode = findNode(targetId);
-        if (dragNode && targetNode) {
-            let nodeData = JSON.parse(JSON.stringify(dragNode)); deleteNode(dragId); 
-            if (mode === 'before') { let parent = findParent(targetId); let list = parent ? parent.children : data; let index = list.findIndex(n => n.id == targetId); if(index > -1) list.splice(index, 0, nodeData); } 
-            else if (mode === 'after') { let parent = findParent(targetId); let list = parent ? parent.children : data; let index = list.findIndex(n => n.id == targetId); if(index > -1) list.splice(index + 1, 0, nodeData); } 
-            else if (mode === 'inside') { if (!targetNode.children) targetNode.children = []; targetNode.children.unshift(nodeData); targetNode.collapsed = false;  } 
+        if (dragNode && targetNode && canCategoryDrop(mode, dragNode, targetNode)) {
+            let nodeData = JSON.parse(JSON.stringify(dragNode)); deleteNode(dragId);
+            const targetAfterDelete = findNode(targetId);
+            if (mode === 'before' || mode === 'after') {
+                let parent = findParent(targetId); let list = parent ? parent.children : data;
+                const zone = list.filter(n => !!n.isPinned === !!nodeData.isPinned);
+                const targetZoneIndex = zone.findIndex(n => n.id == targetId);
+                if (targetZoneIndex > -1) {
+                    const insertIndex = mode === 'before' ? targetZoneIndex : targetZoneIndex + 1;
+                    insertIntoPinZone(list, nodeData, insertIndex);
+                }
+            }
+            else if (mode === 'inside') {
+                if (!targetAfterDelete.children) targetAfterDelete.children = [];
+                insertIntoPinZone(targetAfterDelete.children, nodeData, 0);
+                targetAfterDelete.collapsed = false;
+            }
             else if (mode === 'after-parent') {
                 let parent = findParent(targetId);
-                if (parent) { let grandParent = findParent(parent.id); let list = grandParent ? grandParent.children : data; let index = list.findIndex(n => n.id == parent.id); if(index > -1) list.splice(index + 1, 0, nodeData); } 
-                else { let list = data; let index = list.findIndex(n => n.id == targetId); if(index > -1) list.splice(index + 1, 0, nodeData); }
+                if (parent) {
+                    let grandParent = findParent(parent.id); let list = grandParent ? grandParent.children : data;
+                    const zone = list.filter(n => !!n.isPinned === !!nodeData.isPinned);
+                    const parentZoneIndex = zone.findIndex(n => n.id == parent.id);
+                    insertIntoPinZone(list, nodeData, parentZoneIndex > -1 ? parentZoneIndex + 1 : zone.length);
+                } else {
+                    let list = data;
+                    const zone = list.filter(n => !!n.isPinned === !!nodeData.isPinned);
+                    const targetZoneIndex = zone.findIndex(n => n.id == targetId);
+                    insertIntoPinZone(list, nodeData, targetZoneIndex > -1 ? targetZoneIndex + 1 : zone.length);
+                }
             }
             save(); renderTree(); showToast("分类层级修改成功", 1000);
         }
@@ -1639,7 +1672,7 @@ function performClearData(type) { if (type === 'all') { if (confirm("确定要�
 
 // ================= 树形视图渲染 =================
 // 数据是唯一状态源；每次变更后从 data 重建 DOM，避免界面顺序与持久化结构脱节。
-function renderTree(){const root=document.getElementById('tree-root');root.innerHTML='';if(!data){return;}sortNodesByPin(data);const rootContainer=document.createElement('div');rootContainer.className='children-container';rootContainer.dataset.id='root';data.forEach(node=>rootContainer.appendChild(createNodeEl(node,0)));root.appendChild(rootContainer);updateSelectedCount();initSortable();updateTotalCountDisplay();}
+function renderTree(){const root=document.getElementById('tree-root');root.innerHTML='';if(!data){return;}const rootContainer=document.createElement('div');rootContainer.className='children-container';rootContainer.dataset.id='root';nodesForDisplay(data).forEach(node=>rootContainer.appendChild(createNodeEl(node,0)));root.appendChild(rootContainer);updateSelectedCount();initSortable();updateTotalCountDisplay();}
 function updateTotalCountDisplay(){ const total = data ? countPages({children:data}) : 0; const floatDisplay = document.getElementById('totalFloatingCount'); if(floatDisplay) floatDisplay.innerText = `共 ${total} 个网页`; const btn = document.getElementById('countToggleBtn'); btn.innerHTML = `<i class="fas fa-hashtag"></i>`; }
 function createNodeEl(node,level=0){
     if(node.type==='category'){
@@ -1700,15 +1733,24 @@ function createNodeEl(node,level=0){
         childrenCont.className='children-container'; childrenCont.dataset.id=node.id;
         if(node.collapsed)childrenCont.style.display='none';
         
-        const subCats=node.children.filter(c=>c.type==='category');
-        const pages=node.children.filter(c=>c.type==='page');
+        const displayChildren=nodesForDisplay(node.children||[]);
+        const subCats=displayChildren.filter(c=>c.type==='category');
+        const pages=displayChildren.filter(c=>c.type==='page');
         subCats.forEach(c=>childrenCont.appendChild(createNodeEl(c,level+1)));
         
         if(pages.length>0||subCats.length===0){
-            const pageGrid=document.createElement('div');
-            pageGrid.className='pages-container'; pageGrid.dataset.parentId=node.id;
-            pages.forEach(p=>pageGrid.appendChild(createNodeEl(p,level+1)));
-            childrenCont.appendChild(pageGrid);
+            const pinnedPages=pages.filter(p=>p.isPinned);
+            const unpinnedPages=pages.filter(p=>!p.isPinned);
+            const appendPageGrid=(zonePages, pinZone)=>{
+                const pageGrid=document.createElement('div');
+                pageGrid.className='pages-container';
+                pageGrid.dataset.parentId=node.id;
+                pageGrid.dataset.pinZone=pinZone;
+                zonePages.forEach(p=>pageGrid.appendChild(createNodeEl(p,level+1)));
+                childrenCont.appendChild(pageGrid);
+            };
+            if (pinnedPages.length>0 || isSortingMode) appendPageGrid(pinnedPages, 'pinned');
+            if (unpinnedPages.length>0 || pinnedPages.length===0 || isSortingMode) appendPageGrid(unpinnedPages, 'unpinned');
         }
         container.appendChild(childrenCont);
         return container;
@@ -1797,7 +1839,7 @@ function createNodeEl(node,level=0){
 }
 
 function toggleExpandAll(){isAllExpanded=!isAllExpanded;const btn=document.getElementById('expandToggleBtn');if(isAllExpanded){btn.innerHTML='<i class="fas fa-compress-arrows-alt"></i> <span>全部折叠</span>';}else{btn.innerHTML='<i class="fas fa-expand-arrows-alt"></i> <span>全部展开</span>';}function setCollapse(nodes,collapsed){nodes.forEach(n=>{if(n.type==='category'){n.collapsed=collapsed;if(n.children)setCollapse(n.children,collapsed);}});}setCollapse(data,!isAllExpanded);save();renderTree();}
-function toggleSortMode() { isSortingMode = !isSortingMode; const btn = document.getElementById('sortModeBtn'); if (isSortingMode) { btn.classList.add('active'); showToast("已开启拖拽排序"); } else { btn.classList.remove('active'); showToast("拖拽排序已关闭"); } sortableInstances.forEach(instance => instance.option("disabled", !isSortingMode)); }
+function toggleSortMode() { isSortingMode = !isSortingMode; const btn = document.getElementById('sortModeBtn'); if (isSortingMode) { btn.classList.add('active'); showToast("已开启拖拽排序"); } else { btn.classList.remove('active'); showToast("拖拽排序已关闭"); } renderTree(); }
 
 function openColModeMenu(btn) {
     const menu = document.getElementById('colModeMenu');
@@ -1833,17 +1875,43 @@ function clearSearch() { const input = document.getElementById('searchInput'); i
 function jumpToNode(id, wsId){ if (wsId && wsId !== appData.currentId) { switchWorkspace(wsId); } document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchResults').innerHTML = ''; document.getElementById('searchInput').value = ''; document.getElementById('searchClearBtn').style.display='none'; let parent=findParent(id); while(parent){parent.collapsed=false;parent=findParent(parent.id);} save(); renderTree(); setTimeout(()=>{ const el=document.getElementById('node-'+id); if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add('highlight-node'); setTimeout(()=>{ el.classList.remove('highlight-node'); }, 2000); } },100); }
 
 function initSortable(){ 
+    sortableInstances.forEach(instance => { try { instance.destroy(); } catch (e) { /* 旧实例已随 DOM 移除 */ } });
     sortableInstances = []; 
-    const commonOps={ 
+    const makeOps = (pinZone) => ({
         animation:150, delay:300, delayOnTouchOnly:true, ghostClass:'sortable-ghost', dragClass:'sortable-drag', disabled: !isSortingMode,
         scroll: true, scrollSensitivity: 80, scrollSpeed: 15, bubbleScroll: true,
+        group: pinZone === 'pinned' ? 'pinned-pages' : 'unpinned-pages',
         onStart:function(){ document.body.classList.add('is-dragging'); if(longPressTimer)clearTimeout(longPressTimer); }, 
-        onEnd:function(evt){ syncDomToData(); document.body.classList.remove('is-dragging'); } 
-    }; 
-    document.querySelectorAll('.pages-container').forEach(el=>{ const s = new Sortable(el,{group:'nested-pages',...commonOps}); sortableInstances.push(s); }); 
+        onEnd:function(evt){ syncPageSortFromDom(evt); document.body.classList.remove('is-dragging'); } 
+    });
+    document.querySelectorAll('.pages-container').forEach(el=>{
+        const pinZone = el.dataset.pinZone === 'pinned' ? 'pinned' : 'unpinned';
+        sortableInstances.push(new Sortable(el, makeOps(pinZone)));
+    });
 }
 
-function syncDomToData(){const seenIds=new Set();function readDomTree(container){const children=[];const catBlocks=Array.from(container.children).filter(el=>el.classList.contains('category-block'));catBlocks.forEach(block=>{const id=block.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode){const newNode={...originalNode,children:[]};const subContainer=block.querySelector(':scope > .children-container');if(subContainer)newNode.children=readDomTree(subContainer);children.push(newNode);}});const pageContainers=Array.from(container.children).filter(el=>el.classList.contains('pages-container'));pageContainers.forEach(pc=>{const pageCards=Array.from(pc.children).filter(el=>el.classList.contains('page-card'));pageCards.forEach(card=>{const id=card.dataset.id;if(seenIds.has(String(id)))return;seenIds.add(String(id));const originalNode=findNode(id);if(originalNode)children.push(originalNode);});});return children;}const rootContainer=document.querySelector('#tree-root > .children-container');if(rootContainer){data=readDomTree(rootContainer);save();}}
+function syncPageSortFromDom(evt){
+    const toEl = evt?.to;
+    if (!toEl || !toEl.classList.contains('pages-container')) { renderTree(); return; }
+    const parentId = toEl.dataset.parentId;
+    const parent = parentId ? findNode(parentId) : null;
+    const destList = parent ? parent.children : data;
+    if (!Array.isArray(destList)) { renderTree(); return; }
+    const wantPinned = toEl.dataset.pinZone === 'pinned';
+    const visibleIds = Array.from(toEl.querySelectorAll('.page-card')).map(card => String(card.dataset.id));
+    const dragId = evt.item && evt.item.dataset.id;
+    const dragNode = dragId ? findNode(dragId) : null;
+    if (dragNode && !!dragNode.isPinned !== wantPinned) { renderTree(); return; }
+    const fromEl = evt.from;
+    if (fromEl === toEl) {
+        reorderWithinPinZone(destList, visibleIds);
+    } else if (dragNode) {
+        deleteNode(dragId);
+        insertByOrderedPeers(destList, dragNode, visibleIds);
+    }
+    save();
+    renderTree();
+}
 
 function collectSelfAndDescendantIds(id){
     return collectSelfAndDescendantIdsInTree(id, data);
@@ -2296,16 +2364,29 @@ function confirmBatchAddUrls() {
 
 function removeUrlRow(btn) { const container = document.getElementById('urlListContainer'); if (container.children.length > 1) { btn.parentElement.parentElement.remove(); } else { const row = btn.parentElement.parentElement; row.querySelector('.url-name-input').value = ''; row.querySelector('.url-value-input').value = ''; } }
 function toggleUrlSortMode() { isUrlSortMode = !isUrlSortMode; const btn = document.getElementById('urlSortToggleBtn'); const container = document.getElementById('urlListContainer'); if (isUrlSortMode) { btn.classList.add('active'); container.classList.add('sort-active'); urlSortable = new Sortable(container, { handle: '.url-row-handle', animation: 150 }); } else { btn.classList.remove('active'); container.classList.remove('sort-active'); if(urlSortable) { urlSortable.destroy(); urlSortable = null; } } }
-function batchPin(){const checks=document.querySelectorAll('.item-checkbox:checked');if(checks.length===0)return alert('请选择要操作的内容');checks.forEach(c=>{const node=findNode(c.dataset.id);if(node)node.isPinned=!node.isPinned;});save();renderTree();cancelSelection();}
+function batchPin(){
+    const checks=document.querySelectorAll('.item-checkbox:checked');
+    if(checks.length===0)return alert('请选择要操作的内容');
+    const nodes=Array.from(checks).map(c=>findNode(c.dataset.id)).filter(Boolean);
+    const shouldPin=nodes.some(node=>!node.isPinned);
+    nodes.forEach(node=>{ node.isPinned=shouldPin; });
+    save();renderTree();cancelSelection();
+}
 function batchCopy(){const checks=document.querySelectorAll('.item-checkbox:checked');if(checks.length===0)return alert('请选择要复制的内容');const ids=Array.from(checks).map(c=>c.dataset.id);const topLevelSelected=[];ids.forEach(id=>{const p=findParent(id);if(p&&ids.includes(String(p.id)))return;topLevelSelected.push(findNode(id));});const text=generateTextExport(topLevelSelected);const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('已复制');}
 
 function batchSelectSiblings(){
     const checks = document.querySelectorAll('.item-checkbox:checked');
     if(checks.length===0) return showToast('请先勾选一个网页');
     checks.forEach(cb => {
-        let container = null; const card = cb.closest('.page-card'); const catHeader = cb.closest('.category-header');
-        if(card) container = card.closest('.pages-container'); else if(catHeader) { const block = catHeader.closest('.category-block'); if(block) container = block.parentElement; }
-        if(container) container.querySelectorAll('.item-checkbox').forEach(sibling => sibling.checked = true);
+        const card = cb.closest('.page-card'); const catHeader = cb.closest('.category-header');
+        if(card) {
+            const childrenCont = card.closest('.children-container');
+            if (childrenCont) childrenCont.querySelectorAll(':scope > .pages-container .item-checkbox').forEach(sibling => sibling.checked = true);
+        } else if(catHeader) {
+            const block = catHeader.closest('.category-block');
+            const container = block ? block.parentElement : null;
+            if(container) container.querySelectorAll(':scope > .category-block > .category-header .item-checkbox').forEach(sibling => sibling.checked = true);
+        }
     }); updateSelectedCount();
 }
 
@@ -2345,7 +2426,7 @@ function updateSelectedCount(){const count=document.querySelectorAll('.item-chec
 function toggleSelectAll(cb){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=cb.checked);updateSelectedCount();}
 function cancelSelection(){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=false);document.getElementById('selectAllBox').checked=false;updateSelectedCount();}
 function closeModal(id){ if (id === 'toolbarEditModal' && isToolbarSorting) confirmToolbarSort(); document.getElementById(id).classList.remove('active'); if (id === 'deleteCategoryModal') window.deletingCategoryId = null; }
-function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
+function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const pinItem=document.getElementById('pinMenuItem');const node=findNode(id);if(pinItem){pinItem.innerHTML=node&&node.isPinned?'<i class="fas fa-thumbtack"></i> 取消置顶':'<i class="fas fa-thumbtack"></i> 置顶';}const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
 function hideContextMenu(){document.getElementById('contextMenu').style.display='none';document.getElementById('menuOverlay').style.display='none';}
 document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){['parentDropdownList','moveDropdownList','delMoveDropdownList','batchDelMoveDropdownList'].forEach(id=>{const list=document.getElementById(id);if(list)list.style.display='none';});}});
 window.addEventListener('scroll', function() { if(window.scrollSaveTimeout) clearTimeout(window.scrollSaveTimeout); window.scrollSaveTimeout = setTimeout(function() { localStorage.setItem('lastScrollPosition', window.scrollY); }, 200); });
@@ -2590,6 +2671,8 @@ function importFromFile(input) {
             else { 
                 const cleaned = sanitizeData(jsonData); 
                 if (data && data.length > 0) { if(confirm("当前主页已有数据。点击【确定】彻底覆盖当前数据，点击【取消】追加到末尾。")) data = cleaned; else data = data.concat(cleaned); } else { data = cleaned; } 
+                const currentWs = appData.workspaces.find(w => w.id === appData.currentId);
+                if (currentWs) currentWs.data = data;
                 cleanDuplicates(); save(); renderTree(); showToast("数据已导入当前主页", 1500); closeModal('ioModal'); 
             } 
         } catch(jsonErr) { alert('文本格式导入暂时只支持标准 JSON 格式'); } input.value = ''; 
@@ -2778,6 +2861,7 @@ const inlineHandlers = {
     toggleToolbar,
     toggleSelectAll,
     batchSelectSiblings,
+    batchPin,
     batchCopy,
     openBatchMoveModal,
     batchDelete,

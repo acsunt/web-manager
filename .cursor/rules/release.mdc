@@ -18,6 +18,8 @@ alwaysApply: true
 - `npm run build` → `dist/wan-vX.Y.Z-yes.html`、`dist/wan-vX.Y.Z-no.html`
 - `npm run apk` → 先打上述 HTML，再打 `dist/web-manager-vX.Y.Z.apk`
 
+离线 HTML 用的 Font Awesome / Cropper / Sortable / JSZip 放在 `vendor/`。打包直接读本地，不要每次从 CDN 下载。缺文件时先 `npm run vendor`。
+
 `dist/` 只保留当前版本的 HTML 和 APK；打包时自动删掉旧的 `wan-v*` / `web-manager-v*`。
 
 Release 正文只来自**提交说明**，不来自聊天记录。上传后不要另写一套说明。

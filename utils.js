@@ -19,6 +19,9 @@ export function sanitizeData(nodes) {
     if (!Array.isArray(nodes)) return [];
 
     nodes.forEach((node) => {
+        if (Object.prototype.hasOwnProperty.call(node, 'isPinned')) {
+            node.isPinned = !!node.isPinned;
+        }
         if (node.type !== 'category') return;
         if (!Array.isArray(node.children)) node.children = [];
         sanitizeData(node.children);
