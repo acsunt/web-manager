@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APK 长期存图：存储方案对照</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #fff;
+      --text: #1b1f24;
+      --muted: #5b6570;
+      --line: #e4e7eb;
+      --warn: #8a5a00;
+      --warn-bg: #fff6e5;
+      --ok: #0f6b3a;
+      --ok-bg: #e8f7ee;
+      --info: #0b5cab;
+      --info-bg: #e8f2fb;
+      --neutral: #4b5563;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 20px; margin: 36px 0 12px; }
+    h3 { font-size: 16px; margin: 20px 0 8px; }
+    p { margin: 0 0 12px; }
+    .lead { color: var(--muted); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .stat, .card, .callout {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .stat { padding: 14px 16px; }
+    .stat b { display: block; font-size: 22px; }
+    .stat span { color: var(--muted); font-size: 13px; }
+    .warn b { color: var(--warn); }
+    .ok b { color: var(--ok); }
+    .callout { padding: 14px 16px; margin: 16px 0; }
+    .callout.warn { background: var(--warn-bg); border-color: #f0d9a8; }
+    .callout.ok { background: var(--ok-bg); border-color: #b7e0c6; }
+    .callout h3 { margin-top: 0; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .card { padding: 16px; }
+    .card h3 { margin-top: 0; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+      background: #eef1f4;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef1f4; }
+    tr.warning td:first-child { box-shadow: inset 3px 0 0 #d97706; }
+    tr.info td:first-child { box-shadow: inset 3px 0 0 #0b5cab; }
+    tr.success td:first-child { box-shadow: inset 3px 0 0 #0f6b3a; }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .tag.warn { background: var(--warn-bg); color: var(--warn); }
+    .tag.info { background: var(--info-bg); color: var(--info); }
+    .tag.ok { background: var(--ok-bg); color: var(--ok); }
+    .tag.neutral { background: #eef1f4; color: var(--neutral); }
+    .muted { color: var(--muted); }
+    .pills span {
+      display: inline-block;
+      margin: 0 8px 8px 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+    }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+    .source { font-size: 12px; color: var(--muted); }
+    @media (max-width: 800px) {
+      .stats, .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 560px) {
+      .stats, .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>APK 长期存图：存储方案对照</h1>
+    <p class="lead">现在主页树、主题、背景图、自定义图标都写在 WebView 的 <code>localStorage</code> 里。导入导出已经走原生文件，所以「文件能选进来」和「选进来之后还能存住」不是同一件事。</p>
+
+    <div class="stats">
+      <div class="stat warn"><b>5–10 MB</b><span>当前能长期留下的上限</span></div>
+      <div class="stat ok"><b>机身空间</b><span>原生文件 / SQLite 上限</span></div>
+      <div class="stat"><b>2–4 天</b><span>推荐方案工期</span></div>
+      <div class="stat ok"><b>不影响</b><span>并行改 APK 对打包 HTML</span></div>
+    </div>
+
+    <div class="callout warn">
+      <h3>瓶颈不在导入，在写回</h3>
+      <p>一张裁切后的背景 JPEG（1280px、质量 0.5）大约 100–300 KB。识别出来的图标 data URL 通常 5–30 KB。几十张图标加上两张背景，很容易顶满 localStorage。APK 现在能把 20 MB 的 ZIP 选进来，但 JSON 里的 data URL 再 <code>setItem</code> 时照样会 QuotaExceeded。</p>
+    </div>
+
+    <h2>现在实际走哪</h2>
+    <div class="grid-2">
+      <section class="card">
+        <h3>日常数据</h3>
+        <p>键：<code>webManagerDataProMax</code>、<code>webManagerThemeConfig</code>，外加十几个开关。</p>
+        <p>位置：应用私有 WebView 目录，大约 <code>/data/data/com.webmanager.app/app_webview/</code></p>
+        <p class="muted">卸载 App 会清掉。和浏览器打开 HTML 是同一套 JS，所以配额也差不多。</p>
+      </section>
+      <section class="card">
+        <h3>导入导出文件</h3>
+        <p>写出：<code>Android/data/com.webmanager.app/files/Download/</code>，再弹系统分享。</p>
+        <p>读入：系统文件选择器 + FileReader / JSZip，已经比浏览器松。</p>
+        <p class="muted">这一层已经按 256 KB 分块，不再受 JS 桥大约 1 MB 的限制。</p>
+      </section>
+    </div>
+
+    <h2>四种改法</h2>
+    <table>
+      <thead>
+        <tr><th>方案</th><th>长期上限</th><th>改多久</th><th>HTML 打包</th><th>适不适合存很多图</th></tr>
+      </thead>
+      <tbody>
+        <tr class="warning"><td>现状：WebView localStorage</td><td>约 5–10 MB</td><td>0</td><td>已共用，HTML 不变</td><td>不够</td></tr>
+        <tr class="info"><td>WebView IndexedDB</td><td>约 50–200+ MB</td><td>1–2 天</td><td>可并行，HTML 仍走 localStorage</td><td>够用一阵</td></tr>
+        <tr class="success"><td>原生 JSON + 图片文件</td><td>机身剩余空间</td><td>2–4 天</td><td>可并行，HTML 不变</td><td>适合</td></tr>
+        <tr><td>SQLite 整库</td><td>机身剩余空间</td><td>4–7 天</td><td>可并行，但桥更复杂</td><td>能，但偏重</td></tr>
+      </tbody>
+    </table>
+
+    <h3>上限怎么理解</h3>
+    <p class="muted">这些不是 Android 写死的常数，是 WebView / 系统在这台机上的常见表现。机身 64 GB 和 256 GB 差很多；低存储时系统还会杀后台、清缓存。</p>
+    <table>
+      <thead>
+        <tr><th>存储</th><th>硬限制</th><th>实用上限</th><th>一张背景大概占</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>localStorage</td><td>Chromium 源配额，常见 5 或 10 MB</td><td>大约 5–8 MB 有效 JSON</td><td>1 张就可能吃掉几分之一配额</td></tr>
+        <tr><td>IndexedDB</td><td>同源磁盘配额，常见远大于 10 MB</td><td>按 50–200 MB 估较稳，再往上看机身</td><td>可存几十到几百张，图仍以 Base64 偏胖</td></tr>
+        <tr><td>应用私有文件</td><td>机身剩余空间</td><td>数 GB，受用户清数据 / 卸载影响</td><td>二进制文件，比 data URL 小约 33%</td></tr>
+        <tr><td>SQLite BLOB</td><td>机身剩余空间</td><td>数 GB，但库会膨胀、难备份增量</td><td>能存，但不适合当图床</td></tr>
+      </tbody>
+    </table>
+
+    <h2>各方案利弊</h2>
+
+    <section class="card">
+      <h3>继续 localStorage <span class="tag warn">不推荐再挖</span></h3>
+      <div class="grid-2">
+        <div>
+          <p><b>好处</b></p>
+          <p>零改动。HTML 和 APK 行为完全一致。同步读写，现有 <code>save()</code> 一行就能用。</p>
+        </div>
+        <div>
+          <p><b>坏处</b></p>
+          <p>存不了很多图。主题背景和批量图标会顶配额。用户感觉是「导入成功了，重启又没了」或保存时报存储不足。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h3>IndexedDB（只改 JS，APK 不必加新原生 API） <span class="tag info">过渡可以</span></h3>
+      <div class="grid-2">
+        <div>
+          <p><b>好处</b></p>
+          <p>工期最短。WebView 已开 DomStorage / Database。<code>save()</code> 改成异步适配层即可。HTML 继续 localStorage，APK 检测到 Android 或配额需求再走 IDB。</p>
+        </div>
+        <div>
+          <p><b>坏处</b></p>
+          <p>图仍是 data URL 字符串，体积比文件大约 33%。<code>file://</code> 源上 IDB 行为不如 https 稳。清 App 缓存有时会误伤。调试比文件目录难。</p>
+        </div>
+      </div>
+      <p class="muted">适合：先把配额从 10 MB 抬到几十上百 MB，验证「能存很多图标」再决定要不要上原生。</p>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h3>原生 JSON + 独立图片文件 <span class="tag ok">推荐</span></h3>
+      <p>树和主题配置写成 <code>files/app-data.json</code>，背景和图标写成 <code>files/media/bg-day.jpg</code>、<code>files/media/icon-xxx.png</code>。JS 里只存路径或 id，显示时用 <code>file://</code> 或桥返回的 data/内容 URI。</p>
+      <div class="grid-2">
+        <div>
+          <p><b>好处</b></p>
+          <p>上限基本等于手机剩余空间。导入大包时图直接落盘，不必再塞进 JSON。备份可按文件增量。崩溃时 JSON 和图片可分开修。和现有 saveFile 分块桥同一套路。</p>
+        </div>
+        <div>
+          <p><b>坏处</b></p>
+          <p><code>save()</code> 必须改异步。要做一次 localStorage 迁移。WebView 读私有文件要想好路径（content URI 或桥转 Base64 缩略图）。卸载仍会清空，除非再做导出到公共目录。</p>
+        </div>
+      </div>
+      <p class="muted">HTML 打包：默认分支仍 localStorage。只有 <code>window.Android</code> 存在时走文件桥。离线 HTML 不需要新 API，也不依赖 SQLite。</p>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h3>SQLite <span class="tag neutral">能做，但重</span></h3>
+      <div class="grid-2">
+        <div>
+          <p><b>好处</b></p>
+          <p>查询、分页、按主页增量写更干净。树很大时不必每次整包 stringify。事务和损坏恢复比纯 JSON 强。</p>
+        </div>
+        <div>
+          <p><b>坏处</b></p>
+          <p>要把树模型拆表或整段 JSON 当一列（后者几乎没赢过文件）。图放 BLOB 会让库膨胀、VACUUM 慢。工期大约是文件方案的两倍。HTML 更不能共用这套。</p>
+        </div>
+      </div>
+    </section>
+
+    <h2>改多久（按一个人连续做估）</h2>
+    <table>
+      <thead>
+        <tr><th>阶段</th><th>IndexedDB</th><th>原生文件</th><th>SQLite</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>适配层：读/写/迁移旧 localStorage</td><td>0.5 天</td><td>1 天</td><td>1.5 天</td></tr>
+        <tr><td>图片从 data URL 拆出去</td><td>0.5 天</td><td>1 天</td><td>1.5 天</td></tr>
+        <tr><td>导入导出对接新存储</td><td>0.5 天</td><td>0.5–1 天</td><td>1 天</td></tr>
+        <tr><td>启动异步化、失败回退、测试</td><td>0.5 天</td><td>1 天</td><td>1.5–2 天</td></tr>
+        <tr><td>合计</td><td>1–2 天</td><td>2–4 天</td><td>4–7 天</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">原生文件若只先迁主题背景、图标仍留在 JSON 里，大约 1 天就能先缓解「两张背景把配额打满」。完整「很多图」要把 <code>customIcon</code> 也拆文件。</p>
+
+    <h2>并行会不会影响打包 HTML</h2>
+    <div class="callout ok">
+      <h3>可以并行，HTML 继续 localStorage</h3>
+      <p>打包脚本读的是同一份 <code>index.html</code> / <code>main.js</code> / <code>ui.js</code>，但存储可以做成适配器：没有 Android 桥就走同步 localStorage，有桥才走文件或 IDB。<code>npm run build</code> 打出来的单文件 HTML 不需要原生层，行为与现在一致。</p>
+    </div>
+    <div class="grid-2">
+      <section>
+        <h3>必须守住的边界</h3>
+        <p><code>save()</code>、<code>init()</code> 在网页路径保持同步，或网页也接受 async 但内部仍写 localStorage。</p>
+        <p>不要把 Android 专用方法写进无桥回退。</p>
+        <p>e2e / vitest 继续测 localStorage；另加 APK 桥测。</p>
+      </section>
+      <section>
+        <h3>会碰到的耦合</h3>
+        <p><code>init()</code> 现在假定 localStorage 立刻有值。APK 改文件后启动要先 await 原生读，页面揭示时机要延后。这只影响 APK 壳，不改变 HTML 文件内容逻辑。</p>
+        <p>导出 JSON 仍应内嵌图片或附带 zip 内文件，这样 HTML 用户导入 APK 导出的包也不会缺图。</p>
+      </section>
+    </div>
+
+    <hr>
+    <h2>建议</h2>
+    <p>要「能长期存很多图」：APK 走原生 JSON + 图片文件。IndexedDB 只适合当过渡。SQLite 等树大到整包 JSON 成为性能问题再考虑。HTML 保持现状，两边导入导出格式继续兼容。</p>
+    <p class="pills">
+      <span class="tag ok">APK：文件</span>
+      <span class="tag info">过渡：IndexedDB</span>
+      <span class="tag warn">HTML：localStorage 不动</span>
+    </p>
+    <p class="source">来源：当前 main.js 的 localStorage 读写、ui.js 分块导出、MainActivity 应用私有 Download 目录。上限为 Android WebView / 机身存储的常见范围，不是系统保证的固定配额。</p>
+  </main>
+</body>
+</html>

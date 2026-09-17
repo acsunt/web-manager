@@ -31,6 +31,10 @@ final class PageInfoBridge {
     private final MainActivity activity;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Job> jobs = new LinkedHashMap<>();
+    private final Object exportLock = new Object();
+    private ByteArrayOutputStream pendingExport;
+    private String pendingMime;
+    private String pendingFilename;
     private int activeCount = 0;
 
     PageInfoBridge(MainActivity activity) {
@@ -55,6 +59,65 @@ final class PageInfoBridge {
     @JavascriptInterface
     public void saveFile(String base64, String mime, String filename) {
         activity.saveExportedFile(base64, mime, filename);
+    }
+
+    @JavascriptInterface
+    public boolean beginSaveFile(String mime, String filename) {
+        synchronized (exportLock) {
+            pendingExport = new ByteArrayOutputStream();
+            pendingMime = mime;
+            pendingFilename = filename;
+            return true;
+        }
+    }
+
+    @JavascriptInterface
+    public boolean appendSaveFile(String base64Chunk) {
+        synchronized (exportLock) {
+            if (pendingExport == null) return false;
+            try {
+                byte[] bytes = Base64.decode(base64Chunk == null ? "" : base64Chunk, Base64.DEFAULT);
+                pendingExport.write(bytes);
+                return true;
+            } catch (Exception e) {
+                pendingExport = null;
+                pendingMime = null;
+                pendingFilename = null;
+                return false;
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public boolean finishSaveFile() {
+        final byte[] bytes;
+        final String mime;
+        final String filename;
+        synchronized (exportLock) {
+            if (pendingExport == null) return false;
+            bytes = pendingExport.toByteArray();
+            mime = pendingMime;
+            filename = pendingFilename;
+            pendingExport = null;
+            pendingMime = null;
+            pendingFilename = null;
+        }
+        activity.saveExportedBytes(bytes, mime, filename);
+        return true;
+    }
+
+    @JavascriptInterface
+    public void cancelSaveFile() {
+        synchronized (exportLock) {
+            pendingExport = null;
+            pendingMime = null;
+            pendingFilename = null;
+        }
+    }
+
+    @JavascriptInterface
+    public boolean openUrl(String url) {
+        return activity.openExternalUrl(url);
     }
 
     @JavascriptInterface

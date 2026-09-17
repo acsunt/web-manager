@@ -12,7 +12,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, openExternalUrl, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -560,7 +560,7 @@ function bindInteraction(element, node, type, url){
 
 function handleUrlOpen(url, inCurrentTab) {
     if (!url) return;
-    if (inCurrentTab) { window.location.href = url; } else { window.open(url, '_blank'); }
+    openExternalUrl(url, { currentTab: inCurrentTab });
 }
 
 function updatePositionOptions() {

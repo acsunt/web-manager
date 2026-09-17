@@ -11,13 +11,36 @@ export function closeDialog(id) {
     document.getElementById(id)?.classList.remove('active');
 }
 
+const NATIVE_SAVE_CHUNK_BYTES = 256 * 1024;
+
+function bytesToBase64(bytes) {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+}
+
 export async function downloadBlob(blob, filename) {
-    if (typeof window !== 'undefined' && typeof window.Android?.saveFile === 'function') {
+    const android = typeof window !== 'undefined' ? window.Android : undefined;
+    if (android && typeof android.beginSaveFile === 'function' && typeof android.appendSaveFile === 'function' && typeof android.finishSaveFile === 'function') {
         const buffer = await blob.arrayBuffer();
         const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        window.Android.saveFile(btoa(binary), blob.type || 'application/octet-stream', filename);
+        const mime = blob.type || 'application/octet-stream';
+        try {
+            android.beginSaveFile(mime, filename);
+            for (let offset = 0; offset < bytes.length; offset += NATIVE_SAVE_CHUNK_BYTES) {
+                const chunk = bytes.subarray(offset, Math.min(offset + NATIVE_SAVE_CHUNK_BYTES, bytes.length));
+                const ok = android.appendSaveFile(bytesToBase64(chunk));
+                if (ok === false) throw new Error('appendSaveFile failed');
+            }
+            android.finishSaveFile();
+            return;
+        } catch (e) {
+            try { android.cancelSaveFile?.(); } catch (ignored) { /* 取消失败不影响网页回退 */ }
+        }
+    }
+    if (android && typeof android.saveFile === 'function') {
+        const buffer = await blob.arrayBuffer();
+        window.Android.saveFile(bytesToBase64(new Uint8Array(buffer)), blob.type || 'application/octet-stream', filename);
         return;
     }
 
@@ -29,6 +52,23 @@ export async function downloadBlob(blob, filename) {
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
+}
+
+export function openExternalUrl(url, { currentTab = false } = {}) {
+    const value = url == null ? '' : String(url).trim();
+    if (!value) return false;
+    if (typeof window !== 'undefined' && typeof window.Android?.openUrl === 'function') {
+        try {
+            const ok = window.Android.openUrl(value);
+            if (ok !== false) return true;
+        } catch (e) { /* 网页没有原生桥 */ }
+    }
+    if (currentTab) {
+        window.location.href = value;
+        return true;
+    }
+    const opened = window.open(value, '_blank');
+    return Boolean(opened);
 }
 
 export function applySafeAreaInsets(insets = {}) {

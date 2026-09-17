@@ -1,6 +1,7 @@
 package com.webmanager.app;
 
 import android.annotation.SuppressLint;
+import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -77,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setSupportZoom(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
 
         appWebView.setFitsSystemWindows(false);
@@ -93,25 +95,24 @@ public class MainActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (uri == null) return false;
-                String scheme = uri.getScheme();
-                if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme)) {
-                    return false;
-                }
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
-                } catch (Exception ignored) {
-                }
-                return true;
+                String url = uri.toString();
+                if (url.startsWith("file:///android_asset/")) return false;
+                return openExternalUrl(url);
             }
         });
         appWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
                 filePathCallback = callback;
                 Intent intent = fileChooserParams.createIntent();
+                if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                }
                 try {
                     startActivityForResult(intent, 1001);
                 } catch (Exception e) {
+                    filePathCallback.onReceiveValue(null);
                     filePathCallback = null;
                     return false;
                 }
@@ -202,10 +203,46 @@ public class MainActivity extends AppCompatActivity {
         appWebView.post(() -> appWebView.evaluateJavascript(script, null));
     }
 
+    boolean openExternalUrl(String url) {
+        if (url == null) return false;
+        String trimmed = url.trim();
+        if (trimmed.isEmpty()) return false;
+        try {
+            Uri uri = Uri.parse(trimmed);
+            if (uri.getScheme() == null || uri.getScheme().isEmpty()) {
+                uri = Uri.parse("https://" + trimmed);
+            }
+            final Uri target = uri;
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, target);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(this, "无法打开链接", Toast.LENGTH_SHORT).show();
+                }
+            });
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     void saveExportedFile(String base64, String mime, String filename) {
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(base64 == null ? "" : base64, Base64.DEFAULT);
+        } catch (Exception e) {
+            runOnUiThread(() -> Toast.makeText(this, "导出失败: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            return;
+        }
+        saveExportedBytes(bytes, mime, filename);
+    }
+
+    void saveExportedBytes(byte[] bytes, String mime, String filename) {
+        final byte[] payload = bytes == null ? new byte[0] : bytes;
         runOnUiThread(() -> {
             try {
-                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
                 File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
                 if (dir == null) dir = getCacheDir();
                 if (!dir.exists()) dir.mkdirs();
@@ -214,7 +251,7 @@ public class MainActivity extends AppCompatActivity {
                         : filename.replaceAll("[\\\\/:*?\"<>|]", "_");
                 File out = new File(dir, safeName);
                 try (FileOutputStream fos = new FileOutputStream(out)) {
-                    fos.write(bytes);
+                    fos.write(payload);
                 }
                 Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", out);
                 Intent share = new Intent(Intent.ACTION_SEND);
@@ -232,7 +269,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != 1001 || filePathCallback == null) return;
-        Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+        Uri[] result = null;
+        if (resultCode == RESULT_OK && data != null && data.getClipData() != null) {
+            ClipData clip = data.getClipData();
+            result = new Uri[clip.getItemCount()];
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                result[i] = clip.getItemAt(i).getUri();
+            }
+        } else {
+            result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+        }
         filePathCallback.onReceiveValue(result);
         filePathCallback = null;
     }
