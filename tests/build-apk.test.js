@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -29,5 +29,11 @@ describe('APK 版本号', () => {
   it('系统栏颜色透明，页面可以画到状态栏和导航栏后面', () => {
     expect(theme).toContain('android:statusBarColor">@android:color/transparent');
     expect(theme).toContain('android:navigationBarColor">@android:color/transparent');
+  });
+
+  it('仓库带 Gradle Wrapper，CI 不必本机安装 Gradle', () => {
+    expect(existsSync(join(rootDir, 'android', 'gradlew'))).toBe(true);
+    expect(existsSync(join(rootDir, 'android', 'gradlew.bat'))).toBe(true);
+    expect(existsSync(join(rootDir, 'android', 'gradle', 'wrapper', 'gradle-wrapper.jar'))).toBe(true);
   });
 });

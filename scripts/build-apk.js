@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
+import { platform } from 'node:os';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(rootDir, 'android');
@@ -35,18 +36,30 @@ function copyHtmlIntoAssets(version) {
     copyFileSync(findOfflineHtml(version), join(assetsDir, 'index.html'));
 }
 
+function gradleCommand() {
+    return platform() === 'win32' ? join(androidDir, 'gradlew.bat') : join(androidDir, 'gradlew');
+}
+
+function gradleEnv() {
+    const env = { ...process.env };
+    if (!env.JAVA_HOME && platform() === 'win32') {
+        env.JAVA_HOME = 'C:\\Program Files\\Android\\Android Studio\\jbr';
+    }
+    if (!env.ANDROID_HOME && !env.ANDROID_SDK_ROOT) {
+        env.ANDROID_HOME = platform() === 'win32'
+            ? join(process.env.USERPROFILE || '', 'AppData', 'Local', 'Android', 'Sdk')
+            : join(process.env.HOME || '', 'Android', 'Sdk');
+    }
+    return env;
+}
+
 function runGradle() {
     return new Promise((resolve, reject) => {
-        const gradleBat = join(process.env.USERPROFILE || '', '.gradle', 'wrapper', 'dists', 'gradle-8.14.3-all', '10utluxaxniiv4wxiphsi49nj', 'gradle-8.14.3', 'bin', 'gradle.bat');
-        const child = spawn(gradleBat, ['assembleDebug', '--no-daemon'], {
+        const child = spawn(gradleCommand(), ['assembleDebug', '--no-daemon'], {
             cwd: androidDir,
             stdio: 'inherit',
-            env: {
-                ...process.env,
-                JAVA_HOME: process.env.JAVA_HOME || 'C:\\Program Files\\Android\\Android Studio\\jbr',
-                ANDROID_HOME: process.env.ANDROID_HOME || join(process.env.USERPROFILE || '', 'AppData', 'Local', 'Android', 'Sdk'),
-            },
-            shell: true,
+            env: gradleEnv(),
+            shell: platform() === 'win32',
         });
         child.on('exit', (code) => {
             if (code === 0) resolve();

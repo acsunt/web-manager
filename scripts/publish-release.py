@@ -8,10 +8,14 @@ import urllib.request
 token = os.environ["GH_TOKEN"]
 repo = os.environ["GITHUB_REPOSITORY"]
 tag = os.environ["TAG"]
-notes = os.environ["NOTES"]
+if os.environ.get("NOTES_FILE"):
+    notes = pathlib.Path(os.environ["NOTES_FILE"]).read_text(encoding="utf-8")
+else:
+    notes = os.environ["NOTES"]
 files = [
     pathlib.Path("dist") / os.environ["ONLINE"],
     pathlib.Path("dist") / os.environ["OFFLINE"],
+    pathlib.Path("dist") / os.environ["APK"],
 ]
 
 

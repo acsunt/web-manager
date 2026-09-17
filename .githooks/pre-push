@@ -1,3 +1,5 @@
 #!/bin/sh
 echo "推送前检查版本号..."
-node scripts/check-version.mjs
+node scripts/check-version.mjs || exit 1
+echo "推送前检查 Release 说明..."
+node scripts/release-notes.mjs --check || exit 1

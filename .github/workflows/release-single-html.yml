@@ -12,11 +12,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install dependencies
         run: npm ci
@@ -28,8 +42,11 @@ jobs:
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build single HTML files
-        run: npm run build
+      - name: Make Gradle wrapper executable
+        run: chmod +x android/gradlew
+
+      - name: Build HTML and APK
+        run: npm run apk
 
       - name: Create or update GitHub Release
         env:
@@ -40,11 +57,11 @@ jobs:
           set -eu
           export ONLINE="wan-v${VERSION}-yes.html"
           export OFFLINE="wan-v${VERSION}-no.html"
+          export APK="web-manager-v${VERSION}.apk"
           test -f "dist/${ONLINE}"
           test -f "dist/${OFFLINE}"
+          test -f "dist/${APK}"
           ls -lh dist
-          export NOTES="单文件下载：
-
-          - ${ONLINE}：需联网加载 Font Awesome / Cropper / Sortable / JSZip
-          - ${OFFLINE}：依赖已内联，可离线双击打开"
+          export NOTES_FILE="dist/release-notes.md"
+          node scripts/release-notes.mjs --github
           python3 scripts/publish-release.py
