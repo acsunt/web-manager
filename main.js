@@ -977,14 +977,14 @@ async function applyBatchIconName() {
 // 新增和编辑共用此入口：先规范化网址并检查重复，再更新树结构和持久化数据。
 function saveData(){
     const recognizedRaw = (document.getElementById('editRecognizedName')?.value || '').trim();
-    const autoOverwrite = document.getElementById('autoTitleCheck').checked;
+    const autoOverwrite = document.getElementById('autoTitleCheck')?.checked;
     const nameRaw = document.getElementById('editName').value;
-    const name = (autoOverwrite && recognizedRaw) ? recognizedRaw : nameRaw;
     const note=document.getElementById('editNote').value; const parentId=document.getElementById('selectedParentId').value;
     const relPos = document.querySelector('input[name="relPosition"]:checked').value; const addToTop = (document.querySelector('input[name="insidePos"]:checked').value === 'top'); const editPos = document.querySelector('input[name="editPos"]:checked') ? document.querySelector('input[name="editPos"]:checked').value : 'keep';
     
     let currentType = isAdding ? addType : document.getElementById('editType').value;
     if (!isAdding && !currentType) { const n = findNode(currentEditId); if (n) currentType = n.type; }
+    const name = (currentType === 'page' && autoOverwrite && recognizedRaw) ? recognizedRaw : nameRaw;
 
     let newUrls = [];
     let iconType = 'auto', customIcon = '';
@@ -2200,6 +2200,8 @@ function menuAction(action){
         document.getElementById('parentSelectGroup').style.display='block'; document.getElementById('parentDropdownList').style.display='none';
         
         document.getElementById('iconEditGroup').style.display=node.type==='page'?'block':'none';
+        const recognizedGroup = document.getElementById('recognizedNameGroup');
+        if (recognizedGroup) recognizedGroup.style.display = node.type === 'page' ? 'block' : 'none';
         if(node.type === 'page') {
             const iType = node.iconType || 'auto';
             const matchedRadio = document.querySelector(`input[name="iconType"][value="${iType}"]`);
@@ -2319,6 +2321,8 @@ function openAddModal(type, preSelectedParentId=null, relativePos='inside') {
     const recognizedInput = document.getElementById('editRecognizedName');
     if (recognizedInput) recognizedInput.value = '';
     document.getElementById('autoTitleCheck').checked = false;
+    const recognizedGroup = document.getElementById('recognizedNameGroup');
+    if (recognizedGroup) recognizedGroup.style.display = type === 'page' ? 'block' : 'none';
     
     document.getElementById('iconEditGroup').style.display=type==='page'?'block':'none';
     if(type === 'page') {

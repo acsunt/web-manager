@@ -60,4 +60,14 @@ describe('APK 版本号', () => {
     expect(htmlScript).toContain('loadOfflineVendor');
     expect(htmlScript).not.toContain('正在下载离线依赖');
   });
+
+  it('分类新增编辑不显示识别名称，HTML 与 APK 共用同一源码', () => {
+    const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
+    expect(html).toContain('id="recognizedNameGroup"');
+    expect(html).toMatch(/id="recognizedNameGroup"[^>]*style="display: none;/);
+    expect(main).toContain("recognizedGroup.style.display = type === 'page' ? 'block' : 'none'");
+    expect(main).toContain("recognizedGroup.style.display = node.type === 'page' ? 'block' : 'none'");
+    expect(main).toContain("currentType === 'page' && autoOverwrite && recognizedRaw");
+    expect(readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8')).toContain('copyHtmlIntoAssets');
+  });
 });

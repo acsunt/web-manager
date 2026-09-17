@@ -14,6 +14,31 @@ async function saveEditModal(page) {
   await expect(page.locator('#editModal.active')).toHaveCount(0);
 }
 
+test('分类新增和编辑不显示识别到的名称', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#workspaceBtn')).toBeVisible();
+
+  await page.locator('#addCatBtn').click();
+  await expect(page.locator('#editModal.active')).toBeVisible();
+  await expect(page.locator('#recognizedNameGroup')).toBeHidden();
+  await expect(page.locator('#urlGroup')).toBeHidden();
+  await page.locator('#editName').fill('仅分类');
+  await saveEditModal(page);
+  await expect(page.locator('.category-header', { hasText: '仅分类' })).toBeVisible();
+
+  await page.locator('.category-header', { hasText: '仅分类' }).click({ button: 'right' });
+  await page.locator('#contextMenu').getByText('编辑', { exact: true }).click();
+  await expect(page.locator('#editModal.active')).toBeVisible();
+  await expect(page.locator('#recognizedNameGroup')).toBeHidden();
+  await page.locator('#editModal.active .close-modal-btn').click();
+  await expect(page.locator('#editModal.active')).toHaveCount(0);
+
+  const category = page.locator('.category-block').filter({ has: page.locator('.category-header', { hasText: '仅分类' }) });
+  await category.locator('.cat-btn').nth(1).click();
+  await expect(page.locator('#editModal.active')).toBeVisible();
+  await expect(page.locator('#recognizedNameGroup')).toBeVisible();
+});
+
 test('打开、置顶、删除后刷新，结构仍正确', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
 
