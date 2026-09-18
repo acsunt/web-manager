@@ -127,6 +127,13 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('setChromeVisible(');
     expect(tabs).toContain('saveWebViewState(');
     expect(tabs).toContain('restoreWebViewState(');
+    expect(tabs).toContain('restoreViewState(');
+    expect(tabs).toContain('updateViewState(');
+    expect(tabs).toContain('pendingViewRestore');
+    expect(activity).toContain('onViewState(');
+    expect(activity).toContain('tabs.restoreViewState(view)');
+    expect(main).toContain('importBookmarkHtml');
+    expect(main).toContain('parseBookmarkHtml');
     expect(activity).toContain('handleIncomingIntent(');
     expect(activity).toContain('Intent.EXTRA_STREAM');
     expect(activity).toContain('setBrowserChromeVisible(');
@@ -201,6 +208,10 @@ describe('APK 版本号', () => {
     expect(manifest).toContain('android:launchMode="singleTask"');
     expect(manifest).toContain('application/json');
     expect(manifest).toContain('application/zip');
+    expect(manifest).toContain('text/html');
+    expect(manifest).toContain('.*\\\\.html');
+    expect(manifest).toContain('.*\\\\.htm');
+    expect(html).toContain('accept=".json,.zip,.html,.htm,text/html"');
   });
 
   it('分类新增编辑不显示识别名称，HTML 与 APK 共用同一源码', () => {

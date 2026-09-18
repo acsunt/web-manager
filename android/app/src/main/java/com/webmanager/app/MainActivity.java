@@ -150,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
         webView.setFitsSystemWindows(false);
         webView.setBackgroundColor(Color.WHITE);
+        webView.setSaveEnabled(true);
         webView.addJavascriptInterface(new PageChromeBridge(webView), "WebManagerChrome");
         webView.setOnScrollChangeListener((v, l, t, oldl, oldt) -> refreshPageChrome((WebView) v, false));
         webView.setWebViewClient(new PageWebViewClient());
@@ -483,10 +484,16 @@ public class MainActivity extends AppCompatActivity {
         view.evaluateJavascript(
                 "(function(){if(window.__wmChromeBound)return;window.__wmChromeBound=true;"
                         + "function ping(){try{WebManagerChrome.onViewportChange();}catch(e){}}"
-                        + "var t;function on(){if(t)cancelAnimationFrame(t);t=requestAnimationFrame(ping);}"
+                        + "function collect(){try{var overflow=[];var nodes=document.querySelectorAll('*');"
+                        + "for(var i=0;i<nodes.length&&overflow.length<40;i++){var el=nodes[i];if(!el||el===document.documentElement||el===document.body)continue;"
+                        + "if((el.scrollTop||0)>0||(el.scrollLeft||0)>0)overflow.push({i:i,x:el.scrollLeft||0,y:el.scrollTop||0});}"
+                        + "WebManagerChrome.onViewState(JSON.stringify({x:window.scrollX||0,y:window.scrollY||0,overflow:overflow}));}catch(e){}}"
+                        + "var t,c;function on(){if(t)cancelAnimationFrame(t);t=requestAnimationFrame(ping);"
+                        + "if(c)return;c=setTimeout(function(){c=0;collect();},400);}"
                         + "window.addEventListener('scroll',on,true);"
                         + "window.addEventListener('resize',on);"
                         + "document.addEventListener('touchmove',on,{passive:true});"
+                        + "collect();"
                         + "})();",
                 null
         );
@@ -503,6 +510,13 @@ public class MainActivity extends AppCompatActivity {
         public void onViewportChange() {
             runOnUiThread(() -> {
                 if (isActivePage(webView)) refreshPageChrome(webView, false);
+            });
+        }
+
+        @JavascriptInterface
+        public void onViewState(String json) {
+            runOnUiThread(() -> {
+                if (tabs != null) tabs.updateViewState(webView, json);
             });
         }
     }
@@ -743,7 +757,7 @@ public class MainActivity extends AppCompatActivity {
         return intent;
     }
 
-    // 备份导入的 accept=".json,.zip" 不能传给系统选择器。
+    // 备份导入的 accept=".json,.zip,.html" 不能传给系统选择器。
     // 只保留 image/* 这类 DocumentsUI 能稳定处理的类型，其余一律 */*。
     private String safeChooserMime(WebChromeClient.FileChooserParams params) {
         if (params == null) return "*/*";
@@ -851,7 +865,7 @@ public class MainActivity extends AppCompatActivity {
 
     private String queryDisplayName(Uri uri) {
         String fallback = uri.getLastPathSegment();
-        if (fallback == null || fallback.trim().isEmpty()) fallback = "import.json";
+        if (fallback == null || fallback.trim().isEmpty()) fallback = "import.bin";
         try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
                 String name = cursor.getString(0);
@@ -908,7 +922,10 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            if (tabs != null) tabs.updateUrl(view, url);
+            if (tabs != null) {
+                tabs.updateUrl(view, url);
+                tabs.restoreViewState(view);
+            }
             if (!isActivePage(view)) return;
             bindPageChrome(view);
             refreshPageChrome(view, true);

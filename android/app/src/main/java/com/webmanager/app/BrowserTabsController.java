@@ -257,12 +257,16 @@ final class BrowserTabsController {
                         String normalized = normalizeUrl(current);
                         tab.url = normalized == null ? current : normalized;
                     }
+                    captureNativeScroll(tab);
                 }
                 JSONObject obj = new JSONObject();
                 obj.put("id", tab.id);
                 obj.put("title", tab.title == null ? "" : tab.title);
                 obj.put("url", tab.url == null ? "" : tab.url);
                 obj.put("groupId", tab.groupId == null ? UNGROUPED : tab.groupId);
+                obj.put("scrollX", tab.scrollX);
+                obj.put("scrollY", tab.scrollY);
+                obj.put("viewState", tab.viewStateJson == null ? "" : tab.viewStateJson);
                 tabArr.put(obj);
                 keepIds.add(tab.id);
                 if (includeWebViews && tab.webView != null) saveWebViewState(tab);
@@ -313,6 +317,10 @@ final class BrowserTabsController {
                     tab.title = obj.optString("title", hostTitle(url));
                     tab.url = url;
                     tab.groupId = obj.optString("groupId", UNGROUPED);
+                    tab.scrollX = obj.optInt("scrollX", 0);
+                    tab.scrollY = obj.optInt("scrollY", 0);
+                    tab.viewStateJson = obj.optString("viewState", "");
+                    tab.pendingViewRestore = true;
                     tab.webView = activity.createPageWebView();
                     attachWebView(tab);
                     if (!restoreWebViewState(tab)) tab.webView.loadUrl(url);
@@ -349,12 +357,15 @@ final class BrowserTabsController {
 
     private void saveWebViewState(Tab tab) {
         try {
+            captureNativeScroll(tab);
             Bundle bundle = new Bundle();
             tab.webView.saveState(bundle);
             Parcel parcel = Parcel.obtain();
             bundle.writeToParcel(parcel, 0);
             byte[] bytes = parcel.marshall();
             parcel.recycle();
+            File dir = stateDir();
+            if (!dir.exists()) dir.mkdirs();
             try (FileOutputStream out = new FileOutputStream(stateFile(tab.id))) {
                 out.write(bytes);
             }
@@ -378,7 +389,9 @@ final class BrowserTabsController {
             parcel.setDataPosition(0);
             Bundle bundle = Bundle.CREATOR.createFromParcel(parcel);
             bundle.setClassLoader(WebView.class.getClassLoader());
-            return tab.webView.restoreState(bundle) != null;
+            boolean restored = tab.webView.restoreState(bundle) != null;
+            if (restored) tab.pendingViewRestore = true;
+            return restored;
         } catch (Exception ignored) {
             return false;
         } finally {
@@ -450,6 +463,58 @@ final class BrowserTabsController {
         renderStrips();
     }
 
+    void updateViewState(WebView view, String json) {
+        Tab tab = findTab(view);
+        if (tab == null || tab.pendingViewRestore || json == null || json.trim().isEmpty()) return;
+        tab.viewStateJson = json;
+        try {
+            JSONObject obj = new JSONObject(json);
+            tab.scrollX = obj.optInt("x", tab.scrollX);
+            tab.scrollY = obj.optInt("y", tab.scrollY);
+        } catch (Exception ignored) {
+        }
+    }
+
+    void restoreViewState(WebView view) {
+        Tab tab = findTab(view);
+        if (tab == null || tab.webView == null || !tab.pendingViewRestore) return;
+        String url = tab.webView.getUrl();
+        if (url == null || url.trim().isEmpty() || "about:blank".equalsIgnoreCase(url)) return;
+        String json = tab.viewStateJson;
+        if (json == null || json.trim().isEmpty()) {
+            if (tab.scrollX == 0 && tab.scrollY == 0) {
+                applyNativeScroll(tab);
+                tab.pendingViewRestore = false;
+                return;
+            }
+            json = "{\"x\":" + tab.scrollX + ",\"y\":" + tab.scrollY + "}";
+        }
+        String script = "(function(s){function apply(){try{window.scrollTo(s.x||0,s.y||0);"
+                + "if(s.overflow){var nodes=document.querySelectorAll('*');"
+                + "for(var i=0;i<s.overflow.length;i++){var item=s.overflow[i];var el=nodes[item.i];"
+                + "if(el){el.scrollLeft=item.x||0;el.scrollTop=item.y||0;}}}}catch(e){}}"
+                + "apply();setTimeout(apply,300);setTimeout(apply,900);})(" + json + ");";
+        tab.webView.evaluateJavascript(script, null);
+        applyNativeScroll(tab);
+        tab.webView.postDelayed(() -> tab.pendingViewRestore = false, 1200);
+    }
+
+    private void captureNativeScroll(Tab tab) {
+        if (tab == null || tab.webView == null) return;
+        if (tab.viewStateJson == null || tab.viewStateJson.trim().isEmpty()) {
+            tab.scrollX = tab.webView.getScrollX();
+            tab.scrollY = tab.webView.getScrollY();
+        }
+    }
+
+    private void applyNativeScroll(Tab tab) {
+        if (tab == null || tab.webView == null) return;
+        tab.webView.scrollTo(tab.scrollX, tab.scrollY);
+        tab.webView.postDelayed(() -> {
+            if (tab.webView != null) tab.webView.scrollTo(tab.scrollX, tab.scrollY);
+        }, 300);
+    }
+
     Tab addPopupTab(WebView webView) {
         if (tabs.size() >= MAX_TABS) {
             toast("最多同时打开 " + MAX_TABS + " 个网页");
@@ -519,6 +584,7 @@ final class BrowserTabsController {
         }
         activity.setPageWindow(true);
         activity.refreshPageChrome(tab.webView);
+        restoreViewState(tab.webView);
         renderStrips();
         persistState();
     }
@@ -1568,6 +1634,10 @@ final class BrowserTabsController {
         String url;
         String groupId;
         WebView webView;
+        int scrollX;
+        int scrollY;
+        String viewStateJson = "";
+        boolean pendingViewRestore;
     }
 
     static final class Group {

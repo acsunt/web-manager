@@ -13,7 +13,7 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, normalizeUrls, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, looksLikeBookmarkHtml, normalizeUrls, parseBookmarkHtml, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -2843,7 +2843,10 @@ function importNativeBackup(filename, mime, base64) {
         const binary = atob(String(base64));
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const type = mime || (String(filename || '').toLowerCase().endsWith('.zip') ? 'application/zip' : 'application/json');
+        const lowerName = String(filename || '').toLowerCase();
+        const type = mime
+            || (lowerName.endsWith('.zip') ? 'application/zip'
+                : (lowerName.endsWith('.html') || lowerName.endsWith('.htm') ? 'text/html' : 'application/json'));
         const blob = new Blob([bytes], { type });
         blob.name = filename || 'import.json';
         importBackupFile(blob);
@@ -2863,6 +2866,12 @@ function importBackupFile(file) {
     if (!file) return;
     const fileName = String(file.name || '').toLowerCase();
     const fileType = String(file.type || '').toLowerCase();
+    if (fileName.endsWith('.html') || fileName.endsWith('.htm') || fileType.includes('html')) {
+        const reader = new FileReader();
+        reader.onload = function(e) { importBookmarkHtml(e.target.result); };
+        reader.readAsText(file);
+        return;
+    }
     if (fileName.endsWith('.zip') || fileType.includes('zip')) { 
         JSZip.loadAsync(file).then(function(zip) { 
             if (zip.file("theme_config.json")) return showToast("❌ 这是主题包，请去主题设置导入！", 3000); 
@@ -2942,8 +2951,44 @@ function importBackupFile(file) {
                 if (currentWs) currentWs.data = data;
                 cleanDuplicates(); save(); renderTree(); showToast("数据已导入当前主页", 1500); closeModal('ioModal'); 
             } 
-        } catch(jsonErr) { alert('文本格式导入暂时只支持标准 JSON 格式'); }
+        } catch(jsonErr) {
+            if (looksLikeBookmarkHtml(content, fileName, fileType)) {
+                importBookmarkHtml(content);
+                return;
+            }
+            alert('文本格式导入暂时只支持标准 JSON 或 HTML 书签');
+        }
     }; reader.readAsText(file); 
+}
+
+function stampImportedIds(nodes, seed) {
+    let nextId = Number(seed) || Date.now();
+    const walk = (list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((node) => {
+            node.id = nextId++;
+            if (node.children) walk(node.children);
+        });
+    };
+    walk(nodes);
+    return nodes;
+}
+
+function importBookmarkHtml(content) {
+    const nodes = stampImportedIds(sanitizeData(parseBookmarkHtml(content)));
+    if (!nodes.length) {
+        showToast('未从 HTML 中识别到书签', 2000);
+        return;
+    }
+    if (data && data.length > 0) {
+        if (confirm('当前主页已有数据。点击【确定】彻底覆盖当前数据，点击【取消】追加到末尾。')) data = nodes;
+        else data = data.concat(nodes);
+    } else {
+        data = nodes;
+    }
+    const currentWs = appData.workspaces.find(w => w.id === appData.currentId);
+    if (currentWs) currentWs.data = data;
+    cleanDuplicates(); save(); renderTree(); showToast('已从 HTML 导入书签', 1500); closeModal('ioModal');
 }
 
 // ================= 全站图标并发识别 =================

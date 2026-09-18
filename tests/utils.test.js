@@ -6,6 +6,8 @@ import {
   httpUrlsOf,
   collectOpenablePages,
   sanitizeData,
+  looksLikeBookmarkHtml,
+  parseBookmarkHtml,
   isLocalUrl,
   isOpenableUrl,
   normalizeWebUrl,
@@ -201,6 +203,70 @@ describe('sanitizeData', () => {
     expect(nodes[1].isPinned).toBeUndefined();
     expect(nodes[2].isPinned).toBe(true);
     expect(nodes[2].children[0].isPinned).toBe(false);
+  });
+});
+
+describe('parseBookmarkHtml', () => {
+  it('能解析 Netscape 书签分类和网页', () => {
+    const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL>
+<DT><H3>工作</H3>
+<DL>
+<DT><A HREF="https://a.com">A站</A>
+<DT><A HREF="https://b.com">B &amp; 站</A>
+</DL>
+<DT><A HREF="https://c.com">C站</A>
+</DL>`;
+    expect(parseBookmarkHtml(html)).toEqual([
+      {
+        type: 'category',
+        name: '工作',
+        children: [
+          {
+            type: 'page',
+            name: 'A站',
+            url: 'https://a.com',
+            urls: [{ url: 'https://a.com', name: '' }],
+            collapsed: false,
+          },
+          {
+            type: 'page',
+            name: 'B & 站',
+            url: 'https://b.com',
+            urls: [{ url: 'https://b.com', name: '' }],
+            collapsed: false,
+          },
+        ],
+        collapsed: false,
+      },
+      {
+        type: 'page',
+        name: 'C站',
+        url: 'https://c.com',
+        urls: [{ url: 'https://c.com', name: '' }],
+        collapsed: false,
+      },
+    ]);
+  });
+
+  it('普通 HTML 链接也能导入，并跳过 javascript', () => {
+    const html = '<html><a href="https://x.com">X</a><a href="javascript:void(0)">skip</a></html>';
+    expect(parseBookmarkHtml(html)).toEqual([
+      {
+        type: 'page',
+        name: 'X',
+        url: 'https://x.com',
+        urls: [{ url: 'https://x.com', name: '' }],
+        collapsed: false,
+      },
+    ]);
+  });
+
+  it('按扩展名或内容识别 HTML 书签', () => {
+    expect(looksLikeBookmarkHtml('', 'bookmarks.html')).toBe(true);
+    expect(looksLikeBookmarkHtml('', 'notes.htm', 'text/plain')).toBe(true);
+    expect(looksLikeBookmarkHtml('<a href="https://a.com">A</a></a>', '', 'text/html')).toBe(true);
+    expect(looksLikeBookmarkHtml('{"workspaces":[]}', 'backup.json')).toBe(false);
   });
 });
 
