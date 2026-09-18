@@ -42,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private FrameLayout pageWebHost;
     private View pageTopInset;
     private View pageBottomInset;
+    private View browserBar;
     private View restoreTabsBtn;
     private PageInfoBridge bridge;
     private BrowserTabsController tabs;
@@ -64,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
         pageWebHost = findViewById(R.id.pageWebHost);
         pageTopInset = findViewById(R.id.pageTopInset);
         pageBottomInset = findViewById(R.id.pageBottomInset);
+        browserBar = findViewById(R.id.browserBar);
         restoreTabsBtn = findViewById(R.id.restoreTabsBtn);
         applyEdgeToEdge();
         bridge = new PageInfoBridge(this);
@@ -168,16 +170,25 @@ public class MainActivity extends AppCompatActivity {
             pageContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
         if (visible) {
-            getWindow().setStatusBarColor(Color.WHITE);
-            getWindow().setNavigationBarColor(Color.WHITE);
-            applyPageInsets();
-            applySystemBarIcons(true);
+            refreshPageChrome(null);
         } else {
             getWindow().setStatusBarColor(Color.TRANSPARENT);
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
             applySystemBarIcons(lightSystemBars);
         }
         if (tabs != null) tabs.syncRestoreButton(visible);
+    }
+
+    void refreshPageChrome(WebView webView) {
+        if (!isPageOpen()) return;
+        int color = getResources().getColor(R.color.browser_toolbar_bg, getTheme());
+        getWindow().setStatusBarColor(color);
+        getWindow().setNavigationBarColor(color);
+        if (pageTopInset != null) pageTopInset.setBackgroundColor(color);
+        if (pageBottomInset != null) pageBottomInset.setBackgroundColor(color);
+        if (pageContainer != null) pageContainer.setBackgroundColor(color);
+        applyPageInsets();
+        applySystemBarIcons(true);
     }
 
     void setSystemBarsAppearance(boolean light) {
@@ -219,6 +230,14 @@ public class MainActivity extends AppCompatActivity {
                 params.rightMargin = Math.max(safeRight, 0);
                 pageWebHost.setLayoutParams(params);
             }
+        }
+        if (browserBar != null) {
+            browserBar.setPadding(
+                    Math.max(safeLeft, 0),
+                    browserBar.getPaddingTop(),
+                    Math.max(safeRight, 0),
+                    browserBar.getPaddingBottom()
+            );
         }
         if (restoreTabsBtn != null) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) restoreTabsBtn.getLayoutParams();

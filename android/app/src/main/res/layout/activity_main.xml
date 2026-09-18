@@ -27,7 +27,7 @@
             android:id="@+id/pageTopInset"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="#FFFFFFFF"
+            android:background="@color/browser_toolbar_bg"
             android:elevation="2dp" />
 
         <FrameLayout
@@ -53,7 +53,8 @@
                 android:layout_height="wrap_content"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:scrollbars="none">
+                android:scrollbars="none"
+                android:visibility="gone">
 
                 <LinearLayout
                     android:id="@+id/groupStrip"
@@ -85,6 +86,15 @@
                         android:orientation="horizontal"
                         android:paddingStart="4dp" />
                 </HorizontalScrollView>
+
+                <ImageButton
+                    android:id="@+id/categoryBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="显示分类"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_browser_category" />
 
                 <ImageButton
                     android:id="@+id/homeBtn"
@@ -136,7 +146,7 @@
             android:id="@+id/pageBottomInset"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="#FFFFFFFF"
+            android:background="@color/browser_toolbar_bg"
             android:elevation="2dp" />
     </LinearLayout>
 

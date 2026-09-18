@@ -85,6 +85,17 @@ describe('APK 版本号', () => {
     expect(layout).toContain('refreshBtn');
     expect(layout).toContain('tabStrip');
     expect(layout).toContain('restoreTabsBtn');
+    expect(layout).toContain('categoryBtn');
+    expect(layout).toContain('显示分类');
+    expect(activity).toContain('refreshPageChrome(');
+    expect(activity).toContain('browserBar.setPadding');
+    expect(tabs).toContain('toggleGroupsVisible(');
+    expect(tabs).toContain('showGroupManager(');
+    expect(tabs).toContain('toggleAllGroupsCollapsed(');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetManageGroups"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetCollapseAll"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_groups.xml'), 'utf8')).toContain('id="@+id/manageGroupList"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_manage_group.xml'), 'utf8')).toContain('id="@+id/manageGroupHandle"');
     expect(bridge).toContain('public boolean openUrl(String url)');
     expect(bridge).toContain('public boolean openUrls(String json)');
     expect(activity).toContain('boolean openUrl(String url)');

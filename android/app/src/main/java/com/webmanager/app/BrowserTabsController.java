@@ -43,6 +43,7 @@ final class BrowserTabsController {
     private final LinearLayout groupStrip;
     private final LinearLayout tabStrip;
     private final HorizontalScrollView groupScroll;
+    private final ImageButton categoryBtn;
     private final TextView tabsCount;
     private final View restoreBtn;
     private final LayoutInflater inflater;
@@ -54,6 +55,8 @@ final class BrowserTabsController {
     private String activeTabId;
     private String activeGroupId = UNGROUPED;
     private Dialog sheetDialog;
+    private Dialog groupDialog;
+    private boolean groupsVisible;
     private String sheetQuery = "";
     private static final String DRAG_GROUP = "browser-group";
     private static final String DRAG_TAB = "browser-tab";
@@ -64,12 +67,14 @@ final class BrowserTabsController {
         this.groupStrip = activity.findViewById(R.id.groupStrip);
         this.tabStrip = activity.findViewById(R.id.tabStrip);
         this.groupScroll = activity.findViewById(R.id.groupScroll);
+        this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.inflater = LayoutInflater.from(activity);
         activity.findViewById(R.id.homeBtn).setOnClickListener(v -> hideOverlay());
         activity.findViewById(R.id.refreshBtn).setOnClickListener(v -> refreshActive());
         activity.findViewById(R.id.tabsBtn).setOnClickListener(v -> showSheet());
+        if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
     }
 
@@ -215,10 +220,12 @@ final class BrowserTabsController {
 
     void destroyAll() {
         dismissSheet();
+        dismissGroupManager();
         for (Tab tab : new ArrayList<>(tabs)) destroyTab(tab);
         tabs.clear();
         groups.clear();
         selectedIds.clear();
+        groupsVisible = false;
         activeTabId = null;
         activeGroupId = UNGROUPED;
         host.removeAllViews();
@@ -262,6 +269,7 @@ final class BrowserTabsController {
             else item.webView.onPause();
         }
         activity.setPageWindow(true);
+        activity.refreshPageChrome(tab.webView);
         renderStrips();
     }
 
@@ -298,9 +306,11 @@ final class BrowserTabsController {
             activeGroupId = UNGROUPED;
             activity.setPageWindow(false);
             dismissSheet();
+            dismissGroupManager();
         }
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
     }
 
     private Tab nextTab(int closedIndex, String groupId) {
@@ -343,6 +353,7 @@ final class BrowserTabsController {
         }
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
     }
 
     private void deleteGroup(String groupId) {
@@ -362,6 +373,7 @@ final class BrowserTabsController {
         }
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
     }
 
     private String ensureGroup(String name) {
@@ -393,9 +405,13 @@ final class BrowserTabsController {
     private void renderStrips() {
         groupStrip.removeAllViews();
         tabStrip.removeAllViews();
-        boolean showGroups = !groups.isEmpty();
-        groupScroll.setVisibility(showGroups ? View.VISIBLE : View.GONE);
-        if (showGroups) {
+        if (categoryBtn != null) {
+            categoryBtn.setVisibility(View.VISIBLE);
+            categoryBtn.setContentDescription(groupsVisible ? "隐藏分类" : "显示分类");
+            categoryBtn.setBackgroundResource(groupsVisible ? R.drawable.bg_browser_chip_active : android.R.color.transparent);
+        }
+        groupScroll.setVisibility(groupsVisible ? View.VISIBLE : View.GONE);
+        if (groupsVisible) {
             addGroupChip("未分组", UNGROUPED, countInGroup(UNGROUPED));
             for (Group group : groups) {
                 addGroupChip(group.name, group.id, countInGroup(group.id));
@@ -472,6 +488,10 @@ final class BrowserTabsController {
         dialog.setCanceledOnTouchOutside(true);
         dialog.setCancelable(true);
         dialog.findViewById(R.id.sheetDone).setOnClickListener(v -> dialog.dismiss());
+        View manageGroups = dialog.findViewById(R.id.sheetManageGroups);
+        if (manageGroups != null) manageGroups.setOnClickListener(v -> showGroupManager());
+        View collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
+        if (collapseAll != null) collapseAll.setOnClickListener(v -> toggleAllGroupsCollapsed());
         dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectVisible());
         dialog.findViewById(R.id.sheetMoveSelected).setOnClickListener(v -> pickGroupFor(selectedList()));
         dialog.findViewById(R.id.sheetCloseSelected).setOnClickListener(v -> {
@@ -545,6 +565,10 @@ final class BrowserTabsController {
             }
         }
         selectAll.setText(allSelected ? "取消全选" : "全选");
+        TextView collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
+        if (collapseAll != null) {
+            collapseAll.setText(areAllGroupsCollapsed() ? "展开" : "折叠");
+        }
     }
 
     private void appendGroupSection(LinearLayout list, String name, String groupId) {
@@ -690,6 +714,105 @@ final class BrowserTabsController {
         }
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
+    }
+
+    private void toggleGroupsVisible() {
+        groupsVisible = !groupsVisible;
+        renderStrips();
+    }
+
+    private void showGroupManager() {
+        dismissGroupManager();
+        Dialog dialog = new Dialog(activity, R.style.JsDialogTheme);
+        dialog.setContentView(R.layout.sheet_browser_groups);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.setCancelable(true);
+        dialog.findViewById(R.id.manageGroupDone).setOnClickListener(v -> dialog.dismiss());
+        dialog.setOnDismissListener(d -> {
+            if (groupDialog == dialog) groupDialog = null;
+        });
+        groupDialog = dialog;
+        renderGroupManager(dialog);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = Math.round(activity.getResources().getDisplayMetrics().widthPixels * 0.92f);
+            int height = Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.62f);
+            window.setLayout(width, height);
+        }
+    }
+
+    private void renderGroupManager(Dialog dialog) {
+        LinearLayout list = dialog.findViewById(R.id.manageGroupList);
+        list.removeAllViews();
+        if (groups.isEmpty()) {
+            TextView empty = new TextView(activity);
+            empty.setText("暂无分组");
+            empty.setTextColor(Color.parseColor("#8A97A5"));
+            empty.setPadding(8, 24, 8, 24);
+            empty.setGravity(android.view.Gravity.CENTER);
+            list.addView(empty);
+            return;
+        }
+        for (Group group : groups) {
+            View row = inflater.inflate(R.layout.item_browser_manage_group, list, false);
+            TextView title = row.findViewById(R.id.manageGroupTitle);
+            title.setText(group.name + " (" + countInGroup(group.id) + ")");
+            row.findViewById(R.id.manageGroupRename).setOnClickListener(v -> promptRenameGroup(group.id, group.name));
+            row.findViewById(R.id.manageGroupDelete).setOnClickListener(v -> confirmDeleteGroup(group.id, group.name));
+            enableGroupDrag(row.findViewById(R.id.manageGroupHandle), row, group.id);
+            row.setOnDragListener((v, event) -> handleManageGroupDrop(event, group.id));
+            list.addView(row);
+        }
+    }
+
+    private void refreshGroupManager() {
+        if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
+    }
+
+    private void dismissGroupManager() {
+        if (groupDialog != null) {
+            groupDialog.dismiss();
+            groupDialog = null;
+        }
+    }
+
+    private boolean handleManageGroupDrop(DragEvent event, String targetId) {
+        if (!(event.getLocalState() instanceof DragPayload)) return false;
+        DragPayload payload = (DragPayload) event.getLocalState();
+        if (!DRAG_GROUP.equals(payload.type)) return false;
+        if (UNGROUPED.equals(payload.id) || UNGROUPED.equals(targetId)) return false;
+        if (event.getAction() == DragEvent.ACTION_DROP) {
+            reorderGroups(payload.id, targetId);
+        }
+        return true;
+    }
+
+    private void toggleAllGroupsCollapsed() {
+        if (areAllGroupsCollapsed()) collapsedGroupIds.clear();
+        else collapsedGroupIds.addAll(sheetGroupIds());
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private boolean areAllGroupsCollapsed() {
+        List<String> ids = sheetGroupIds();
+        if (ids.isEmpty()) return false;
+        for (String id : ids) {
+            if (!collapsedGroupIds.contains(id)) return false;
+        }
+        return true;
+    }
+
+    private List<String> sheetGroupIds() {
+        List<String> ids = new ArrayList<>();
+        if (!filteredTabsInGroup(UNGROUPED).isEmpty()) ids.add(UNGROUPED);
+        for (Group group : groups) {
+            if (sheetQuery.trim().isEmpty() || !filteredTabsInGroup(group.id).isEmpty()) {
+                ids.add(group.id);
+            }
+        }
+        return ids;
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -827,6 +950,7 @@ final class BrowserTabsController {
         groups.add(to, moved);
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
     }
 
     private int indexOfGroup(String groupId) {
