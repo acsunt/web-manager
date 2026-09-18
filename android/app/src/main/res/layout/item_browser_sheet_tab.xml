@@ -8,6 +8,15 @@
     android:paddingStart="4dp"
     android:paddingEnd="4dp">
 
+    <ImageButton
+        android:id="@+id/sheetTabHandle"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="拖拽网页"
+        android:padding="4dp"
+        android:src="@drawable/ic_browser_drag" />
+
     <CheckBox
         android:id="@+id/sheetCheck"
         android:layout_width="wrap_content"
@@ -48,7 +57,7 @@
         android:layout_width="36dp"
         android:layout_height="36dp"
         android:background="@android:color/transparent"
-        android:contentDescription="移动网页"
+        android:contentDescription="移动到分组"
         android:padding="6dp"
         android:src="@drawable/ic_browser_move" />
 

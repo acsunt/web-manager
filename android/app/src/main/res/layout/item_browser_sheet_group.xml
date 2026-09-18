@@ -18,6 +18,15 @@
         android:padding="4dp"
         android:src="@drawable/ic_browser_drag" />
 
+    <ImageButton
+        android:id="@+id/sheetGroupToggle"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="折叠分组"
+        android:padding="4dp"
+        android:src="@drawable/ic_browser_collapse" />
+
     <TextView
         android:id="@+id/sheetGroupTitle"
         android:layout_width="0dp"

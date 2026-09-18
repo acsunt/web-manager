@@ -50,11 +50,13 @@ final class BrowserTabsController {
     private final List<Group> groups = new ArrayList<>();
     private final List<Tab> tabs = new ArrayList<>();
     private final Set<String> selectedIds = new HashSet<>();
+    private final Set<String> collapsedGroupIds = new HashSet<>();
     private String activeTabId;
     private String activeGroupId = UNGROUPED;
     private Dialog sheetDialog;
     private String sheetQuery = "";
     private static final String DRAG_GROUP = "browser-group";
+    private static final String DRAG_TAB = "browser-tab";
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
@@ -354,6 +356,7 @@ final class BrowserTabsController {
         while (it.hasNext()) {
             if (groupId.equals(it.next().id)) it.remove();
         }
+        collapsedGroupIds.remove(groupId);
         if (groupId.equals(activeGroupId)) {
             activeGroupId = UNGROUPED;
         }
@@ -376,8 +379,12 @@ final class BrowserTabsController {
         Iterator<Group> it = groups.iterator();
         while (it.hasNext()) {
             Group group = it.next();
-            if (countInGroup(group.id) == 0) it.remove();
+            if (countInGroup(group.id) == 0) {
+                collapsedGroupIds.remove(group.id);
+                it.remove();
+            }
         }
+        if (countInGroup(UNGROUPED) == 0) collapsedGroupIds.remove(UNGROUPED);
         if (!UNGROUPED.equals(activeGroupId) && countInGroup(activeGroupId) == 0) {
             activeGroupId = UNGROUPED;
         }
@@ -548,17 +555,28 @@ final class BrowserTabsController {
         TextView rename = header.findViewById(R.id.sheetGroupRename);
         TextView delete = header.findViewById(R.id.sheetGroupDelete);
         ImageButton handle = header.findViewById(R.id.sheetGroupHandle);
+        ImageButton toggle = header.findViewById(R.id.sheetGroupToggle);
+        boolean collapsed = isGroupCollapsed(groupId);
         title.setText(name + " (" + items.size() + ")");
+        toggle.setImageResource(collapsed ? R.drawable.ic_browser_expand : R.drawable.ic_browser_collapse);
+        toggle.setContentDescription(collapsed ? "展开分组" : "折叠分组");
+        View.OnClickListener toggleClick = v -> toggleGroupCollapsed(groupId);
+        toggle.setOnClickListener(toggleClick);
+        title.setOnClickListener(toggleClick);
+        header.setOnDragListener((v, event) -> handleGroupDrop(event, groupId));
         if (UNGROUPED.equals(groupId)) {
             handle.setVisibility(View.GONE);
             rename.setVisibility(View.GONE);
-            delete.setVisibility(View.GONE);
+            delete.setText("关闭");
+            delete.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+            delete.setOnClickListener(v -> confirmCloseGroup(groupId, name));
         } else {
             rename.setOnClickListener(v -> promptRenameGroup(groupId, name));
             delete.setOnClickListener(v -> confirmDeleteGroup(groupId, name));
             enableGroupDrag(handle, header, groupId);
         }
         list.addView(header);
+        if (collapsed) return;
         for (Tab tab : items) {
             View row = inflater.inflate(R.layout.item_browser_sheet_tab, list, false);
             TextView titleView = row.findViewById(R.id.sheetTitle);
@@ -583,6 +601,7 @@ final class BrowserTabsController {
             });
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
+            enableTabDrag(row.findViewById(R.id.sheetTabHandle), row, tab.id);
             list.addView(row);
         }
     }
@@ -680,24 +699,123 @@ final class BrowserTabsController {
             if (event.getAction() != MotionEvent.ACTION_DOWN) return false;
             ClipData data = ClipData.newPlainText(DRAG_GROUP, groupId);
             View.DragShadowBuilder shadow = new View.DragShadowBuilder(header);
+            DragPayload payload = new DragPayload(DRAG_GROUP, groupId);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                header.startDragAndDrop(data, shadow, groupId, 0);
+                header.startDragAndDrop(data, shadow, payload, 0);
             } else {
-                header.startDrag(data, shadow, groupId, 0);
+                header.startDrag(data, shadow, payload, 0);
             }
             return true;
         });
-        header.setOnDragListener((v, event) -> handleGroupDrop(event, groupId));
+    }
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    @SuppressWarnings("deprecation")
+    private void enableTabDrag(View handle, View row, String tabId) {
+        handle.setOnTouchListener((v, event) -> {
+            if (event.getAction() != MotionEvent.ACTION_DOWN) return false;
+            ClipData data = ClipData.newPlainText(DRAG_TAB, tabId);
+            View.DragShadowBuilder shadow = new View.DragShadowBuilder(row);
+            DragPayload payload = new DragPayload(DRAG_TAB, tabId);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                row.startDragAndDrop(data, shadow, payload, 0);
+            } else {
+                row.startDrag(data, shadow, payload, 0);
+            }
+            return true;
+        });
+        row.setOnDragListener((v, event) -> handleTabDrop(event, tabId));
     }
 
     private boolean handleGroupDrop(DragEvent event, String targetId) {
-        if (!(event.getLocalState() instanceof String)) return false;
-        String fromId = (String) event.getLocalState();
-        if (UNGROUPED.equals(fromId) || UNGROUPED.equals(targetId)) return false;
+        if (!(event.getLocalState() instanceof DragPayload)) return false;
+        DragPayload payload = (DragPayload) event.getLocalState();
+        if (DRAG_TAB.equals(payload.type)) {
+            if (event.getAction() == DragEvent.ACTION_DROP) moveTabToGroup(payload.id, targetId);
+            return true;
+        }
+        if (!DRAG_GROUP.equals(payload.type)) return false;
+        if (UNGROUPED.equals(payload.id) || UNGROUPED.equals(targetId)) return false;
         if (event.getAction() == DragEvent.ACTION_DROP) {
-            reorderGroups(fromId, targetId);
+            reorderGroups(payload.id, targetId);
         }
         return true;
+    }
+
+    private boolean handleTabDrop(DragEvent event, String targetId) {
+        if (!(event.getLocalState() instanceof DragPayload)) return false;
+        DragPayload payload = (DragPayload) event.getLocalState();
+        if (!DRAG_TAB.equals(payload.type)) return false;
+        if (event.getAction() == DragEvent.ACTION_DROP) {
+            reorderTabs(payload.id, targetId);
+        }
+        return true;
+    }
+
+    private void reorderTabs(String fromId, String toId) {
+        if (fromId == null || fromId.equals(toId)) return;
+        int from = indexOfTab(fromId);
+        int to = indexOfTab(toId);
+        if (from < 0 || to < 0) return;
+        Tab target = findTabById(toId);
+        Tab moved = tabs.remove(from);
+        if (to > from) to--;
+        if (target != null) moved.groupId = target.groupId;
+        tabs.add(to, moved);
+        pruneEmptyGroups();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void moveTabToGroup(String tabId, String groupId) {
+        Tab tab = findTabById(tabId);
+        if (tab == null) return;
+        String targetGroup = groupId == null ? UNGROUPED : groupId;
+        tab.groupId = targetGroup;
+        tabs.remove(tab);
+        int insert = tabs.size();
+        for (int i = 0; i < tabs.size(); i++) {
+            if (targetGroup.equals(tabs.get(i).groupId)) insert = i + 1;
+        }
+        tabs.add(insert, tab);
+        pruneEmptyGroups();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private int indexOfTab(String tabId) {
+        for (int i = 0; i < tabs.size(); i++) {
+            if (tabId.equals(tabs.get(i).id)) return i;
+        }
+        return -1;
+    }
+
+    private boolean isGroupCollapsed(String groupId) {
+        if (sheetQuery != null && !sheetQuery.trim().isEmpty()) return false;
+        return collapsedGroupIds.contains(groupId == null ? UNGROUPED : groupId);
+    }
+
+    private void toggleGroupCollapsed(String groupId) {
+        String id = groupId == null ? UNGROUPED : groupId;
+        if (collapsedGroupIds.contains(id)) collapsedGroupIds.remove(id);
+        else collapsedGroupIds.add(id);
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void confirmCloseGroup(String groupId, String name) {
+        new AlertDialog.Builder(activity)
+                .setMessage("关闭「" + name + "」中打开的所有网页？")
+                .setPositiveButton("关闭", (dialog, which) -> closeGroupTabs(groupId))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void closeGroupTabs(String groupId) {
+        List<String> ids = new ArrayList<>();
+        for (Tab tab : tabs) {
+            if (groupId.equals(tab.groupId)) ids.add(tab.id);
+        }
+        closeTabs(ids);
     }
 
     private void reorderGroups(String fromId, String toId) {
@@ -903,6 +1021,16 @@ final class BrowserTabsController {
         PageSpec(String title, String url) {
             this.title = title;
             this.url = url;
+        }
+    }
+
+    static final class DragPayload {
+        final String type;
+        final String id;
+
+        DragPayload(String type, String id) {
+            this.type = type;
+            this.id = id;
         }
     }
 }
