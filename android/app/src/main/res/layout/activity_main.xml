@@ -10,19 +10,44 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/pageContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#FFFFFFFF"
         android:clickable="true"
+        android:clipChildren="true"
+        android:clipToPadding="true"
         android:elevation="8dp"
         android:fitsSystemWindows="false"
+        android:orientation="vertical"
         android:visibility="gone">
 
-        <WebView
-            android:id="@+id/pageWebView"
+        <View
+            android:id="@+id/pageTopInset"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
+            android:layout_height="0dp"
+            android:background="#FFFFFFFF"
+            android:elevation="2dp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+
+            <WebView
+                android:id="@+id/pageWebView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <View
+            android:id="@+id/pageBottomInset"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="#FFFFFFFF"
+            android:elevation="2dp" />
+    </LinearLayout>
 </FrameLayout>

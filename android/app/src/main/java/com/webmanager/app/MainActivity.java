@@ -11,9 +11,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.util.Base64;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.DownloadListener;
-import android.webkit.JsPromptResult;
-import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -40,7 +39,9 @@ public class MainActivity extends AppCompatActivity {
     private WebView appWebView;
     private WebView pageWebView;
     private FrameLayout root;
-    private FrameLayout pageContainer;
+    private ViewGroup pageContainer;
+    private View pageTopInset;
+    private View pageBottomInset;
     private PageInfoBridge bridge;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
@@ -58,6 +59,8 @@ public class MainActivity extends AppCompatActivity {
         root = findViewById(R.id.rootLayout);
         appWebView = findViewById(R.id.appWebView);
         pageContainer = findViewById(R.id.pageContainer);
+        pageTopInset = findViewById(R.id.pageTopInset);
+        pageBottomInset = findViewById(R.id.pageBottomInset);
         pageWebView = findViewById(R.id.pageWebView);
         applyEdgeToEdge();
         bridge = new PageInfoBridge(this);
@@ -112,6 +115,8 @@ public class MainActivity extends AppCompatActivity {
         pageWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
         pageWebView.setFitsSystemWindows(false);
         pageWebView.setBackgroundColor(Color.WHITE);
+        pageContainer.setClipChildren(true);
+        pageContainer.setClipToPadding(true);
         pageWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -140,12 +145,7 @@ public class MainActivity extends AppCompatActivity {
         if (url == null || url.trim().isEmpty()) return false;
         String target = url.trim();
         if (!(target.startsWith("http://") || target.startsWith("https://"))) return false;
-        runOnUiThread(() -> {
-            pageContainer.setVisibility(View.VISIBLE);
-            applyPageInsets();
-            applySystemBarIcons(true);
-            pageWebView.loadUrl(target);
-        });
+        runOnUiThread(() -> showPage(target));
         return true;
     }
 
@@ -158,10 +158,28 @@ public class MainActivity extends AppCompatActivity {
             pageWebView.stopLoading();
             pageWebView.loadUrl("about:blank");
         }
+        setPageWindow(false);
+    }
+
+    private void showPage(String url) {
+        setPageWindow(true);
+        pageWebView.loadUrl(url);
+    }
+
+    private void setPageWindow(boolean visible) {
         if (pageContainer != null) {
-            pageContainer.setVisibility(View.GONE);
+            pageContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
-        applySystemBarIcons(lightSystemBars);
+        if (visible) {
+            getWindow().setStatusBarColor(Color.WHITE);
+            getWindow().setNavigationBarColor(Color.WHITE);
+            applyPageInsets();
+            applySystemBarIcons(true);
+        } else {
+            getWindow().setStatusBarColor(Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+            applySystemBarIcons(lightSystemBars);
+        }
     }
 
     void setSystemBarsAppearance(boolean light) {
@@ -192,8 +210,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyPageInsets() {
-        if (pageContainer == null) return;
-        pageContainer.setPadding(safeLeft, safeTop, safeRight, safeBottom);
+        int top = Math.max(safeTop, systemBarSize("status_bar_height"));
+        int bottom = Math.max(safeBottom, systemBarSize("navigation_bar_height"));
+        setInsetSize(pageTopInset, ViewGroup.LayoutParams.MATCH_PARENT, top);
+        setInsetSize(pageBottomInset, ViewGroup.LayoutParams.MATCH_PARENT, bottom);
+        if (pageWebView == null) return;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) pageWebView.getLayoutParams();
+        if (params == null) return;
+        params.leftMargin = Math.max(safeLeft, 0);
+        params.rightMargin = Math.max(safeRight, 0);
+        pageWebView.setLayoutParams(params);
+    }
+
+    private int systemBarSize(String dimenName) {
+        int id = getResources().getIdentifier(dimenName, "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
+    }
+
+    private void setInsetSize(View view, int width, int height) {
+        if (view == null) return;
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (params == null) return;
+        params.width = width;
+        params.height = height;
+        view.setLayoutParams(params);
     }
 
     private void applySystemBarIcons(boolean light) {
@@ -274,6 +314,7 @@ public class MainActivity extends AppCompatActivity {
                 consumePopupUrl(url == null ? null : Uri.parse(url));
             }
         });
+        temp.setWebChromeClient(new JsChromeClient(this, true));
         temp.postDelayed(this::destroyPendingWindow, 8000);
         WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
         transport.setWebView(temp);
@@ -392,28 +433,14 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    private class AppChromeClient extends WebChromeClient {
+    private class AppChromeClient extends JsChromeClient {
+        AppChromeClient() {
+            super(MainActivity.this, true);
+        }
+
         @Override
         public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
             return capturePopupWindow(resultMsg);
-        }
-
-        @Override
-        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
-            JsDialog.alert(MainActivity.this, message, result);
-            return true;
-        }
-
-        @Override
-        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
-            JsDialog.confirm(MainActivity.this, message, result);
-            return true;
-        }
-
-        @Override
-        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
-            JsDialog.prompt(MainActivity.this, message, defaultValue, result);
-            return true;
         }
 
         @Override
@@ -435,28 +462,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class PageChromeClient extends WebChromeClient {
+    private class PageChromeClient extends JsChromeClient {
+        PageChromeClient() {
+            super(MainActivity.this, true);
+        }
+
         @Override
         public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
             return capturePopupWindow(resultMsg);
-        }
-
-        @Override
-        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
-            JsDialog.alert(MainActivity.this, message, result);
-            return true;
-        }
-
-        @Override
-        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
-            JsDialog.confirm(MainActivity.this, message, result);
-            return true;
-        }
-
-        @Override
-        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
-            JsDialog.prompt(MainActivity.this, message, defaultValue, result);
-            return true;
         }
 
         @Override

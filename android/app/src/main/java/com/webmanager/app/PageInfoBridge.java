@@ -126,6 +126,21 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void alert(String message) {
+        JsDialog.alertSync(activity, message);
+    }
+
+    @JavascriptInterface
+    public boolean confirm(String message) {
+        return JsDialog.confirmSync(activity, message);
+    }
+
+    @JavascriptInterface
+    public String prompt(String message, String defaultValue) {
+        return JsDialog.promptSync(activity, message, defaultValue);
+    }
+
+    @JavascriptInterface
     public boolean copyText(String text) {
         try {
             final String value = text == null ? "" : text;
@@ -260,7 +275,7 @@ final class PageInfoBridge {
                 }
             });
 
-            webView.setWebChromeClient(new WebChromeClient() {
+            webView.setWebChromeClient(new JsChromeClient(activity, false) {
                 @Override
                 public void onReceivedTitle(WebView view, String receivedTitle) {
                     if (receivedTitle != null && !receivedTitle.isEmpty()) {

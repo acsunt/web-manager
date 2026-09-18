@@ -12,7 +12,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
 import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -304,6 +304,7 @@ function revealApp() {
 }
 
 function init() {
+    installNativeDialogs();
     document.body.style.opacity = '0';
     try {
         const saved = localStorage.getItem('webManagerDataProMax');

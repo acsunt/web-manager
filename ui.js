@@ -68,6 +68,20 @@ export function isNativeApp() {
     return typeof window !== 'undefined' && typeof window.Android === 'object' && window.Android !== null;
 }
 
+export function installNativeDialogs() {
+    if (typeof window === 'undefined' || typeof window.Android?.alert !== 'function') return;
+    window.alert = (message) => {
+        window.Android.alert(message == null ? '' : String(message));
+    };
+    window.confirm = (message) => {
+        return !!window.Android.confirm(message == null ? '' : String(message));
+    };
+    window.prompt = (message, defaultValue) => {
+        const result = window.Android.prompt(message == null ? '' : String(message), defaultValue == null ? '' : String(defaultValue));
+        return result == null ? null : String(result);
+    };
+}
+
 export async function copyTextToClipboard(text) {
     const value = text == null ? '' : String(text);
     if (typeof window !== 'undefined' && typeof window.Android?.copyText === 'function') {

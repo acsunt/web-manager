@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, installNativeDialogs, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -179,6 +179,35 @@ describe('copyTextToClipboard', () => {
     vi.stubGlobal('navigator', {});
     document.execCommand = vi.fn(() => { throw new Error('no copy'); });
     await expect(copyTextToClipboard('失败')).resolves.toBe(false);
+  });
+});
+
+describe('installNativeDialogs', () => {
+  const originalAlert = window.alert;
+  const originalConfirm = window.confirm;
+  const originalPrompt = window.prompt;
+
+  afterEach(() => {
+    delete window.Android;
+    window.alert = originalAlert;
+    window.confirm = originalConfirm;
+    window.prompt = originalPrompt;
+    vi.restoreAllMocks();
+  });
+
+  it('APK 把 alert/confirm/prompt 接到原生弹窗', () => {
+    window.Android = {
+      alert: vi.fn(),
+      confirm: vi.fn(() => true),
+      prompt: vi.fn(() => '改名'),
+    };
+    installNativeDialogs();
+    window.alert('请至少填写一个有效的网址');
+    expect(window.Android.alert).toHaveBeenCalledWith('请至少填写一个有效的网址');
+    expect(window.confirm('确定删除吗？')).toBe(true);
+    expect(window.Android.confirm).toHaveBeenCalledWith('确定删除吗？');
+    expect(window.prompt('新名字', '旧名字')).toBe('改名');
+    expect(window.Android.prompt).toHaveBeenCalledWith('新名字', '旧名字');
   });
 });
 
