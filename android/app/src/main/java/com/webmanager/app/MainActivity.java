@@ -4,15 +4,22 @@ import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Base64;
+import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -53,6 +60,18 @@ public class MainActivity extends AppCompatActivity {
     private int safeRight;
     private int safeBottom;
     private int safeLeft;
+    private int pageTopColor = Color.WHITE;
+    private int pageBottomColor = Color.WHITE;
+    private int sampleGen;
+    private int sampleFlags;
+    private int sampledTopColor = Color.WHITE;
+    private int sampledBottomColor = Color.WHITE;
+    private long lastSampleAt;
+    private WebView chromeWebView;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable sampleChromeRunnable = () -> samplePageColors(chromeWebView);
+    private static final int SAMPLE_STRIP_PX = 8;
+    private static final long SAMPLE_THROTTLE_MS = 180;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -120,6 +139,8 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
         webView.setFitsSystemWindows(false);
         webView.setBackgroundColor(Color.WHITE);
+        webView.addJavascriptInterface(new PageChromeBridge(webView), "WebManagerChrome");
+        webView.setOnScrollChangeListener((v, l, t, oldl, oldt) -> refreshPageChrome((WebView) v, false));
         webView.setWebViewClient(new PageWebViewClient());
         webView.setWebChromeClient(new PageChromeClient());
         webView.setDownloadListener(downloadListener());
@@ -169,9 +190,8 @@ public class MainActivity extends AppCompatActivity {
         if (pageContainer != null) {
             pageContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
-        if (visible) {
-            refreshPageChrome(null);
-        } else {
+        if (!visible) {
+            cancelPageChromeSample();
             getWindow().setStatusBarColor(Color.TRANSPARENT);
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
             applySystemBarIcons(lightSystemBars);
@@ -180,15 +200,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void refreshPageChrome(WebView webView) {
+        refreshPageChrome(webView, true);
+    }
+
+    void refreshPageChrome(WebView webView, boolean force) {
         if (!isPageOpen()) return;
-        int color = getResources().getColor(R.color.browser_toolbar_bg, getTheme());
-        getWindow().setStatusBarColor(color);
-        getWindow().setNavigationBarColor(color);
-        if (pageTopInset != null) pageTopInset.setBackgroundColor(color);
-        if (pageBottomInset != null) pageBottomInset.setBackgroundColor(color);
-        if (pageContainer != null) pageContainer.setBackgroundColor(color);
         applyPageInsets();
-        applySystemBarIcons(true);
+        if (webView == null) {
+            applyPageChromeColors(pageTopColor, pageBottomColor);
+            return;
+        }
+        chromeWebView = webView;
+        if (force) lastSampleAt = 0;
+        applyPageChromeColors(pageTopColor, pageBottomColor);
+        schedulePageChromeSample(webView);
     }
 
     void setSystemBarsAppearance(boolean light) {
@@ -213,6 +238,7 @@ public class MainActivity extends AppCompatActivity {
             safeLeft = Math.max(bars.left, cutout.left);
             injectSafeArea();
             applyPageInsets();
+            if (isPageOpen() && chromeWebView != null) schedulePageChromeSample(chromeWebView);
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
@@ -266,11 +292,190 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySystemBarIcons(boolean light) {
-        boolean useLight = isPageOpen() || light;
         View decor = getWindow().getDecorView();
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decor);
-        controller.setAppearanceLightStatusBars(useLight);
-        controller.setAppearanceLightNavigationBars(useLight);
+        if (isPageOpen()) {
+            controller.setAppearanceLightStatusBars(isLightColor(pageTopColor));
+            controller.setAppearanceLightNavigationBars(isLightColor(pageBottomColor));
+            return;
+        }
+        controller.setAppearanceLightStatusBars(light);
+        controller.setAppearanceLightNavigationBars(light);
+    }
+
+    private void schedulePageChromeSample(WebView webView) {
+        chromeWebView = webView;
+        mainHandler.removeCallbacks(sampleChromeRunnable);
+        long now = SystemClock.uptimeMillis();
+        long delay = Math.max(0, SAMPLE_THROTTLE_MS - (now - lastSampleAt));
+        mainHandler.postDelayed(sampleChromeRunnable, delay);
+    }
+
+    private void cancelPageChromeSample() {
+        mainHandler.removeCallbacks(sampleChromeRunnable);
+        chromeWebView = null;
+    }
+
+    private void samplePageColors(WebView webView) {
+        if (!isPageOpen() || webView == null || webView.getVisibility() != View.VISIBLE) return;
+        if (webView.getWindowToken() == null || webView.getWidth() <= 0 || webView.getHeight() <= 0) {
+            mainHandler.postDelayed(sampleChromeRunnable, 80);
+            return;
+        }
+        lastSampleAt = SystemClock.uptimeMillis();
+        int gen = ++sampleGen;
+        sampleFlags = 0;
+        copyStrip(webView, true, gen);
+        copyStrip(webView, false, gen);
+    }
+
+    private void copyStrip(WebView webView, boolean top, int gen) {
+        Rect src = stripRect(webView, top);
+        if (src == null || src.isEmpty()) {
+            onStripSampled(top, fallbackDrawColor(webView, top), gen);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 26) {
+            Bitmap bitmap = Bitmap.createBitmap(Math.max(1, src.width()), Math.max(1, src.height()), Bitmap.Config.ARGB_8888);
+            try {
+                PixelCopy.request(getWindow(), src, bitmap, result -> {
+                    if (gen != sampleGen) {
+                        bitmap.recycle();
+                        return;
+                    }
+                    int color = result == PixelCopy.SUCCESS ? averageColor(bitmap) : fallbackDrawColor(webView, top);
+                    bitmap.recycle();
+                    onStripSampled(top, color, gen);
+                }, mainHandler);
+                return;
+            } catch (Exception ignored) {
+                bitmap.recycle();
+            }
+        }
+        onStripSampled(top, fallbackDrawColor(webView, top), gen);
+    }
+
+    private Rect stripRect(WebView webView, boolean top) {
+        int width = webView.getWidth();
+        int height = webView.getHeight();
+        if (width <= 0 || height <= 0) return null;
+        int strip = Math.min(SAMPLE_STRIP_PX, height);
+        int[] loc = new int[2];
+        webView.getLocationInWindow(loc);
+        View decor = getWindow().getDecorView();
+        Rect src = new Rect(
+                loc[0],
+                top ? loc[1] : loc[1] + height - strip,
+                loc[0] + width,
+                top ? loc[1] + strip : loc[1] + height
+        );
+        if (!src.intersect(0, 0, Math.max(1, decor.getWidth()), Math.max(1, decor.getHeight()))) return null;
+        return src;
+    }
+
+    private int fallbackDrawColor(WebView webView, boolean top) {
+        int width = Math.max(1, webView.getWidth());
+        int height = Math.max(1, webView.getHeight());
+        int strip = Math.min(SAMPLE_STRIP_PX, height);
+        Bitmap bitmap = Bitmap.createBitmap(width, strip, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.translate(0, top ? 0 : strip - height);
+        webView.draw(canvas);
+        int color = averageColor(bitmap);
+        bitmap.recycle();
+        return color;
+    }
+
+    private void onStripSampled(boolean top, int color, int gen) {
+        if (gen != sampleGen || !isPageOpen()) return;
+        if (top) {
+            sampledTopColor = color;
+            sampleFlags |= 1;
+        } else {
+            sampledBottomColor = color;
+            sampleFlags |= 2;
+        }
+        if (sampleFlags != 3) return;
+        applyPageChromeColors(sampledTopColor, sampledBottomColor);
+    }
+
+    private void applyPageChromeColors(int topColor, int bottomColor) {
+        pageTopColor = opaque(topColor);
+        pageBottomColor = opaque(bottomColor);
+        getWindow().setStatusBarColor(pageTopColor);
+        getWindow().setNavigationBarColor(pageBottomColor);
+        if (pageTopInset != null) pageTopInset.setBackgroundColor(pageTopColor);
+        if (pageBottomInset != null) pageBottomInset.setBackgroundColor(pageBottomColor);
+        if (pageContainer != null) pageContainer.setBackgroundColor(pageTopColor);
+        if (browserBar != null) browserBar.setBackgroundColor(pageBottomColor);
+        applySystemBarIcons(lightSystemBars);
+        if (tabs != null) tabs.applyChromeColors(pageBottomColor);
+    }
+
+    private int opaque(int color) {
+        return Color.rgb(Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private int averageColor(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        if (width <= 0 || height <= 0) return Color.WHITE;
+        long r = 0;
+        long g = 0;
+        long b = 0;
+        long n = 0;
+        int stepX = Math.max(1, width / 24);
+        int stepY = Math.max(1, height / 4);
+        for (int y = 0; y < height; y += stepY) {
+            for (int x = 0; x < width; x += stepX) {
+                int pixel = bitmap.getPixel(x, y);
+                if (Color.alpha(pixel) < 24) continue;
+                r += Color.red(pixel);
+                g += Color.green(pixel);
+                b += Color.blue(pixel);
+                n++;
+            }
+        }
+        if (n == 0) return Color.WHITE;
+        return Color.rgb((int) (r / n), (int) (g / n), (int) (b / n));
+    }
+
+    private boolean isLightColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255d;
+        return luminance > 0.55;
+    }
+
+    private boolean isActivePage(WebView view) {
+        return isPageOpen() && view != null && view.getVisibility() == View.VISIBLE;
+    }
+
+    private void bindPageChrome(WebView view) {
+        if (view == null) return;
+        view.evaluateJavascript(
+                "(function(){if(window.__wmChromeBound)return;window.__wmChromeBound=true;"
+                        + "function ping(){try{WebManagerChrome.onViewportChange();}catch(e){}}"
+                        + "var t;function on(){if(t)cancelAnimationFrame(t);t=requestAnimationFrame(ping);}"
+                        + "window.addEventListener('scroll',on,true);"
+                        + "window.addEventListener('resize',on);"
+                        + "document.addEventListener('touchmove',on,{passive:true});"
+                        + "})();",
+                null
+        );
+    }
+
+    private final class PageChromeBridge {
+        private final WebView webView;
+
+        PageChromeBridge(WebView webView) {
+            this.webView = webView;
+        }
+
+        @JavascriptInterface
+        public void onViewportChange() {
+            runOnUiThread(() -> {
+                if (isActivePage(webView)) refreshPageChrome(webView, false);
+            });
+        }
     }
 
     private float cssPx(int px) {
@@ -470,13 +675,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (tabs != null && isPageOpen()) tabs.resumeActive();
+        if (tabs != null && isPageOpen()) {
+            tabs.resumeActive();
+            if (chromeWebView != null) refreshPageChrome(chromeWebView, true);
+        }
     }
 
     @Override
     protected void onDestroy() {
         if (bridge != null) bridge.cancelAll();
         destroyPendingWindow();
+        cancelPageChromeSample();
         if (tabs != null) tabs.destroyAll();
         super.onDestroy();
     }
@@ -519,11 +728,26 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (tabs != null) tabs.updateUrl(view, url);
+            if (isActivePage(view)) refreshPageChrome(view, true);
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
             if (tabs != null) tabs.updateUrl(view, url);
+            if (!isActivePage(view)) return;
+            bindPageChrome(view);
+            refreshPageChrome(view, true);
+            view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+                @Override
+                public void onComplete(long requestId) {
+                    if (isActivePage(view)) refreshPageChrome(view, true);
+                }
+            });
+        }
+
+        @Override
+        public void onScaleChanged(WebView view, float oldScale, float newScale) {
+            if (isActivePage(view)) refreshPageChrome(view, false);
         }
     }
 
@@ -535,6 +759,11 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceivedTitle(WebView view, String title) {
             if (tabs != null) tabs.updateTitle(view, title);
+        }
+
+        @Override
+        public void onProgressChanged(WebView view, int newProgress) {
+            if (newProgress >= 100 && isActivePage(view)) refreshPageChrome(view, true);
         }
 
         @Override

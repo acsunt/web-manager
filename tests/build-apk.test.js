@@ -88,7 +88,16 @@ describe('APK 版本号', () => {
     expect(layout).toContain('categoryBtn');
     expect(layout).toContain('显示分类');
     expect(activity).toContain('refreshPageChrome(');
+    expect(activity).toContain('samplePageColors(');
+    expect(activity).toContain('PixelCopy.request');
+    expect(activity).toContain('applyPageChromeColors(');
+    expect(activity).toContain('browserBar.setBackgroundColor(pageBottomColor)');
+    expect(activity).toContain('setOnScrollChangeListener');
+    expect(activity).toContain('postVisualStateCallback');
+    expect(activity).toContain('WebManagerChrome');
     expect(activity).toContain('browserBar.setPadding');
+    expect(tabs).toContain('applyChromeColors(');
+    expect(tabs).toContain('tintBarButtons()');
     expect(tabs).toContain('toggleGroupsVisible(');
     expect(tabs).toContain('showGroupManager(');
     expect(tabs).toContain('toggleAllGroupsCollapsed(');

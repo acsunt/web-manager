@@ -3,6 +3,8 @@ package com.webmanager.app;
 import android.app.Dialog;
 import android.content.ClipData;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -44,6 +46,8 @@ final class BrowserTabsController {
     private final LinearLayout tabStrip;
     private final HorizontalScrollView groupScroll;
     private final ImageButton categoryBtn;
+    private final ImageButton homeBtn;
+    private final ImageButton refreshBtn;
     private final TextView tabsCount;
     private final View restoreBtn;
     private final LayoutInflater inflater;
@@ -58,6 +62,12 @@ final class BrowserTabsController {
     private Dialog groupDialog;
     private boolean groupsVisible;
     private String sheetQuery = "";
+    private int chromeColor = 0;
+    private int chromeText = Color.parseColor("#2C3E50");
+    private int chromeMuted = Color.parseColor("#8A97A5");
+    private int chromeChip = Color.parseColor("#F3F5F7");
+    private int chromeChipActive = Color.parseColor("#E8F2FF");
+    private int chromeAccent = Color.parseColor("#007BFF");
     private static final String DRAG_GROUP = "browser-group";
     private static final String DRAG_TAB = "browser-tab";
 
@@ -68,11 +78,13 @@ final class BrowserTabsController {
         this.tabStrip = activity.findViewById(R.id.tabStrip);
         this.groupScroll = activity.findViewById(R.id.groupScroll);
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
+        this.homeBtn = activity.findViewById(R.id.homeBtn);
+        this.refreshBtn = activity.findViewById(R.id.refreshBtn);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.inflater = LayoutInflater.from(activity);
-        activity.findViewById(R.id.homeBtn).setOnClickListener(v -> hideOverlay());
-        activity.findViewById(R.id.refreshBtn).setOnClickListener(v -> refreshActive());
+        if (homeBtn != null) homeBtn.setOnClickListener(v -> hideOverlay());
+        if (refreshBtn != null) refreshBtn.setOnClickListener(v -> refreshActive());
         activity.findViewById(R.id.tabsBtn).setOnClickListener(v -> showSheet());
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
@@ -176,6 +188,22 @@ final class BrowserTabsController {
     void refreshActive() {
         Tab tab = activeTab();
         if (tab != null && tab.webView != null) tab.webView.reload();
+    }
+
+    void applyChromeColors(int color) {
+        if (color == chromeColor) {
+            tintBarButtons();
+            return;
+        }
+        chromeColor = color;
+        boolean light = isLightColor(color);
+        chromeText = light ? Color.parseColor("#2C3E50") : Color.WHITE;
+        chromeMuted = light ? Color.parseColor("#8A97A5") : Color.parseColor("#B8C0C8");
+        chromeAccent = light ? Color.parseColor("#007BFF") : Color.parseColor("#7AB8FF");
+        chromeChip = mix(color, light ? Color.BLACK : Color.WHITE, light ? 0.08f : 0.18f);
+        chromeChipActive = mix(color, Color.parseColor("#007BFF"), light ? 0.16f : 0.28f);
+        tintBarButtons();
+        restyleStrips();
     }
 
     void closeWindow(WebView window) {
@@ -408,7 +436,8 @@ final class BrowserTabsController {
         if (categoryBtn != null) {
             categoryBtn.setVisibility(View.VISIBLE);
             categoryBtn.setContentDescription(groupsVisible ? "隐藏分类" : "显示分类");
-            categoryBtn.setBackgroundResource(groupsVisible ? R.drawable.bg_browser_chip_active : android.R.color.transparent);
+            if (groupsVisible) categoryBtn.setBackground(chipBackground(true));
+            else categoryBtn.setBackgroundResource(android.R.color.transparent);
         }
         groupScroll.setVisibility(groupsVisible ? View.VISIBLE : View.GONE);
         if (groupsVisible) {
@@ -424,6 +453,7 @@ final class BrowserTabsController {
         int count = tabs.size();
         tabsCount.setText(count > 9 ? "9+" : String.valueOf(count));
         tabsCount.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+        tintBarButtons();
     }
 
     private void addGroupChip(String name, String groupId, int count) {
@@ -431,8 +461,8 @@ final class BrowserTabsController {
         TextView title = chip.findViewById(R.id.groupTitle);
         title.setText(name + (count > 0 ? " " + count : ""));
         boolean active = activeGroupId.equals(groupId);
-        chip.setBackgroundResource(active ? R.drawable.bg_browser_chip_active : R.drawable.bg_browser_chip);
-        title.setTextColor(active ? Color.parseColor("#007BFF") : Color.parseColor("#2C3E50"));
+        chip.setTag(groupId);
+        styleChip(chip, title, active);
         chip.setOnClickListener(v -> {
             activeGroupId = groupId;
             Tab first = firstInGroup(groupId);
@@ -452,8 +482,10 @@ final class BrowserTabsController {
         TextView title = chip.findViewById(R.id.tabTitle);
         title.setText(displayTitle(tab));
         boolean active = tab.id.equals(activeTabId);
-        chip.setBackgroundResource(active ? R.drawable.bg_browser_chip_active : R.drawable.bg_browser_chip);
-        title.setTextColor(active ? Color.parseColor("#007BFF") : Color.parseColor("#2C3E50"));
+        chip.setTag(tab.id);
+        styleChip(chip, title, active);
+        ImageButton close = chip.findViewById(R.id.tabClose);
+        if (close != null) close.setColorFilter(chromeMuted, PorterDuff.Mode.SRC_IN);
         chip.setOnClickListener(v -> showTab(tab.id));
         chip.setOnLongClickListener(v -> {
             showTabActions(tab);
@@ -1107,6 +1139,73 @@ final class BrowserTabsController {
         } catch (Exception ignored) {
         }
         return url;
+    }
+
+    private void restyleStrips() {
+        tintBarButtons();
+        restyleChipGroup(groupStrip, true);
+        restyleChipGroup(tabStrip, false);
+    }
+
+    private void restyleChipGroup(ViewGroup parent, boolean group) {
+        if (parent == null) return;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View chip = parent.getChildAt(i);
+            Object tag = chip.getTag();
+            boolean active = group
+                    ? String.valueOf(tag == null ? "" : tag).equals(activeGroupId)
+                    : String.valueOf(tag == null ? "" : tag).equals(activeTabId);
+            TextView title = chip.findViewById(group ? R.id.groupTitle : R.id.tabTitle);
+            styleChip(chip, title, active);
+            ImageButton close = chip.findViewById(R.id.tabClose);
+            if (close != null) close.setColorFilter(chromeMuted, PorterDuff.Mode.SRC_IN);
+        }
+    }
+
+    private void styleChip(View chip, TextView title, boolean active) {
+        if (chip == null) return;
+        chip.setBackground(chipBackground(active));
+        if (title != null) title.setTextColor(active ? chromeAccent : chromeText);
+    }
+
+    private GradientDrawable chipBackground(boolean active) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        float radius = 16f * activity.getResources().getDisplayMetrics().density;
+        drawable.setCornerRadius(radius);
+        drawable.setColor(active ? chromeChipActive : chromeChip);
+        if (active) {
+            int stroke = Math.max(1, Math.round(activity.getResources().getDisplayMetrics().density));
+            drawable.setStroke(stroke, chromeAccent);
+        }
+        return drawable;
+    }
+
+    private void tintBarButtons() {
+        tint(categoryBtn, chromeText);
+        tint(homeBtn, chromeText);
+        tint(refreshBtn, chromeText);
+        if (categoryBtn != null) {
+            if (groupsVisible) categoryBtn.setBackground(chipBackground(true));
+            else categoryBtn.setBackgroundResource(android.R.color.transparent);
+        }
+    }
+
+    private void tint(ImageButton button, int color) {
+        if (button != null) button.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+    }
+
+    private int mix(int from, int to, float amount) {
+        float t = Math.max(0f, Math.min(1f, amount));
+        int r = Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * t);
+        int g = Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * t);
+        int b = Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t);
+        return Color.rgb(r, g, b);
+    }
+
+    private boolean isLightColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255d;
+        return luminance > 0.55;
     }
 
     private String normalizeUrl(String url) {
