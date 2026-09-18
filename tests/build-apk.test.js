@@ -120,7 +120,25 @@ describe('APK 版本号', () => {
     expect(activity).toContain('setInsetSize(pageTopInset');
     expect(activity).toContain('tabs.handleBack()');
     expect(activity).toContain('JsChromeClient');
-    expect(tabs).toContain('MAX_TABS = 12');
+    expect(tabs).toContain('MAX_TABS = 50');
+    expect(tabs).toContain('persistState()');
+    expect(tabs).toContain('persistFullState()');
+    expect(tabs).toContain('restoreState()');
+    expect(tabs).toContain('setChromeVisible(');
+    expect(tabs).toContain('saveWebViewState(');
+    expect(tabs).toContain('restoreWebViewState(');
+    expect(activity).toContain('handleIncomingIntent(');
+    expect(activity).toContain('Intent.EXTRA_STREAM');
+    expect(activity).toContain('setBrowserChromeVisible(');
+    expect(activity).toContain('consumeImportFile(');
+    expect(bridge).toContain('public void setBrowserChromeVisible(boolean visible)');
+    expect(bridge).toContain('public String consumeImportFile()');
+    expect(main).toContain("id: 'browserWidgetBtn'");
+    expect(main).toContain("name: '浏览器部件'");
+    expect(main).toContain('consumeNativeImport');
+    expect(main).toContain('importBackupFile');
+    expect(main).toContain('setBrowserChromeVisible');
+    expect(html).toContain('onclick="batchOpenSelected()"');
     expect(tabs).toContain('refreshActive()');
     expect(tabs).toContain('deleteGroup(');
     expect(tabs).toContain('promptRenameGroup(');
@@ -178,6 +196,11 @@ describe('APK 版本号', () => {
     expect(activity).not.toContain('fileChooserParams.createIntent()');
     expect(manifest).toContain('android.intent.action.GET_CONTENT');
     expect(manifest).toContain('android.intent.action.OPEN_DOCUMENT');
+    expect(manifest).toContain('android.intent.action.VIEW');
+    expect(manifest).toContain('android.intent.action.SEND');
+    expect(manifest).toContain('android:launchMode="singleTask"');
+    expect(manifest).toContain('application/json');
+    expect(manifest).toContain('application/zip');
   });
 
   it('分类新增编辑不显示识别名称，HTML 与 APK 共用同一源码', () => {

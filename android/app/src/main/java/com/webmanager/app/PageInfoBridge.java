@@ -121,6 +121,16 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void setBrowserChromeVisible(boolean visible) {
+        activity.setBrowserChromeVisible(visible);
+    }
+
+    @JavascriptInterface
+    public String consumeImportFile() {
+        return activity.consumeImportFile();
+    }
+
+    @JavascriptInterface
     public boolean openUrl(String url) {
         return activity.openUrl(url);
     }

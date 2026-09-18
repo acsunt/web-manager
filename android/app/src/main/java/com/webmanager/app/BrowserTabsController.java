@@ -2,10 +2,14 @@ package com.webmanager.app;
 
 import android.app.Dialog;
 import android.content.ClipData;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.Parcel;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.DragEvent;
@@ -29,6 +33,9 @@ import androidx.appcompat.app.AlertDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -37,7 +44,7 @@ import java.util.Set;
 import java.util.UUID;
 
 final class BrowserTabsController {
-    static final int MAX_TABS = 12;
+    static final int MAX_TABS = 50;
     static final String UNGROUPED = "";
 
     private final MainActivity activity;
@@ -50,6 +57,7 @@ final class BrowserTabsController {
     private final ImageButton refreshBtn;
     private final TextView tabsCount;
     private final View restoreBtn;
+    private final View browserBar;
     private final LayoutInflater inflater;
 
     private final List<Group> groups = new ArrayList<>();
@@ -61,6 +69,8 @@ final class BrowserTabsController {
     private Dialog sheetDialog;
     private Dialog groupDialog;
     private boolean groupsVisible;
+    private boolean chromeVisible;
+    private boolean restoring;
     private String sheetQuery = "";
     private boolean appDarkMode;
     private int chromeColor = 0;
@@ -82,6 +92,10 @@ final class BrowserTabsController {
     private static final int SHEET_INPUT_LIGHT = Color.parseColor("#F3F5F7");
     private static final int SHEET_INPUT_DARK = Color.parseColor("#1E1E1E");
     private static final int SHEET_DANGER = Color.parseColor("#DC3545");
+    private static final String PREFS = "browser_tabs";
+    private static final String PREF_STATE = "state";
+    private static final String PREF_CHROME = "chromeVisible";
+    private static final String STATE_DIR = "browser_tab_state";
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
@@ -94,12 +108,15 @@ final class BrowserTabsController {
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
+        this.browserBar = activity.findViewById(R.id.browserBar);
         this.inflater = LayoutInflater.from(activity);
         if (homeBtn != null) homeBtn.setOnClickListener(v -> hideOverlay());
         if (refreshBtn != null) refreshBtn.setOnClickListener(v -> refreshActive());
         activity.findViewById(R.id.tabsBtn).setOnClickListener(v -> showSheet());
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
+        chromeVisible = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_CHROME, false);
+        applyChromeVisible();
     }
 
     boolean hasTabs() {
@@ -184,6 +201,7 @@ final class BrowserTabsController {
     void hideOverlay() {
         pauseAll();
         activity.setPageWindow(false);
+        persistState();
     }
 
     void restoreOverlay() {
@@ -194,7 +212,191 @@ final class BrowserTabsController {
 
     void syncRestoreButton(boolean overlayVisible) {
         if (restoreBtn == null) return;
-        restoreBtn.setVisibility(!overlayVisible && hasTabs() ? View.VISIBLE : View.GONE);
+        restoreBtn.setVisibility(chromeVisible && !overlayVisible && hasTabs() ? View.VISIBLE : View.GONE);
+    }
+
+    void setChromeVisible(boolean visible) {
+        chromeVisible = visible;
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_CHROME, visible)
+                .apply();
+        applyChromeVisible();
+    }
+
+    void applyChromeVisible() {
+        if (browserBar != null) browserBar.setVisibility(chromeVisible ? View.VISIBLE : View.GONE);
+        syncRestoreButton(activity.isPageOpen());
+    }
+
+    void persistState() {
+        persistState(false);
+    }
+
+    void persistFullState() {
+        persistState(true);
+    }
+
+    private void persistState(boolean includeWebViews) {
+        if (restoring) return;
+        try {
+            JSONObject root = new JSONObject();
+            JSONArray groupArr = new JSONArray();
+            for (Group group : groups) {
+                JSONObject obj = new JSONObject();
+                obj.put("id", group.id);
+                obj.put("name", group.name);
+                groupArr.put(obj);
+            }
+            Set<String> keepIds = new HashSet<>();
+            JSONArray tabArr = new JSONArray();
+            for (Tab tab : tabs) {
+                if (tab.webView != null) {
+                    String current = tab.webView.getUrl();
+                    if (current != null && !current.trim().isEmpty() && !"about:blank".equalsIgnoreCase(current)) {
+                        String normalized = normalizeUrl(current);
+                        tab.url = normalized == null ? current : normalized;
+                    }
+                }
+                JSONObject obj = new JSONObject();
+                obj.put("id", tab.id);
+                obj.put("title", tab.title == null ? "" : tab.title);
+                obj.put("url", tab.url == null ? "" : tab.url);
+                obj.put("groupId", tab.groupId == null ? UNGROUPED : tab.groupId);
+                tabArr.put(obj);
+                keepIds.add(tab.id);
+                if (includeWebViews && tab.webView != null) saveWebViewState(tab);
+            }
+            if (includeWebViews) pruneStateFiles(keepIds);
+            root.put("groups", groupArr);
+            root.put("tabs", tabArr);
+            root.put("activeTabId", activeTabId == null ? "" : activeTabId);
+            root.put("activeGroupId", activeGroupId == null ? UNGROUPED : activeGroupId);
+            root.put("groupsVisible", groupsVisible);
+            root.put("pageOpen", activity.isPageOpen());
+            activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_STATE, root.toString())
+                    .apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    void restoreState() {
+        restoring = true;
+        try {
+            String json = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_STATE, "");
+            if (json == null || json.trim().isEmpty()) return;
+            JSONObject root = new JSONObject(json);
+            groups.clear();
+            JSONArray groupArr = root.optJSONArray("groups");
+            if (groupArr != null) {
+                for (int i = 0; i < groupArr.length(); i++) {
+                    JSONObject obj = groupArr.optJSONObject(i);
+                    if (obj == null) continue;
+                    Group group = new Group();
+                    group.id = obj.optString("id", UUID.randomUUID().toString());
+                    group.name = obj.optString("name", "");
+                    if (group.name.trim().isEmpty()) continue;
+                    groups.add(group);
+                }
+            }
+            JSONArray tabArr = root.optJSONArray("tabs");
+            if (tabArr != null) {
+                for (int i = 0; i < tabArr.length() && tabs.size() < MAX_TABS; i++) {
+                    JSONObject obj = tabArr.optJSONObject(i);
+                    if (obj == null) continue;
+                    String url = obj.optString("url", "");
+                    if (url.trim().isEmpty()) continue;
+                    Tab tab = new Tab();
+                    tab.id = obj.optString("id", UUID.randomUUID().toString());
+                    tab.title = obj.optString("title", hostTitle(url));
+                    tab.url = url;
+                    tab.groupId = obj.optString("groupId", UNGROUPED);
+                    tab.webView = activity.createPageWebView();
+                    attachWebView(tab);
+                    if (!restoreWebViewState(tab)) tab.webView.loadUrl(url);
+                    tabs.add(tab);
+                }
+            }
+            activeTabId = root.optString("activeTabId", "");
+            activeGroupId = root.optString("activeGroupId", UNGROUPED);
+            groupsVisible = root.optBoolean("groupsVisible", false);
+            boolean pageOpen = root.optBoolean("pageOpen", false);
+            if (findTabById(activeTabId) == null && !tabs.isEmpty()) activeTabId = tabs.get(0).id;
+            Tab active = findTabById(activeTabId);
+            if (active != null) activeGroupId = active.groupId == null ? UNGROUPED : active.groupId;
+            applyChromeVisible();
+            renderStrips();
+            if (pageOpen && active != null) showTab(active.id);
+            else {
+                pauseAll();
+                activity.setPageWindow(false);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            restoring = false;
+        }
+    }
+
+    private File stateDir() {
+        return new File(activity.getFilesDir(), STATE_DIR);
+    }
+
+    private File stateFile(String tabId) {
+        return new File(stateDir(), tabId + ".bin");
+    }
+
+    private void saveWebViewState(Tab tab) {
+        try {
+            Bundle bundle = new Bundle();
+            tab.webView.saveState(bundle);
+            Parcel parcel = Parcel.obtain();
+            bundle.writeToParcel(parcel, 0);
+            byte[] bytes = parcel.marshall();
+            parcel.recycle();
+            try (FileOutputStream out = new FileOutputStream(stateFile(tab.id))) {
+                out.write(bytes);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private boolean restoreWebViewState(Tab tab) {
+        File file = stateFile(tab.id);
+        if (!file.exists()) return false;
+        Parcel parcel = Parcel.obtain();
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] bytes = new byte[(int) file.length()];
+            int offset = 0;
+            while (offset < bytes.length) {
+                int read = in.read(bytes, offset, bytes.length - offset);
+                if (read < 0) break;
+                offset += read;
+            }
+            parcel.unmarshall(bytes, 0, offset);
+            parcel.setDataPosition(0);
+            Bundle bundle = Bundle.CREATOR.createFromParcel(parcel);
+            bundle.setClassLoader(WebView.class.getClassLoader());
+            return tab.webView.restoreState(bundle) != null;
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            parcel.recycle();
+        }
+    }
+
+    private void pruneStateFiles(Set<String> keepIds) {
+        File dir = stateDir();
+        if (!dir.exists()) dir.mkdirs();
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            String name = file.getName();
+            if (!name.endsWith(".bin")) continue;
+            String id = name.substring(0, name.length() - 4);
+            if (!keepIds.contains(id)) file.delete();
+        }
     }
 
     void refreshActive() {
@@ -318,6 +520,7 @@ final class BrowserTabsController {
         activity.setPageWindow(true);
         activity.refreshPageChrome(tab.webView);
         renderStrips();
+        persistState();
     }
 
     void pauseBackground() {
@@ -358,6 +561,7 @@ final class BrowserTabsController {
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
         refreshGroupManager();
+        persistState();
     }
 
     private Tab nextTab(int closedIndex, String groupId) {

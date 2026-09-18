@@ -100,7 +100,8 @@ const DEFAULT_TOOLBAR_CONFIG = [
     { id: 'alignToggleBtn', name: '对齐方式', show: true }, { id: 'targetToggleBtn', name: '新标签页', show: true }, 
     { id: 'autoRefreshToggleBtn', name: '本地刷新', show: true }, 
     { id: 'iconGlobalConfigBtn', name: '图标设置', show: true }, 
-    { id: 'ioBtn', name: '导入导出', show: true }, 
+    { id: 'ioBtn', name: '导入导出', show: true },
+    { id: 'browserWidgetBtn', name: '浏览器部件', show: false },
     { id: 'toolbarEditBtn', name: '自定义工具栏', show: true }
 ];
 let toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG];
@@ -357,6 +358,7 @@ function init() {
         loadThemeConfig(); applyThemeSettings(); initToolbar();
         if (isNativeApp()) document.body.classList.add('native-app');
         renderTree(); document.body.classList.add('hide-urls');
+        consumeNativeImport();
         
         const savedScroll = localStorage.getItem('lastScrollPosition');
         if(savedScroll) { document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, parseInt(savedScroll)); }
@@ -379,18 +381,44 @@ function initToolbar() {
             const idMap = new Map(parsed.map(i => [i.id, i]));
             const merged = [];
             parsed.forEach(item => { if(DEFAULT_TOOLBAR_CONFIG.find(d => d.id === item.id)) merged.push(item); });
-            DEFAULT_TOOLBAR_CONFIG.forEach(def => { if(!idMap.has(def.id)) merged.push(def); });
+            DEFAULT_TOOLBAR_CONFIG.forEach(def => {
+                if (idMap.has(def.id)) return;
+                if (def.id === 'browserWidgetBtn') {
+                    const ioIndex = merged.findIndex(item => item.id === 'ioBtn');
+                    merged.splice(ioIndex >= 0 ? ioIndex + 1 : merged.length, 0, def);
+                    return;
+                }
+                merged.push(def);
+            });
             toolbarConfig = merged;
         } catch (e) { toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG]; }
     }
     renderToolbar();
 }
 
+function isBrowserWidgetItem(item) {
+    return item && item.id === 'browserWidgetBtn';
+}
+
+function isBrowserWidgetEnabled() {
+    return !!toolbarConfig.find(item => isBrowserWidgetItem(item) && item.show);
+}
+
+function syncBrowserChrome() {
+    if (!isNativeApp() || typeof window.Android?.setBrowserChromeVisible !== 'function') return;
+    try { window.Android.setBrowserChromeVisible(isBrowserWidgetEnabled()); } catch (e) { /* 网页没有原生桥 */ }
+}
+
 function renderToolbar() {
     const container = document.getElementById('toolbarBtnRow');
     const frag = document.createDocumentFragment();
-    toolbarConfig.forEach(item => { const btn = document.getElementById(item.id); if (btn) { btn.style.display = item.show ? '' : 'none'; frag.appendChild(btn); } });
+    toolbarConfig.forEach(item => {
+        if (isBrowserWidgetItem(item)) return;
+        const btn = document.getElementById(item.id);
+        if (btn) { btn.style.display = item.show ? '' : 'none'; frag.appendChild(btn); }
+    });
     container.appendChild(frag);
+    syncBrowserChrome();
 }
 
 function toggleToolbarColMode() { toolbarColMode = (toolbarColMode % 3) + 1; localStorage.setItem('toolbarColMode', toolbarColMode); updateToolbarColBtn(); const list = document.getElementById('toolbarConfigList'); list.className = 'toolbar-config-list cols-' + toolbarColMode; if (isToolbarSorting) { list.classList.add('toolbar-sort-active'); } }
@@ -400,6 +428,7 @@ function openToolbarEditModal() {
     const list = document.getElementById('toolbarConfigList');
     list.innerHTML = ''; list.className = 'toolbar-config-list cols-' + toolbarColMode; updateToolbarColBtn();
     toolbarConfig.forEach(item => {
+        if (isBrowserWidgetItem(item) && !isNativeApp()) return;
         const div = document.createElement('div');
         div.className = 'toolbar-config-item'; div.dataset.id = item.id;
         div.onclick = function(e) { if(isToolbarSorting) return; if (e.target.type !== 'checkbox') { const cb = div.querySelector('.toolbar-config-checkbox'); cb.checked = !cb.checked; saveToolbarCheckboxState(); } };
@@ -413,7 +442,26 @@ function openToolbarEditModal() {
 
 function saveToolbarCheckboxState() { if (isToolbarSorting) return; const list = document.getElementById('toolbarConfigList'); Array.from(list.children).forEach(div => { const id = div.dataset.id; const show = div.querySelector('input').checked; const item = toolbarConfig.find(t => t.id === id); if (item) item.show = show; }); localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig)); renderToolbar(); }
 function startToolbarSort() { isToolbarSorting = true; const list = document.getElementById('toolbarConfigList'); list.classList.add('toolbar-sort-active'); document.getElementById('toolbarSortStartBtn').style.display = 'none'; document.getElementById('toolbarSortActions').style.display = 'flex'; toolbarSortable = new Sortable(list, { animation: 150 }); }
-function confirmToolbarSort() { const list = document.getElementById('toolbarConfigList'); const newConfig = []; Array.from(list.children).forEach(div => { const id = div.dataset.id; const show = div.querySelector('input').checked; const original = toolbarConfig.find(t => t.id === id) || DEFAULT_TOOLBAR_CONFIG.find(t => t.id === id); if (original) { newConfig.push({ id: id, name: original.name, show: show }); } }); toolbarConfig = newConfig; localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig)); renderToolbar(); cancelToolbarSort(false); showToast("工具栏顺序已保存"); }
+function confirmToolbarSort() {
+    const list = document.getElementById('toolbarConfigList');
+    const newConfig = [];
+    Array.from(list.children).forEach(div => {
+        const id = div.dataset.id;
+        const show = div.querySelector('input').checked;
+        const original = toolbarConfig.find(t => t.id === id) || DEFAULT_TOOLBAR_CONFIG.find(t => t.id === id);
+        if (original) { newConfig.push({ id: id, name: original.name, show: show }); }
+    });
+    const widget = toolbarConfig.find(isBrowserWidgetItem);
+    if (widget && !newConfig.find(isBrowserWidgetItem)) {
+        const ioIndex = newConfig.findIndex(item => item.id === 'ioBtn');
+        newConfig.splice(ioIndex >= 0 ? ioIndex + 1 : Math.max(0, newConfig.length - 1), 0, widget);
+    }
+    toolbarConfig = newConfig;
+    localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig));
+    renderToolbar();
+    cancelToolbarSort(false);
+    showToast("工具栏顺序已保存");
+}
 function cancelToolbarSort(resetList = true) { isToolbarSorting = false; const list = document.getElementById('toolbarConfigList'); list.classList.remove('toolbar-sort-active'); if (toolbarSortable) { toolbarSortable.destroy(); toolbarSortable = null; } document.getElementById('toolbarSortStartBtn').style.display = 'flex'; document.getElementById('toolbarSortActions').style.display = 'none'; if (resetList) openToolbarEditModal(); }
 function toggleBadgeDisplay(btn) { isBadgeVisible = !isBadgeVisible; if (isBadgeVisible) { document.body.classList.add('show-badges'); btn.classList.add('active'); } else { document.body.classList.remove('show-badges'); btn.classList.remove('active'); } localStorage.setItem('badgeVisible', isBadgeVisible); }
 function toggleLocalTagDisplay(btn) { isLocalTagVisible = !isLocalTagVisible; if (isLocalTagVisible) { document.body.classList.remove('hide-local-tags'); btn.classList.add('active'); } else { document.body.classList.add('hide-local-tags'); btn.classList.remove('active'); } localStorage.setItem('localTagVisible', isLocalTagVisible); }
@@ -2776,9 +2824,46 @@ function exportIconSettings() {
 
 // ================= 数据导入入口 =================
 // 根据 JSON、ZIP、主题包和图标配置的特征分流，避免把不同类型文件误写入主页数据。
-function importFromFile(input) { 
-    const file = input.files[0]; if (!file) return;
-    if (file.name.toLowerCase().endsWith('.zip')) { 
+function consumeNativeImport() {
+    if (!isNativeApp() || typeof window.Android?.consumeImportFile !== 'function') return;
+    let payload = '';
+    try { payload = window.Android.consumeImportFile(); } catch (e) { return; }
+    if (!payload) return;
+    try {
+        const parsed = JSON.parse(payload);
+        importNativeBackup(parsed.name, parsed.mime, parsed.base64);
+    } catch (e) {
+        showToast('外部文件读取失败', 1500);
+    }
+}
+
+function importNativeBackup(filename, mime, base64) {
+    if (!base64) return;
+    try {
+        const binary = atob(String(base64));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const type = mime || (String(filename || '').toLowerCase().endsWith('.zip') ? 'application/zip' : 'application/json');
+        const blob = new Blob([bytes], { type });
+        blob.name = filename || 'import.json';
+        importBackupFile(blob);
+    } catch (e) {
+        showToast('外部文件导入失败', 1500);
+    }
+}
+
+function importFromFile(input) {
+    const file = input && input.files ? input.files[0] : input;
+    if (!file) return;
+    importBackupFile(file);
+    if (input && input.value !== undefined) input.value = '';
+}
+
+function importBackupFile(file) {
+    if (!file) return;
+    const fileName = String(file.name || '').toLowerCase();
+    const fileType = String(file.type || '').toLowerCase();
+    if (fileName.endsWith('.zip') || fileType.includes('zip')) { 
         JSZip.loadAsync(file).then(function(zip) { 
             if (zip.file("theme_config.json")) return showToast("❌ 这是主题包，请去主题设置导入！", 3000); 
             const promises = []; 
@@ -2812,7 +2897,7 @@ function importFromFile(input) {
                 } else { alert("ZIP 文件中未找到有效的 JSON 数据"); } 
             }); 
         }).catch(function(err) { alert("ZIP 读取失败: " + err); }); 
-        input.value = ''; return; 
+        return; 
     } 
     
     const reader = new FileReader(); 
@@ -2820,7 +2905,7 @@ function importFromFile(input) {
         const content = e.target.result; 
         try { 
             const jsonData = JSON.parse(content); 
-            if (jsonData.theme !== undefined && jsonData.day !== undefined) { showToast("❌ 格式错误：这是主题配置文件！", 2500); input.value = ''; return; } 
+            if (jsonData.theme !== undefined && jsonData.day !== undefined) { showToast("❌ 格式错误：这是主题配置文件！", 2500); return; } 
             
             if (jsonData.type === 'web_manager_icon_settings') {
                 if (jsonData.globalIconShape) setGlobalIconShape(jsonData.globalIconShape);
@@ -2837,7 +2922,7 @@ function importFromFile(input) {
                     });
                     save(); renderTree(); showToast(`成功导入 ${count} 个图标配置`); closeModal('ioModal');
                 }
-                input.value = ''; return;
+                return;
             }
 
             if (jsonData.workspaces && Array.isArray(jsonData.workspaces)) { 
@@ -2857,7 +2942,7 @@ function importFromFile(input) {
                 if (currentWs) currentWs.data = data;
                 cleanDuplicates(); save(); renderTree(); showToast("数据已导入当前主页", 1500); closeModal('ioModal'); 
             } 
-        } catch(jsonErr) { alert('文本格式导入暂时只支持标准 JSON 格式'); } input.value = ''; 
+        } catch(jsonErr) { alert('文本格式导入暂时只支持标准 JSON 格式'); }
     }; reader.readAsText(file); 
 }
 
@@ -3105,6 +3190,7 @@ const inlineHandlers = {
     exportJsonFile,
     exportIconSettings,
     importFromFile,
+    consumeNativeImport,
     performClearBg,
     performClearSelectedWorkspaces,
     performClearData,

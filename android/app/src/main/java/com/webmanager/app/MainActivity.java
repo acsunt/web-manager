@@ -3,6 +3,7 @@ package com.webmanager.app;
 import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,6 +15,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.view.PixelCopy;
 import android.view.View;
@@ -29,6 +31,8 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -39,8 +43,10 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 
 public class MainActivity extends AppCompatActivity {
     private WebView appWebView;
@@ -55,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private BrowserTabsController tabs;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
+    private String pendingImportJson;
     private boolean lightSystemBars = true;
     private int safeTop;
     private int safeRight;
@@ -89,8 +96,10 @@ public class MainActivity extends AppCompatActivity {
         restoreTabsBtn = findViewById(R.id.restoreTabsBtn);
         applyEdgeToEdge();
         bridge = new PageInfoBridge(this);
-        setupAppWebView();
         tabs = new BrowserTabsController(this);
+        tabs.restoreState();
+        handleIncomingIntent(getIntent());
+        setupAppWebView();
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -118,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 applySystemBarIcons(lightSystemBars);
                 injectSafeArea();
+                deliverPendingImport();
             }
 
             @Override
@@ -197,7 +207,22 @@ public class MainActivity extends AppCompatActivity {
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
             applySystemBarIcons(lightSystemBars);
         }
-        if (tabs != null) tabs.syncRestoreButton(visible);
+        if (tabs != null) {
+            tabs.applyChromeVisible();
+            tabs.syncRestoreButton(visible);
+        }
+    }
+
+    void setBrowserChromeVisible(boolean visible) {
+        runOnUiThread(() -> {
+            if (tabs != null) tabs.setChromeVisible(visible);
+        });
+    }
+
+    String consumeImportFile() {
+        String json = pendingImportJson;
+        pendingImportJson = null;
+        return json == null ? "" : json;
     }
 
     void refreshPageChrome(WebView webView) {
@@ -741,9 +766,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingIntent(intent);
+        deliverPendingImport();
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
-        if (tabs != null) tabs.pauseBackground();
+        if (tabs != null) {
+            tabs.pauseBackground();
+            tabs.persistFullState();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (tabs != null) tabs.persistFullState();
+        super.onStop();
     }
 
     @Override
@@ -757,11 +799,75 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (tabs != null) tabs.persistFullState();
         if (bridge != null) bridge.cancelAll();
         destroyPendingWindow();
         cancelPageChromeSample();
         if (tabs != null) tabs.destroyAll();
         super.onDestroy();
+    }
+
+    private void handleIncomingIntent(Intent intent) {
+        if (intent == null) return;
+        Uri uri = intent.getData();
+        if (uri == null && Intent.ACTION_SEND.equals(intent.getAction())) {
+            uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        }
+        if (uri == null && intent.getClipData() != null && intent.getClipData().getItemCount() > 0) {
+            uri = intent.getClipData().getItemAt(0).getUri();
+        }
+        if (uri == null) return;
+        String action = intent.getAction();
+        if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_SEND.equals(action) || Intent.ACTION_EDIT.equals(action)) {
+            queueImportUri(uri, intent.getType());
+            intent.setData(null);
+            intent.removeExtra(Intent.EXTRA_STREAM);
+            intent.setAction(Intent.ACTION_MAIN);
+        }
+    }
+
+    private void queueImportUri(Uri uri, String mime) {
+        if (uri == null) return;
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                runOnUiThread(() -> Toast.makeText(this, "无法读取外部文件", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            byte[] bytes = readAllBytes(in);
+            JSONObject payload = new JSONObject();
+            payload.put("name", queryDisplayName(uri));
+            payload.put("mime", mime == null ? "" : mime);
+            payload.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP));
+            pendingImportJson = payload.toString();
+        } catch (Exception e) {
+            runOnUiThread(() -> Toast.makeText(this, "外部文件读取失败", Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private void deliverPendingImport() {
+        if (pendingImportJson == null || appWebView == null) return;
+        evaluateJavascript("(function(){if(typeof window.consumeNativeImport==='function')window.consumeNativeImport();})();");
+    }
+
+    private String queryDisplayName(Uri uri) {
+        String fallback = uri.getLastPathSegment();
+        if (fallback == null || fallback.trim().isEmpty()) fallback = "import.json";
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String name = cursor.getString(0);
+                if (name != null && !name.trim().isEmpty()) return name;
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    private byte[] readAllBytes(InputStream in) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+        return out.toByteArray();
     }
 
     private class AppChromeClient extends JsChromeClient {
