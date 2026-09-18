@@ -13,7 +13,7 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, normalizeUrls, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -526,7 +526,7 @@ function bindInteraction(element, node, type, url){
         }
         if(e.target.type==='checkbox'||e.target.closest('.cat-btn')||e.target.closest('.expand-urls-btn')||e.target.closest('.sub-link-item')||e.target.closest('.url-copy-icon'))return;
         startX=e.touches[0].clientX; startY=e.touches[0].clientY; isMoving=false; isLongPressTriggered=false;
-        longPressTimer=setTimeout(()=>{ if(!isMoving&&!document.body.classList.contains('is-dragging')&&!isSortingMode){ isLongPressTriggered=true; showContextMenu(startX,startY,node.id,type); } },600);
+        longPressTimer=setTimeout(()=>{ if(!isMoving&&!document.body.classList.contains('is-dragging')&&!isSortingMode){ isLongPressTriggered=true; const selection = window.getSelection && window.getSelection(); if (selection && selection.removeAllRanges) selection.removeAllRanges(); showContextMenu(startX,startY,node.id,type); } },600);
     },{passive:false});
     
     element.addEventListener('mousedown',(e)=>{
@@ -573,7 +573,7 @@ function openPagesInApp(pages, groupName) {
     if (!isNativeApp() || typeof window.Android?.openUrls !== 'function') return false;
     const list = Array.isArray(pages) ? pages.filter((page) => page?.url) : [];
     if (list.length === 0) {
-        showToast('没有可打开的网络网页');
+        showToast('没有可打开的网页');
         return true;
     }
     window.Android.openUrls(JSON.stringify({
@@ -1151,10 +1151,86 @@ function saveData(){
     save(); renderTree(); closeModal('editModal'); showToast(changeMsg);
 }
 
+function loadSearchHistory() {
+    return parseSearchHistory(localStorage.getItem(SEARCH_HISTORY_KEY));
+}
+
+function persistSearchHistory(list) {
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(parseSearchHistory(list)));
+}
+
+function rememberCurrentSearch(query) {
+    const next = rememberSearchQuery(loadSearchHistory(), query);
+    persistSearchHistory(next);
+    return next;
+}
+
+function renderSearchHistory() {
+    const resultsDiv = document.getElementById('searchResults');
+    if (!resultsDiv) return;
+    const history = loadSearchHistory();
+    document.body.classList.add('search-mode');
+    resultsDiv.innerHTML = '';
+    if (history.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'search-item search-history-empty';
+        empty.textContent = '暂无搜索历史';
+        resultsDiv.appendChild(empty);
+    } else {
+        history.forEach((query) => {
+            const item = document.createElement('div');
+            item.className = 'search-item search-history-item';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-clock-rotate-left';
+            icon.style.color = '#999';
+            const text = document.createElement('span');
+            text.className = 'search-history-query';
+            text.textContent = query;
+            item.append(icon, text);
+            item.addEventListener('mousedown', (e) => e.preventDefault());
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                applySearchHistory(query);
+            });
+            resultsDiv.appendChild(item);
+        });
+    }
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'search-history-clear';
+    clearBtn.textContent = '清空搜索历史';
+    clearBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    clearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearchHistory();
+    });
+    resultsDiv.appendChild(clearBtn);
+}
+
+function applySearchHistory(query) {
+    const input = document.getElementById('searchInput');
+    if (!input) return;
+    input.value = query;
+    input.focus();
+    rememberCurrentSearch(query);
+    handleSearchInput(query);
+}
+
+function clearSearchHistory() {
+    persistSearchHistory([]);
+    renderSearchHistory();
+}
+
 function handleSearchInput(val){
     const resultsDiv = document.getElementById('searchResults'); const clearBtn = document.getElementById('searchClearBtn');
     if(val) { clearBtn.style.display = 'block'; document.body.classList.add('search-focus'); } else { clearBtn.style.display = 'none'; }
-    if(!val.trim()){ document.body.classList.remove('search-mode'); resultsDiv.innerHTML = ''; return; }
+    if(!String(val || '').trim()){
+        document.body.classList.add('search-focus');
+        renderSearchHistory();
+        return;
+    }
     document.body.classList.add('search-mode');
     const q=val.toLowerCase(); const matches=[];
     
@@ -1941,10 +2017,11 @@ function toggleOpenTarget(btn){ isOpenCurrentTab=!isOpenCurrentTab; if(isOpenCur
 function toggleAutoRefresh(btn) { isAutoRefresh = !isAutoRefresh; if (isAutoRefresh) { btn.classList.add('active'); showToast("已开启：本地路径自动刷新防白屏"); } else { btn.classList.remove('active'); showToast("已关闭：本地路径自动刷新"); } localStorage.setItem('autoRefreshVisible', isAutoRefresh); }
 function toggleCountDisplay(btn){isCountVisible=!isCountVisible;if(isCountVisible){document.body.classList.add('show-counts');btn.classList.add('active');}else{document.body.classList.remove('show-counts');btn.classList.remove('active');}updateTotalCountDisplay();localStorage.setItem('countVisible',isCountVisible);}
 function toggleUrlDisplay(btn){isUrlVisible=!isUrlVisible;if(isUrlVisible){document.body.classList.remove('hide-urls');btn.classList.add('active');}else{document.body.classList.add('hide-urls');btn.classList.remove('active');} }
-function handleSearchFocus() { document.body.classList.add('search-focus'); const val = document.getElementById('searchInput').value; if(val) handleSearchInput(val); }
+function handleSearchFocus() { document.body.classList.add('search-focus'); const val = document.getElementById('searchInput').value; handleSearchInput(val); }
 function handleSearchBlur() { setTimeout(() => { document.body.classList.remove('search-focus'); }, 200); }
+function handleSearchKeydown(e) { if (e.key === 'Enter') { e.preventDefault(); rememberCurrentSearch(e.target.value); } }
 function clearSearch() { const input = document.getElementById('searchInput'); input.value = ''; input.focus(); handleSearchInput(''); }
-function jumpToNode(id, wsId){ if (wsId && wsId !== appData.currentId) { switchWorkspace(wsId); } document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchResults').innerHTML = ''; document.getElementById('searchInput').value = ''; document.getElementById('searchClearBtn').style.display='none'; let parent=findParent(id); while(parent){parent.collapsed=false;parent=findParent(parent.id);} save(); renderTree(); setTimeout(()=>{ const el=document.getElementById('node-'+id); if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add('highlight-node'); setTimeout(()=>{ el.classList.remove('highlight-node'); }, 2000); } },100); }
+function jumpToNode(id, wsId){ rememberCurrentSearch(document.getElementById('searchInput')?.value); if (wsId && wsId !== appData.currentId) { switchWorkspace(wsId); } document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchResults').innerHTML = ''; document.getElementById('searchInput').value = ''; document.getElementById('searchClearBtn').style.display='none'; let parent=findParent(id); while(parent){parent.collapsed=false;parent=findParent(parent.id);} save(); renderTree(); setTimeout(()=>{ const el=document.getElementById('node-'+id); if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add('highlight-node'); setTimeout(()=>{ el.classList.remove('highlight-node'); }, 2000); } },100); }
 
 function initSortable(){ 
     sortableInstances.forEach(instance => { try { instance.destroy(); } catch (e) { /* 旧实例已随 DOM 移除 */ } });
@@ -2533,7 +2610,7 @@ function cancelSelection(){document.querySelectorAll('.item-checkbox').forEach(c
 function closeModal(id){ if (id === 'toolbarEditModal' && isToolbarSorting) confirmToolbarSort(); document.getElementById(id).classList.remove('active'); if (id === 'deleteCategoryModal') window.deletingCategoryId = null; }
 function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const pinItem=document.getElementById('pinMenuItem');const openItem=document.getElementById('openPagesMenuItem');const node=findNode(id);if(pinItem){pinItem.innerHTML=node&&node.isPinned?'<i class="fas fa-thumbtack"></i> 取消置顶':'<i class="fas fa-thumbtack"></i> 置顶';}if(openItem){openItem.style.display=isNativeApp()&&type==='category'?'flex':'none';}const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
 function hideContextMenu(){document.getElementById('contextMenu').style.display='none';document.getElementById('menuOverlay').style.display='none';}
-document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){['parentDropdownList','moveDropdownList','delMoveDropdownList','batchDelMoveDropdownList'].forEach(id=>{const list=document.getElementById(id);if(list)list.style.display='none';});}});
+document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper') && !e.target.closest('#searchResults')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){['parentDropdownList','moveDropdownList','delMoveDropdownList','batchDelMoveDropdownList'].forEach(id=>{const list=document.getElementById(id);if(list)list.style.display='none';});}});
 window.addEventListener('scroll', function() { if(window.scrollSaveTimeout) clearTimeout(window.scrollSaveTimeout); window.scrollSaveTimeout = setTimeout(function() { localStorage.setItem('lastScrollPosition', window.scrollY); }, 200); });
 
 function save() { localStorage.setItem('webManagerDataProMax', JSON.stringify(appData)); }
@@ -2957,7 +3034,10 @@ const inlineHandlers = {
     handleSearchInput,
     handleSearchFocus,
     handleSearchBlur,
+    handleSearchKeydown,
     clearSearch,
+    applySearchHistory,
+    clearSearchHistory,
     toggleExpandAll,
     toggleSortMode,
     toggleIconMode,

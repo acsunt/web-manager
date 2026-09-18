@@ -108,12 +108,14 @@ public class MainActivity extends AppCompatActivity {
         appWebView.loadUrl("file:///android_asset/index.html");
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "SetAllowFileAccessFromFileURLs"})
     WebView createPageWebView() {
         WebView webView = new WebView(this);
         applyCommonWebSettings(webView.getSettings());
         webView.getSettings().setSupportMultipleWindows(true);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+        webView.getSettings().setAllowFileAccessFromFileURLs(true);
+        webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
         webView.setFitsSystemWindows(false);
         webView.setBackgroundColor(Color.WHITE);
         webView.setWebViewClient(new PageWebViewClient());
@@ -143,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
     boolean openUrl(String url, String title) {
         if (url == null || url.trim().isEmpty()) return false;
         String target = url.trim();
-        if (!(target.startsWith("http://") || target.startsWith("https://"))) return false;
+        if (!(target.startsWith("http://") || target.startsWith("https://") || target.startsWith("file://"))) return false;
         runOnUiThread(() -> {
             if (tabs != null) tabs.openUrl(target, title);
         });
@@ -285,8 +287,14 @@ public class MainActivity extends AppCompatActivity {
     private boolean openHttpUrl(Uri uri) {
         if (uri == null) return false;
         String scheme = uri.getScheme();
+        String target = uri.toString();
+        if ("file".equals(scheme)) {
+            if (target.contains("/android_asset/")) return false;
+            openUrl(target);
+            return true;
+        }
         if (!"http".equals(scheme) && !"https".equals(scheme)) return false;
-        openUrl(uri.toString());
+        openUrl(target);
         return true;
     }
 

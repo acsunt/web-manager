@@ -20,6 +20,7 @@
         android:maxWidth="140dp"
         android:maxLines="1"
         android:textColor="@color/browser_text"
+        android:textIsSelectable="false"
         android:textSize="13sp" />
 
     <ImageButton

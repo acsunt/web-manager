@@ -1,8 +1,14 @@
 package com.webmanager.app;
 
 import android.app.Dialog;
+import android.content.ClipData;
 import android.graphics.Color;
+import android.os.Build;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.DragEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -11,6 +17,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -46,6 +53,8 @@ final class BrowserTabsController {
     private String activeTabId;
     private String activeGroupId = UNGROUPED;
     private Dialog sheetDialog;
+    private String sheetQuery = "";
+    private static final String DRAG_GROUP = "browser-group";
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
@@ -409,7 +418,7 @@ final class BrowserTabsController {
         });
         chip.setOnLongClickListener(v -> {
             if (UNGROUPED.equals(groupId)) return true;
-            confirmDeleteGroup(groupId, name);
+            showGroupActions(groupId, name);
             return true;
         });
         groupStrip.addView(chip);
@@ -440,6 +449,15 @@ final class BrowserTabsController {
                 .show();
     }
 
+    private void showGroupActions(String groupId, String name) {
+        new AlertDialog.Builder(activity)
+                .setItems(new CharSequence[]{"修改名称", "删除分组"}, (dialog, which) -> {
+                    if (which == 0) promptRenameGroup(groupId, name);
+                    else confirmDeleteGroup(groupId, name);
+                })
+                .show();
+    }
+
     private void showSheet() {
         dismissSheet();
         Dialog dialog = new Dialog(activity, R.style.JsDialogTheme);
@@ -447,6 +465,7 @@ final class BrowserTabsController {
         dialog.setCanceledOnTouchOutside(true);
         dialog.setCancelable(true);
         dialog.findViewById(R.id.sheetDone).setOnClickListener(v -> dialog.dismiss());
+        dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectVisible());
         dialog.findViewById(R.id.sheetMoveSelected).setOnClickListener(v -> pickGroupFor(selectedList()));
         dialog.findViewById(R.id.sheetCloseSelected).setOnClickListener(v -> {
             List<String> ids = selectedList();
@@ -455,6 +474,30 @@ final class BrowserTabsController {
                 return;
             }
             closeTabs(ids);
+        });
+        EditText search = dialog.findViewById(R.id.sheetSearch);
+        ImageButton clear = dialog.findViewById(R.id.sheetSearchClear);
+        search.setText(sheetQuery);
+        clear.setVisibility(sheetQuery.trim().isEmpty() ? View.GONE : View.VISIBLE);
+        search.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                sheetQuery = s == null ? "" : s.toString();
+                clear.setVisibility(sheetQuery.trim().isEmpty() ? View.GONE : View.VISIBLE);
+                renderSheet(dialog);
+            }
+        });
+        clear.setOnClickListener(v -> {
+            search.setText("");
+            search.requestFocus();
         });
         dialog.setOnDismissListener(d -> {
             if (sheetDialog == dialog) sheetDialog = null;
@@ -473,23 +516,47 @@ final class BrowserTabsController {
     private void renderSheet(Dialog dialog) {
         LinearLayout list = dialog.findViewById(R.id.sheetList);
         TextView countView = dialog.findViewById(R.id.sheetSelectCount);
+        TextView selectAll = dialog.findViewById(R.id.sheetSelectAll);
         list.removeAllViews();
         appendGroupSection(list, "未分组", UNGROUPED);
         for (Group group : groups) appendGroupSection(list, group.name, group.id);
+        List<Tab> visible = visibleTabs();
+        if (visible.isEmpty() && !sheetQuery.trim().isEmpty()) {
+            TextView empty = new TextView(activity);
+            empty.setText("无搜索结果");
+            empty.setTextColor(Color.parseColor("#8A97A5"));
+            empty.setPadding(8, 24, 8, 24);
+            empty.setGravity(android.view.Gravity.CENTER);
+            list.addView(empty);
+        }
         countView.setText("已选 " + selectedIds.size());
+        boolean allSelected = !visible.isEmpty();
+        for (Tab tab : visible) {
+            if (!selectedIds.contains(tab.id)) {
+                allSelected = false;
+                break;
+            }
+        }
+        selectAll.setText(allSelected ? "取消全选" : "全选");
     }
 
     private void appendGroupSection(LinearLayout list, String name, String groupId) {
-        List<Tab> items = tabsInGroup(groupId);
-        if (items.isEmpty() && UNGROUPED.equals(groupId)) return;
+        List<Tab> items = filteredTabsInGroup(groupId);
+        if (items.isEmpty() && (UNGROUPED.equals(groupId) || !sheetQuery.trim().isEmpty())) return;
         View header = inflater.inflate(R.layout.item_browser_sheet_group, list, false);
         TextView title = header.findViewById(R.id.sheetGroupTitle);
+        TextView rename = header.findViewById(R.id.sheetGroupRename);
         TextView delete = header.findViewById(R.id.sheetGroupDelete);
+        ImageButton handle = header.findViewById(R.id.sheetGroupHandle);
         title.setText(name + " (" + items.size() + ")");
         if (UNGROUPED.equals(groupId)) {
+            handle.setVisibility(View.GONE);
+            rename.setVisibility(View.GONE);
             delete.setVisibility(View.GONE);
         } else {
+            rename.setOnClickListener(v -> promptRenameGroup(groupId, name));
             delete.setOnClickListener(v -> confirmDeleteGroup(groupId, name));
+            enableGroupDrag(handle, header, groupId);
         }
         list.addView(header);
         for (Tab tab : items) {
@@ -508,9 +575,11 @@ final class BrowserTabsController {
                     if (countView != null) countView.setText("已选 " + selectedIds.size());
                 }
             });
-            row.setOnClickListener(v -> {
+            row.setOnClickListener(v -> check.setChecked(!check.isChecked()));
+            row.setOnLongClickListener(v -> {
                 showTab(tab.id);
                 dismissSheet();
+                return true;
             });
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
@@ -567,6 +636,106 @@ final class BrowserTabsController {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    private void promptRenameGroup(String groupId, String currentName) {
+        EditText input = new EditText(activity);
+        input.setHint("分组名称");
+        input.setSingleLine(true);
+        input.setText(currentName);
+        FrameLayout wrap = new FrameLayout(activity);
+        int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
+        wrap.setPadding(pad, pad / 2, pad, 0);
+        wrap.addView(input);
+        new AlertDialog.Builder(activity)
+                .setTitle("修改分组名称")
+                .setView(wrap)
+                .setPositiveButton("确定", (dialog, which) -> {
+                    String trimmed = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (trimmed.isEmpty()) {
+                        toast("请输入分组名称");
+                        return;
+                    }
+                    renameGroup(groupId, trimmed);
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void renameGroup(String groupId, String name) {
+        for (Group group : groups) {
+            if (groupId.equals(group.id)) {
+                group.name = name;
+                break;
+            }
+        }
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    @SuppressWarnings("deprecation")
+    private void enableGroupDrag(View handle, View header, String groupId) {
+        handle.setOnTouchListener((v, event) -> {
+            if (event.getAction() != MotionEvent.ACTION_DOWN) return false;
+            ClipData data = ClipData.newPlainText(DRAG_GROUP, groupId);
+            View.DragShadowBuilder shadow = new View.DragShadowBuilder(header);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                header.startDragAndDrop(data, shadow, groupId, 0);
+            } else {
+                header.startDrag(data, shadow, groupId, 0);
+            }
+            return true;
+        });
+        header.setOnDragListener((v, event) -> handleGroupDrop(event, groupId));
+    }
+
+    private boolean handleGroupDrop(DragEvent event, String targetId) {
+        if (!(event.getLocalState() instanceof String)) return false;
+        String fromId = (String) event.getLocalState();
+        if (UNGROUPED.equals(fromId) || UNGROUPED.equals(targetId)) return false;
+        if (event.getAction() == DragEvent.ACTION_DROP) {
+            reorderGroups(fromId, targetId);
+        }
+        return true;
+    }
+
+    private void reorderGroups(String fromId, String toId) {
+        if (fromId == null || fromId.equals(toId)) return;
+        int from = indexOfGroup(fromId);
+        int to = indexOfGroup(toId);
+        if (from < 0 || to < 0) return;
+        Group moved = groups.remove(from);
+        groups.add(to, moved);
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private int indexOfGroup(String groupId) {
+        for (int i = 0; i < groups.size(); i++) {
+            if (groupId.equals(groups.get(i).id)) return i;
+        }
+        return -1;
+    }
+
+    private void toggleSelectVisible() {
+        List<Tab> visible = visibleTabs();
+        if (visible.isEmpty()) {
+            toast("没有可选择的网页");
+            return;
+        }
+        boolean allSelected = true;
+        for (Tab tab : visible) {
+            if (!selectedIds.contains(tab.id)) {
+                allSelected = false;
+                break;
+            }
+        }
+        for (Tab tab : visible) {
+            if (allSelected) selectedIds.remove(tab.id);
+            else selectedIds.add(tab.id);
+        }
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
     }
 
     private void confirmDeleteGroup(String groupId, String name) {
@@ -636,6 +805,30 @@ final class BrowserTabsController {
         return items;
     }
 
+    private List<Tab> filteredTabsInGroup(String groupId) {
+        List<Tab> items = new ArrayList<>();
+        for (Tab tab : tabsInGroup(groupId)) {
+            if (matchesQuery(tab)) items.add(tab);
+        }
+        return items;
+    }
+
+    private List<Tab> visibleTabs() {
+        List<Tab> items = new ArrayList<>();
+        for (Tab tab : tabs) {
+            if (matchesQuery(tab)) items.add(tab);
+        }
+        return items;
+    }
+
+    private boolean matchesQuery(Tab tab) {
+        String q = sheetQuery == null ? "" : sheetQuery.trim().toLowerCase();
+        if (q.isEmpty()) return true;
+        String title = displayTitle(tab).toLowerCase();
+        String url = tab.url == null ? "" : tab.url.toLowerCase();
+        return title.contains(q) || url.contains(q);
+    }
+
     private List<String> selectedList() {
         List<String> ids = new ArrayList<>();
         for (Tab tab : tabs) {
@@ -664,8 +857,11 @@ final class BrowserTabsController {
     private String hostTitle(String url) {
         if (url == null || url.trim().isEmpty()) return "新网页";
         try {
-            String hostName = android.net.Uri.parse(url).getHost();
+            android.net.Uri uri = android.net.Uri.parse(url);
+            String hostName = uri.getHost();
             if (hostName != null && !hostName.isEmpty()) return hostName;
+            String last = uri.getLastPathSegment();
+            if (last != null && !last.isEmpty()) return last;
         } catch (Exception ignored) {
         }
         return url;
@@ -674,7 +870,12 @@ final class BrowserTabsController {
     private String normalizeUrl(String url) {
         if (url == null) return null;
         String target = url.trim();
-        if (target.startsWith("http://") || target.startsWith("https://")) return target;
+        if (target.startsWith("http://") || target.startsWith("https://") || target.startsWith("file://")) {
+            return target;
+        }
+        if (target.startsWith("/storage/") || target.startsWith("/sdcard/")) {
+            return "file://" + target;
+        }
         return null;
     }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.22</title>
+    <title>网页管理系统 v13.0.23</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -47,7 +47,7 @@
         <div class="toolbar-row" id="toolbarSearchRow">
             <div class="search-wrapper">
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="搜索名称、备注或网址 (搜全站)..." oninput="handleSearchInput(this.value)" onclick="handleSearchFocus()" onblur="handleSearchBlur()" autocomplete="off">
+                    <input type="text" id="searchInput" placeholder="搜索名称、备注或网址 (搜全站)..." oninput="handleSearchInput(this.value)" onfocus="handleSearchFocus()" onclick="handleSearchFocus()" onblur="handleSearchBlur()" onkeydown="handleSearchKeydown(event)" autocomplete="off">
                     <i class="fas fa-times search-clear-btn" id="searchClearBtn" onclick="clearSearch()"></i>
                     <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#999; pointer-events: none;"><i class="fas fa-search"></i></div>
                 </div>

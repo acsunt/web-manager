@@ -7,8 +7,11 @@ import {
   collectOpenablePages,
   sanitizeData,
   isLocalUrl,
+  isOpenableUrl,
   normalizeWebUrl,
   escapeHtml,
+  parseSearchHistory,
+  rememberSearchQuery,
   resolveColumnModes,
 } from '../utils.js';
 
@@ -99,7 +102,7 @@ describe('httpUrlsOf', () => {
 });
 
 describe('collectOpenablePages', () => {
-  it('收集分类及子分类里可打开的网络网页', () => {
+  it('收集分类及子分类里可打开的网络和本地网页', () => {
     const pages = collectOpenablePages([
       {
         type: 'category',
@@ -121,6 +124,7 @@ describe('collectOpenablePages', () => {
     expect(pages).toEqual([
       { title: 'A', url: 'https://a.com', urls: ['https://a.com'] },
       { title: 'B', url: 'https://b.com', urls: ['https://b.com', 'https://b2.com'] },
+      { title: '本地', url: 'file:///C:/x.html', urls: ['file:///C:/x.html'] },
       { title: '根网页', url: 'https://root.com', urls: ['https://root.com'] },
     ]);
   });
@@ -128,6 +132,26 @@ describe('collectOpenablePages', () => {
   it('没有可打开网址时返回空数组', () => {
     expect(collectOpenablePages(null)).toEqual([]);
     expect(collectOpenablePages([{ type: 'page', name: '本地', url: 'D:\\a.html' }])).toEqual([]);
+  });
+});
+
+describe('isOpenableUrl', () => {
+  it('http 和 file:// 可打开，盘符路径不可打开', () => {
+    expect(isOpenableUrl('https://a.com')).toBe(true);
+    expect(isOpenableUrl('file:///storage/emulated/0/Android/data/com.webmanager.app/files/Download/a.html')).toBe(true);
+    expect(isOpenableUrl('D:\\a.html')).toBe(false);
+  });
+});
+
+describe('search history', () => {
+  it('解析并去重搜索历史', () => {
+    expect(parseSearchHistory('["百度","百度"," github "]')).toEqual(['百度', 'github']);
+    expect(parseSearchHistory('not-json')).toEqual([]);
+  });
+
+  it('新搜索插到最前并限制条数', () => {
+    expect(rememberSearchQuery(['旧', 'github'], ' GitHub ', 3)).toEqual(['GitHub', '旧']);
+    expect(rememberSearchQuery(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b']);
   });
 });
 

@@ -28,6 +28,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/browser_text"
+            android:textIsSelectable="false"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -38,6 +39,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/browser_text_muted"
+            android:textIsSelectable="false"
             android:textSize="12sp" />
     </LinearLayout>
 

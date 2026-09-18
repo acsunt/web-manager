@@ -15,10 +15,21 @@ export function countTotalPages(nodes) {
     return nodes.reduce((total, node) => total + countPages(node), 0);
 }
 
+export function isOpenableUrl(url = '') {
+    const trimmed = String(url || '').trim();
+    return /^https?:\/\//i.test(trimmed) || /^file:\/\//i.test(trimmed);
+}
+
 export function httpUrlsOf(node) {
     return normalizeUrls(node)
         .map((item) => (item?.url || '').trim())
         .filter((url) => /^https?:\/\//i.test(url));
+}
+
+export function openableUrlsOf(node) {
+    return normalizeUrls(node)
+        .map((item) => (item?.url || '').trim())
+        .filter((url) => isOpenableUrl(url));
 }
 
 export function collectOpenablePages(nodes) {
@@ -27,7 +38,7 @@ export function collectOpenablePages(nodes) {
         if (!Array.isArray(list)) return;
         list.forEach((node) => {
             if (node?.type === 'page') {
-                const urls = httpUrlsOf(node);
+                const urls = openableUrlsOf(node);
                 if (urls.length > 0) pages.push({ title: node.name || urls[0], url: urls[0], urls });
             } else if (node?.type === 'category') {
                 walk(node.children);
@@ -36,6 +47,38 @@ export function collectOpenablePages(nodes) {
     };
     walk(nodes);
     return pages;
+}
+
+export const SEARCH_HISTORY_KEY = 'webManagerSearchHistory';
+export const SEARCH_HISTORY_LIMIT = 20;
+
+export function parseSearchHistory(raw) {
+    try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!Array.isArray(parsed)) return [];
+        const seen = new Set();
+        const list = [];
+        parsed.forEach((item) => {
+            const query = String(item ?? '').trim();
+            if (!query) return;
+            const key = query.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            list.push(query);
+        });
+        return list;
+    } catch {
+        return [];
+    }
+}
+
+export function rememberSearchQuery(history, query, limit = SEARCH_HISTORY_LIMIT) {
+    const q = String(query ?? '').trim();
+    const list = parseSearchHistory(history);
+    const max = Number.isInteger(limit) && limit > 0 ? limit : SEARCH_HISTORY_LIMIT;
+    if (!q) return list.slice(0, max);
+    const lower = q.toLowerCase();
+    return [q, ...list.filter((item) => item.toLowerCase() !== lower)].slice(0, max);
 }
 
 export function sanitizeData(nodes) {

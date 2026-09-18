@@ -145,7 +145,7 @@ export function registerInlineHandlers(handlers, expectedNames = new Set()) {
 }
 
 export function collectInlineHandlerNames(root = document) {
-    const eventAttributes = ['onclick', 'onchange', 'oninput', 'onblur', 'onfocus'];
+    const eventAttributes = ['onclick', 'onchange', 'oninput', 'onblur', 'onfocus', 'onmousedown', 'onkeydown'];
     const names = new Set();
 
     root.querySelectorAll('*').forEach((element) => {
