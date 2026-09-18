@@ -72,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
     private final Runnable sampleChromeRunnable = () -> samplePageColors(chromeWebView);
     private static final int SAMPLE_STRIP_PX = 8;
     private static final long SAMPLE_THROTTLE_MS = 180;
+    private static final int FILE_CHOOSER_REQUEST = 1001;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -654,19 +655,89 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != 1001 || filePathCallback == null) return;
-        Uri[] result = null;
-        if (resultCode == RESULT_OK && data != null && data.getClipData() != null) {
-            ClipData clip = data.getClipData();
-            result = new Uri[clip.getItemCount()];
-            for (int i = 0; i < clip.getItemCount(); i++) {
-                result[i] = clip.getItemAt(i).getUri();
-            }
-        } else {
-            result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
+        Uri[] result = parseFileChooserResult(resultCode, data);
+        try {
+            filePathCallback.onReceiveValue(result);
+        } catch (Exception ignored) {
         }
-        filePathCallback.onReceiveValue(result);
         filePathCallback = null;
+    }
+
+    private Uri[] parseFileChooserResult(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null) return null;
+        ClipData clip = data.getClipData();
+        if (clip != null && clip.getItemCount() > 0) {
+            Uri[] result = new Uri[clip.getItemCount()];
+            int count = 0;
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri uri = clip.getItemAt(i).getUri();
+                if (uri != null) result[count++] = uri;
+            }
+            if (count == 0) return null;
+            if (count == result.length) return result;
+            Uri[] trimmed = new Uri[count];
+            System.arraycopy(result, 0, trimmed, 0, count);
+            return trimmed;
+        }
+        if (data.getData() != null) return new Uri[] { data.getData() };
+        return WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+    }
+
+    private boolean launchFileChooser(WebChromeClient.FileChooserParams params) {
+        boolean multiple = params != null
+                && params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE;
+        String type = safeChooserMime(params);
+        Intent getContent = buildChooserIntent(Intent.ACTION_GET_CONTENT, type, multiple);
+        Intent openDoc = buildChooserIntent(Intent.ACTION_OPEN_DOCUMENT, type, multiple);
+        // Android 10 系统文件选择器一旦带上 application/json 等 EXTRA_MIME_TYPES，
+        // 会在还没画出文件列表时直接崩溃，startActivity 成功后回退逻辑走不到。
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+            if (startFileChooser(Intent.createChooser(getContent, "选择文件"))) return true;
+            if (startFileChooser(getContent)) return true;
+            return startFileChooser(openDoc);
+        }
+        if (startFileChooser(openDoc)) return true;
+        return startFileChooser(Intent.createChooser(getContent, "选择文件"));
+    }
+
+    private boolean startFileChooser(Intent intent) {
+        try {
+            startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Intent buildChooserIntent(String action, String type, boolean multiple) {
+        Intent intent = new Intent(action);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(type);
+        if (multiple) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        return intent;
+    }
+
+    // 备份导入的 accept=".json,.zip" 不能传给系统选择器。
+    // 只保留 image/* 这类 DocumentsUI 能稳定处理的类型，其余一律 */*。
+    private String safeChooserMime(WebChromeClient.FileChooserParams params) {
+        if (params == null) return "*/*";
+        String[] types = params.getAcceptTypes();
+        if (types == null || types.length == 0) return "*/*";
+        boolean sawImage = false;
+        for (String raw : types) {
+            if (raw == null) continue;
+            for (String part : raw.split(",")) {
+                String token = part.trim().toLowerCase();
+                if (token.isEmpty() || token.equals("*/*")) continue;
+                if (token.equals("image/*") || token.startsWith("image/")) {
+                    sawImage = true;
+                    continue;
+                }
+                return "*/*";
+            }
+        }
+        return sawImage ? "image/*" : "*/*";
     }
 
     @Override
@@ -705,20 +776,15 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
-            if (filePathCallback != null) filePathCallback.onReceiveValue(null);
-            filePathCallback = callback;
-            Intent intent = fileChooserParams.createIntent();
-            if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
-                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            }
-            try {
-                startActivityForResult(intent, 1001);
-            } catch (Exception e) {
+            if (filePathCallback != null) {
                 filePathCallback.onReceiveValue(null);
                 filePathCallback = null;
-                return false;
             }
-            return true;
+            filePathCallback = callback;
+            if (launchFileChooser(fileChooserParams)) return true;
+            filePathCallback = null;
+            callback.onReceiveValue(null);
+            return false;
         }
     }
 

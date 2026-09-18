@@ -161,6 +161,7 @@ describe('APK 版本号', () => {
     const ui = readFileSync(join(rootDir, 'ui.js'), 'utf8');
     const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
     const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
+    const manifest = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
     expect(bridge).toContain('public boolean beginSaveFile');
     expect(bridge).toContain('public boolean appendSaveFile');
     expect(bridge).toContain('public boolean finishSaveFile');
@@ -168,6 +169,15 @@ describe('APK 版本号', () => {
     expect(ui).toContain('NATIVE_SAVE_CHUNK_BYTES');
     expect(activity).toContain('EXTRA_ALLOW_MULTIPLE');
     expect(activity).toContain('getClipData()');
+    expect(activity).toContain('ACTION_OPEN_DOCUMENT');
+    expect(activity).toContain('ACTION_GET_CONTENT');
+    expect(activity).toContain('VERSION_CODES.Q');
+    expect(activity).toContain('safeChooserMime');
+    expect(activity).toContain('image/*');
+    expect(activity).not.toContain('Intent.EXTRA_MIME_TYPES');
+    expect(activity).not.toContain('fileChooserParams.createIntent()');
+    expect(manifest).toContain('android.intent.action.GET_CONTENT');
+    expect(manifest).toContain('android.intent.action.OPEN_DOCUMENT');
   });
 
   it('分类新增编辑不显示识别名称，HTML 与 APK 共用同一源码', () => {
