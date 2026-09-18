@@ -141,9 +141,9 @@ describe('defaultThemeScale', () => {
     expect(defaultThemeScale()).toEqual({ systemTextSize: true, textScale: 1, uiScale: 1 });
   });
 
-  it('APK 默认关掉系统字号、界面大小 85%', () => {
+  it('APK 默认关掉系统字号、界面大小 100%', () => {
     window.Android = {};
-    expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 0.85 });
+    expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 1 });
   });
 });
 

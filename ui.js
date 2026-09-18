@@ -115,7 +115,7 @@ export async function copyTextToClipboard(text) {
 
 export function defaultThemeScale() {
     if (isNativeApp()) {
-        return { systemTextSize: false, textScale: 1, uiScale: 0.85 };
+        return { systemTextSize: false, textScale: 1, uiScale: 1 };
     }
     return { systemTextSize: true, textScale: 1, uiScale: 1 };
 }

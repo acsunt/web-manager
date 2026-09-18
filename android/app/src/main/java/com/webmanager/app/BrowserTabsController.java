@@ -62,6 +62,7 @@ final class BrowserTabsController {
     private Dialog groupDialog;
     private boolean groupsVisible;
     private String sheetQuery = "";
+    private boolean appDarkMode;
     private int chromeColor = 0;
     private int chromeText = Color.parseColor("#2C3E50");
     private int chromeMuted = Color.parseColor("#8A97A5");
@@ -70,6 +71,17 @@ final class BrowserTabsController {
     private int chromeAccent = Color.parseColor("#007BFF");
     private static final String DRAG_GROUP = "browser-group";
     private static final String DRAG_TAB = "browser-tab";
+    private static final int SHEET_TEXT_LIGHT = Color.parseColor("#2C3E50");
+    private static final int SHEET_TEXT_DARK = Color.parseColor("#E0E0E0");
+    private static final int SHEET_MUTED_LIGHT = Color.parseColor("#8A97A5");
+    private static final int SHEET_MUTED_DARK = Color.parseColor("#A0A0A0");
+    private static final int SHEET_ACCENT_LIGHT = Color.parseColor("#007BFF");
+    private static final int SHEET_ACCENT_DARK = Color.parseColor("#4DABF7");
+    private static final int SHEET_SURFACE_LIGHT = Color.WHITE;
+    private static final int SHEET_SURFACE_DARK = Color.parseColor("#2C2C2C");
+    private static final int SHEET_INPUT_LIGHT = Color.parseColor("#F3F5F7");
+    private static final int SHEET_INPUT_DARK = Color.parseColor("#1E1E1E");
+    private static final int SHEET_DANGER = Color.parseColor("#DC3545");
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
@@ -188,6 +200,13 @@ final class BrowserTabsController {
     void refreshActive() {
         Tab tab = activeTab();
         if (tab != null && tab.webView != null) tab.webView.reload();
+    }
+
+    void setAppDarkMode(boolean dark) {
+        if (appDarkMode == dark) return;
+        appDarkMode = dark;
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
     }
 
     void applyChromeColors(int color) {
@@ -496,7 +515,7 @@ final class BrowserTabsController {
     }
 
     private void showTabActions(Tab tab) {
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setItems(new CharSequence[]{"移动到分组", "关闭"}, (dialog, which) -> {
                     if (which == 0) pickGroupFor(singletonList(tab.id));
                     else closeTab(tab.id);
@@ -505,7 +524,7 @@ final class BrowserTabsController {
     }
 
     private void showGroupActions(String groupId, String name) {
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setItems(new CharSequence[]{"修改名称", "删除分组"}, (dialog, which) -> {
                     if (which == 0) promptRenameGroup(groupId, name);
                     else confirmDeleteGroup(groupId, name);
@@ -515,7 +534,7 @@ final class BrowserTabsController {
 
     private void showSheet() {
         dismissSheet();
-        Dialog dialog = new Dialog(activity, R.style.JsDialogTheme);
+        Dialog dialog = new Dialog(activity, sheetDialogTheme());
         dialog.setContentView(R.layout.sheet_browser_tabs);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setCancelable(true);
@@ -563,6 +582,7 @@ final class BrowserTabsController {
         });
         sheetDialog = dialog;
         renderSheet(dialog);
+        applySheetChrome(dialog);
         dialog.show();
         Window window = dialog.getWindow();
         if (window != null) {
@@ -583,7 +603,7 @@ final class BrowserTabsController {
         if (visible.isEmpty() && !sheetQuery.trim().isEmpty()) {
             TextView empty = new TextView(activity);
             empty.setText("无搜索结果");
-            empty.setTextColor(Color.parseColor("#8A97A5"));
+            empty.setTextColor(sheetMuted());
             empty.setPadding(8, 24, 8, 24);
             empty.setGravity(android.view.Gravity.CENTER);
             list.addView(empty);
@@ -601,6 +621,7 @@ final class BrowserTabsController {
         if (collapseAll != null) {
             collapseAll.setText(areAllGroupsCollapsed() ? "展开" : "折叠");
         }
+        applySheetChrome(dialog);
     }
 
     private void appendGroupSection(LinearLayout list, String name, String groupId) {
@@ -632,6 +653,11 @@ final class BrowserTabsController {
             enableGroupDrag(handle, header, groupId);
         }
         list.addView(header);
+        tint(handle, sheetMuted());
+        tint(toggle, sheetMuted());
+        title.setTextColor(sheetText());
+        if (rename != null) rename.setTextColor(sheetAccent());
+        if (delete != null) delete.setTextColor(SHEET_DANGER);
         if (collapsed) return;
         for (Tab tab : items) {
             View row = inflater.inflate(R.layout.item_browser_sheet_tab, list, false);
@@ -658,6 +684,12 @@ final class BrowserTabsController {
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
             enableTabDrag(row.findViewById(R.id.sheetTabHandle), row, tab.id);
+            tint(row.findViewById(R.id.sheetTabHandle), sheetMuted());
+            tint(row.findViewById(R.id.sheetMove), sheetMuted());
+            tint(row.findViewById(R.id.sheetClose), sheetMuted());
+            titleView.setTextColor(sheetText());
+            urlView.setTextColor(sheetMuted());
+            check.setButtonTintList(android.content.res.ColorStateList.valueOf(sheetAccent()));
             list.addView(row);
         }
     }
@@ -677,7 +709,7 @@ final class BrowserTabsController {
         }
         labels.add("新建分组");
         values.add("__new__");
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setTitle("移动到分组")
                 .setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
                     String value = values.get(which);
@@ -694,11 +726,12 @@ final class BrowserTabsController {
         EditText input = new EditText(activity);
         input.setHint("分组名称");
         input.setSingleLine(true);
+        stylePromptInput(input);
         FrameLayout wrap = new FrameLayout(activity);
         int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(input);
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setTitle("新建分组")
                 .setView(wrap)
                 .setPositiveButton("确定", (dialog, which) -> {
@@ -718,11 +751,12 @@ final class BrowserTabsController {
         input.setHint("分组名称");
         input.setSingleLine(true);
         input.setText(currentName);
+        stylePromptInput(input);
         FrameLayout wrap = new FrameLayout(activity);
         int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(input);
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setTitle("修改分组名称")
                 .setView(wrap)
                 .setPositiveButton("确定", (dialog, which) -> {
@@ -756,7 +790,7 @@ final class BrowserTabsController {
 
     private void showGroupManager() {
         dismissGroupManager();
-        Dialog dialog = new Dialog(activity, R.style.JsDialogTheme);
+        Dialog dialog = new Dialog(activity, sheetDialogTheme());
         dialog.setContentView(R.layout.sheet_browser_groups);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setCancelable(true);
@@ -766,6 +800,7 @@ final class BrowserTabsController {
         });
         groupDialog = dialog;
         renderGroupManager(dialog);
+        applySheetChrome(dialog);
         dialog.show();
         Window window = dialog.getWindow();
         if (window != null) {
@@ -781,22 +816,30 @@ final class BrowserTabsController {
         if (groups.isEmpty()) {
             TextView empty = new TextView(activity);
             empty.setText("暂无分组");
-            empty.setTextColor(Color.parseColor("#8A97A5"));
+            empty.setTextColor(sheetMuted());
             empty.setPadding(8, 24, 8, 24);
             empty.setGravity(android.view.Gravity.CENTER);
             list.addView(empty);
+            applySheetChrome(dialog);
             return;
         }
         for (Group group : groups) {
             View row = inflater.inflate(R.layout.item_browser_manage_group, list, false);
             TextView title = row.findViewById(R.id.manageGroupTitle);
             title.setText(group.name + " (" + countInGroup(group.id) + ")");
+            title.setTextColor(sheetText());
+            TextView rename = row.findViewById(R.id.manageGroupRename);
+            TextView delete = row.findViewById(R.id.manageGroupDelete);
+            if (rename != null) rename.setTextColor(sheetAccent());
+            if (delete != null) delete.setTextColor(SHEET_DANGER);
+            tint(row.findViewById(R.id.manageGroupHandle), sheetMuted());
             row.findViewById(R.id.manageGroupRename).setOnClickListener(v -> promptRenameGroup(group.id, group.name));
             row.findViewById(R.id.manageGroupDelete).setOnClickListener(v -> confirmDeleteGroup(group.id, group.name));
             enableGroupDrag(row.findViewById(R.id.manageGroupHandle), row, group.id);
             row.setOnDragListener((v, event) -> handleManageGroupDrop(event, group.id));
             list.addView(row);
         }
+        applySheetChrome(dialog);
     }
 
     private void refreshGroupManager() {
@@ -958,7 +1001,7 @@ final class BrowserTabsController {
     }
 
     private void confirmCloseGroup(String groupId, String name) {
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setMessage("关闭「" + name + "」中打开的所有网页？")
                 .setPositiveButton("关闭", (dialog, which) -> closeGroupTabs(groupId))
                 .setNegativeButton("取消", null)
@@ -1013,7 +1056,7 @@ final class BrowserTabsController {
     }
 
     private void confirmDeleteGroup(String groupId, String name) {
-        new AlertDialog.Builder(activity)
+        new AlertDialog.Builder(activity, alertTheme())
                 .setMessage("删除分组「" + name + "」并关闭其中打开的网页？")
                 .setPositiveButton("删除", (dialog, which) -> deleteGroup(groupId))
                 .setNegativeButton("取消", null)
@@ -1191,8 +1234,99 @@ final class BrowserTabsController {
         }
     }
 
-    private void tint(ImageButton button, int color) {
-        if (button != null) button.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+    private void tint(View view, int color) {
+        if (view instanceof android.widget.ImageView) {
+            ((android.widget.ImageView) view).setColorFilter(color, PorterDuff.Mode.SRC_IN);
+        }
+    }
+
+    private int sheetDialogTheme() {
+        return appDarkMode ? R.style.JsDialogThemeDark : R.style.JsDialogTheme;
+    }
+
+    private int alertTheme() {
+        return appDarkMode ? R.style.JsAlertThemeDark : R.style.JsAlertTheme;
+    }
+
+    private int sheetText() {
+        return appDarkMode ? SHEET_TEXT_DARK : SHEET_TEXT_LIGHT;
+    }
+
+    private int sheetMuted() {
+        return appDarkMode ? SHEET_MUTED_DARK : SHEET_MUTED_LIGHT;
+    }
+
+    private int sheetAccent() {
+        return appDarkMode ? SHEET_ACCENT_DARK : SHEET_ACCENT_LIGHT;
+    }
+
+    private int sheetSurface() {
+        return appDarkMode ? SHEET_SURFACE_DARK : SHEET_SURFACE_LIGHT;
+    }
+
+    private int sheetInput() {
+        return appDarkMode ? SHEET_INPUT_DARK : SHEET_INPUT_LIGHT;
+    }
+
+    private void stylePromptInput(EditText input) {
+        input.setTextColor(sheetText());
+        input.setHintTextColor(sheetMuted());
+        if (Build.VERSION.SDK_INT >= 29) {
+            input.setTextCursorDrawable(null);
+        }
+    }
+
+    private void applySheetChrome(Dialog dialog) {
+        if (dialog == null) return;
+        View root = dialog.findViewById(android.R.id.content);
+        if (root instanceof ViewGroup && ((ViewGroup) root).getChildCount() > 0) {
+            View panel = ((ViewGroup) root).getChildAt(0);
+            panel.setBackground(roundedSurface(sheetSurface(), 18f));
+        }
+        setText(dialog, R.id.sheetHeading, sheetText());
+        setText(dialog, R.id.sheetManageGroups, sheetAccent());
+        setText(dialog, R.id.sheetSelectCount, sheetMuted());
+        setText(dialog, R.id.sheetCollapseAll, sheetAccent());
+        setText(dialog, R.id.sheetSelectAll, sheetAccent());
+        setText(dialog, R.id.sheetMoveSelected, sheetAccent());
+        setText(dialog, R.id.sheetCloseSelected, SHEET_DANGER);
+        setText(dialog, R.id.sheetDone, sheetAccent());
+        setText(dialog, R.id.manageGroupHeading, sheetText());
+        setText(dialog, R.id.manageGroupHint, sheetMuted());
+        setText(dialog, R.id.manageGroupDone, sheetAccent());
+        EditText search = dialog.findViewById(R.id.sheetSearch);
+        if (search != null) {
+            search.setTextColor(sheetText());
+            search.setHintTextColor(sheetMuted());
+            search.setBackground(roundedSurface(sheetInput(), 10f));
+        }
+        tint(dialog.findViewById(R.id.sheetSearchClear), sheetMuted());
+        TextView manage = dialog.findViewById(R.id.sheetManageGroups);
+        if (manage != null) {
+            android.graphics.drawable.Drawable[] icons = manage.getCompoundDrawablesRelative();
+            android.graphics.drawable.Drawable start = icons[0] == null ? null : icons[0].mutate();
+            android.graphics.drawable.Drawable top = icons[1] == null ? null : icons[1].mutate();
+            android.graphics.drawable.Drawable end = icons[2] == null ? null : icons[2].mutate();
+            android.graphics.drawable.Drawable bottom = icons[3] == null ? null : icons[3].mutate();
+            if (start != null) start.setColorFilter(sheetAccent(), PorterDuff.Mode.SRC_IN);
+            if (top != null) top.setColorFilter(sheetAccent(), PorterDuff.Mode.SRC_IN);
+            if (end != null) end.setColorFilter(sheetAccent(), PorterDuff.Mode.SRC_IN);
+            if (bottom != null) bottom.setColorFilter(sheetAccent(), PorterDuff.Mode.SRC_IN);
+            manage.setCompoundDrawablesRelative(start, top, end, bottom);
+        }
+    }
+
+    private void setText(Dialog dialog, int id, int color) {
+        View view = dialog.findViewById(id);
+        if (view instanceof TextView) ((TextView) view).setTextColor(color);
+    }
+
+    private GradientDrawable roundedSurface(int color, float radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setCornerRadius(radiusDp * activity.getResources().getDisplayMetrics().density);
+        drawable.setColor(color);
+        return drawable;
     }
 
     private int mix(int from, int to, float amount) {

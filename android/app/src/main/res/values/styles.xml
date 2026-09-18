@@ -7,4 +7,21 @@
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:backgroundDimAmount">0.45</item>
     </style>
+    <style name="JsDialogThemeDark" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="colorAccent">#4DABF7</item>
+        <item name="android:textColorPrimary">#E0E0E0</item>
+    </style>
+    <style name="JsAlertTheme" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="colorAccent">#007BFF</item>
+    </style>
+    <style name="JsAlertThemeDark" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#4DABF7</item>
+        <item name="android:textColorPrimary">#E0E0E0</item>
+        <item name="android:textColor">#E0E0E0</item>
+    </style>
 </resources>

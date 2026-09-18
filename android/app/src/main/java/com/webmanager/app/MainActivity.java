@@ -218,7 +218,10 @@ public class MainActivity extends AppCompatActivity {
 
     void setSystemBarsAppearance(boolean light) {
         lightSystemBars = light;
-        runOnUiThread(() -> applySystemBarIcons(light));
+        runOnUiThread(() -> {
+            applySystemBarIcons(light);
+            if (tabs != null) tabs.setAppDarkMode(!light);
+        });
     }
 
     private void applyEdgeToEdge() {
