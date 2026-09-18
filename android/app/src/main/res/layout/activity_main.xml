@@ -31,17 +31,106 @@
             android:elevation="2dp" />
 
         <FrameLayout
+            android:id="@+id/pageWebHost"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipChildren="true"
-            android:clipToPadding="true">
+            android:clipToPadding="true" />
 
-            <WebView
-                android:id="@+id/pageWebView"
+        <LinearLayout
+            android:id="@+id/browserBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_browser_toolbar"
+            android:elevation="6dp"
+            android:orientation="vertical"
+            android:paddingTop="6dp">
+
+            <HorizontalScrollView
+                android:id="@+id/groupScroll"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </FrameLayout>
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/groupStrip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="8dp">
+
+                <HorizontalScrollView
+                    android:id="@+id/tabScroll"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/tabStrip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="4dp" />
+                </HorizontalScrollView>
+
+                <ImageButton
+                    android:id="@+id/homeBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="返回主页"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_browser_home" />
+
+                <ImageButton
+                    android:id="@+id/refreshBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="刷新网页"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_browser_refresh" />
+
+                <FrameLayout
+                    android:layout_width="44dp"
+                    android:layout_height="44dp">
+
+                    <ImageButton
+                        android:id="@+id/tabsBtn"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_browser_fab"
+                        android:contentDescription="打开的网页列表"
+                        android:padding="10dp"
+                        android:src="@drawable/ic_browser_tabs"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tabsCount"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="top|end"
+                        android:background="@drawable/bg_browser_chip_active"
+                        android:gravity="center"
+                        android:textColor="@color/browser_accent"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
 
         <View
             android:id="@+id/pageBottomInset"
@@ -50,4 +139,19 @@
             android:background="#FFFFFFFF"
             android:elevation="2dp" />
     </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/restoreTabsBtn"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_browser_fab"
+        android:contentDescription="回到打开的网页"
+        android:elevation="10dp"
+        android:padding="12dp"
+        android:src="@drawable/ic_browser_tabs"
+        android:tint="#FFFFFFFF"
+        android:visibility="gone" />
 </FrameLayout>

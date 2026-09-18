@@ -37,12 +37,14 @@ import java.io.FileOutputStream;
 
 public class MainActivity extends AppCompatActivity {
     private WebView appWebView;
-    private WebView pageWebView;
     private FrameLayout root;
     private ViewGroup pageContainer;
+    private FrameLayout pageWebHost;
     private View pageTopInset;
     private View pageBottomInset;
+    private View restoreTabsBtn;
     private PageInfoBridge bridge;
+    private BrowserTabsController tabs;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
     private boolean lightSystemBars = true;
@@ -59,20 +61,18 @@ public class MainActivity extends AppCompatActivity {
         root = findViewById(R.id.rootLayout);
         appWebView = findViewById(R.id.appWebView);
         pageContainer = findViewById(R.id.pageContainer);
+        pageWebHost = findViewById(R.id.pageWebHost);
         pageTopInset = findViewById(R.id.pageTopInset);
         pageBottomInset = findViewById(R.id.pageBottomInset);
-        pageWebView = findViewById(R.id.pageWebView);
+        restoreTabsBtn = findViewById(R.id.restoreTabsBtn);
         applyEdgeToEdge();
         bridge = new PageInfoBridge(this);
         setupAppWebView();
-        setupPageWebView();
+        tabs = new BrowserTabsController(this);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (isPageOpen()) {
-                    closePage();
-                    return;
-                }
+                if (tabs != null && tabs.handleBack()) return;
                 if (appWebView.canGoBack()) {
                     appWebView.goBack();
                 } else {
@@ -109,22 +109,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private void setupPageWebView() {
-        applyCommonWebSettings(pageWebView.getSettings());
-        pageWebView.getSettings().setSupportMultipleWindows(true);
-        pageWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
-        pageWebView.setFitsSystemWindows(false);
-        pageWebView.setBackgroundColor(Color.WHITE);
-        pageContainer.setClipChildren(true);
-        pageContainer.setClipToPadding(true);
-        pageWebView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleExternalScheme(request.getUrl());
-            }
-        });
-        pageWebView.setWebChromeClient(new PageChromeClient());
-        pageWebView.setDownloadListener(downloadListener());
+    WebView createPageWebView() {
+        WebView webView = new WebView(this);
+        applyCommonWebSettings(webView.getSettings());
+        webView.getSettings().setSupportMultipleWindows(true);
+        webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+        webView.setFitsSystemWindows(false);
+        webView.setBackgroundColor(Color.WHITE);
+        webView.setWebViewClient(new PageWebViewClient());
+        webView.setWebChromeClient(new PageChromeClient());
+        webView.setDownloadListener(downloadListener());
+        return webView;
     }
 
     private void applyCommonWebSettings(WebSettings settings) {
@@ -142,10 +137,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     boolean openUrl(String url) {
+        return openUrl(url, "");
+    }
+
+    boolean openUrl(String url, String title) {
         if (url == null || url.trim().isEmpty()) return false;
         String target = url.trim();
         if (!(target.startsWith("http://") || target.startsWith("https://"))) return false;
-        runOnUiThread(() -> showPage(target));
+        runOnUiThread(() -> {
+            if (tabs != null) tabs.openUrl(target, title);
+        });
+        return true;
+    }
+
+    boolean openUrls(String json) {
+        runOnUiThread(() -> {
+            if (tabs != null) tabs.openUrls(json);
+        });
         return true;
     }
 
@@ -153,20 +161,7 @@ public class MainActivity extends AppCompatActivity {
         return pageContainer != null && pageContainer.getVisibility() == View.VISIBLE;
     }
 
-    void closePage() {
-        if (pageWebView != null) {
-            pageWebView.stopLoading();
-            pageWebView.loadUrl("about:blank");
-        }
-        setPageWindow(false);
-    }
-
-    private void showPage(String url) {
-        setPageWindow(true);
-        pageWebView.loadUrl(url);
-    }
-
-    private void setPageWindow(boolean visible) {
+    void setPageWindow(boolean visible) {
         if (pageContainer != null) {
             pageContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
@@ -180,6 +175,7 @@ public class MainActivity extends AppCompatActivity {
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
             applySystemBarIcons(lightSystemBars);
         }
+        if (tabs != null) tabs.syncRestoreButton(visible);
     }
 
     void setSystemBarsAppearance(boolean light) {
@@ -214,12 +210,24 @@ public class MainActivity extends AppCompatActivity {
         int bottom = Math.max(safeBottom, systemBarSize("navigation_bar_height"));
         setInsetSize(pageTopInset, ViewGroup.LayoutParams.MATCH_PARENT, top);
         setInsetSize(pageBottomInset, ViewGroup.LayoutParams.MATCH_PARENT, bottom);
-        if (pageWebView == null) return;
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) pageWebView.getLayoutParams();
-        if (params == null) return;
-        params.leftMargin = Math.max(safeLeft, 0);
-        params.rightMargin = Math.max(safeRight, 0);
-        pageWebView.setLayoutParams(params);
+        if (pageWebHost != null) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) pageWebHost.getLayoutParams();
+            if (params != null) {
+                params.leftMargin = Math.max(safeLeft, 0);
+                params.rightMargin = Math.max(safeRight, 0);
+                pageWebHost.setLayoutParams(params);
+            }
+        }
+        if (restoreTabsBtn != null) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) restoreTabsBtn.getLayoutParams();
+            if (params != null) {
+                float density = getResources().getDisplayMetrics().density;
+                int margin = Math.round(16 * density);
+                params.rightMargin = Math.max(safeRight, 0) + margin;
+                params.bottomMargin = bottom + margin;
+                restoreTabsBtn.setLayoutParams(params);
+            }
+        }
     }
 
     private int systemBarSize(String dimenName) {
@@ -427,9 +435,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        if (tabs != null) tabs.pauseBackground();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (tabs != null && isPageOpen()) tabs.resumeActive();
+    }
+
+    @Override
     protected void onDestroy() {
         if (bridge != null) bridge.cancelAll();
         destroyPendingWindow();
+        if (tabs != null) tabs.destroyAll();
         super.onDestroy();
     }
 
@@ -462,19 +483,49 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private class PageWebViewClient extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            return handleExternalScheme(request.getUrl());
+        }
+
+        @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            if (tabs != null) tabs.updateUrl(view, url);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (tabs != null) tabs.updateUrl(view, url);
+        }
+    }
+
     private class PageChromeClient extends JsChromeClient {
         PageChromeClient() {
             super(MainActivity.this, true);
         }
 
         @Override
+        public void onReceivedTitle(WebView view, String title) {
+            if (tabs != null) tabs.updateTitle(view, title);
+        }
+
+        @Override
         public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
-            return capturePopupWindow(resultMsg);
+            WebView child = createPageWebView();
+            if (tabs == null || tabs.addPopupTab(child) == null) {
+                child.destroy();
+                return false;
+            }
+            WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+            transport.setWebView(child);
+            resultMsg.sendToTarget();
+            return true;
         }
 
         @Override
         public void onCloseWindow(WebView window) {
-            closePage();
+            if (tabs != null) tabs.closeWindow(window);
         }
     }
 }

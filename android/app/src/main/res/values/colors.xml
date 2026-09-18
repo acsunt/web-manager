@@ -1,3 +1,11 @@
 <resources>
     <color name="ic_launcher_bg">#FFFFFF</color>
+    <color name="browser_toolbar_bg">#FFFFFFFF</color>
+    <color name="browser_toolbar_line">#FFE6EAF0</color>
+    <color name="browser_text">#FF2C3E50</color>
+    <color name="browser_text_muted">#FF8A97A5</color>
+    <color name="browser_accent">#FF007BFF</color>
+    <color name="browser_danger">#FFDC3545</color>
+    <color name="browser_chip">#FFF3F5F7</color>
+    <color name="browser_chip_active">#FFE8F2FF</color>
 </resources>

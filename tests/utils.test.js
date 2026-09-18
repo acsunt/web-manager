@@ -3,6 +3,8 @@ import {
   normalizeUrls,
   countPages,
   countTotalPages,
+  httpUrlsOf,
+  collectOpenablePages,
   sanitizeData,
   isLocalUrl,
   normalizeWebUrl,
@@ -80,6 +82,52 @@ describe('countTotalPages', () => {
     expect(countTotalPages(null)).toBe(0);
     expect(countTotalPages(undefined)).toBe(0);
     expect(countTotalPages({ type: 'page' })).toBe(0);
+  });
+});
+
+describe('httpUrlsOf', () => {
+  it('只保留 http/https', () => {
+    expect(httpUrlsOf({
+      urls: [
+        { url: 'https://a.com' },
+        { url: 'file:///C:/a.html' },
+        { url: 'http://b.com' },
+        { url: 'C:\\local.html' },
+      ],
+    })).toEqual(['https://a.com', 'http://b.com']);
+  });
+});
+
+describe('collectOpenablePages', () => {
+  it('收集分类及子分类里可打开的网络网页', () => {
+    const pages = collectOpenablePages([
+      {
+        type: 'category',
+        name: '工作',
+        children: [
+          { type: 'page', name: 'A', url: 'https://a.com' },
+          {
+            type: 'category',
+            name: '子分类',
+            children: [
+              { type: 'page', name: 'B', urls: [{ url: 'https://b.com' }, { url: 'https://b2.com' }] },
+              { type: 'page', name: '本地', url: 'file:///C:/x.html' },
+            ],
+          },
+        ],
+      },
+      { type: 'page', name: '根网页', url: 'https://root.com' },
+    ]);
+    expect(pages).toEqual([
+      { title: 'A', url: 'https://a.com', urls: ['https://a.com'] },
+      { title: 'B', url: 'https://b.com', urls: ['https://b.com', 'https://b2.com'] },
+      { title: '根网页', url: 'https://root.com', urls: ['https://root.com'] },
+    ]);
+  });
+
+  it('没有可打开网址时返回空数组', () => {
+    expect(collectOpenablePages(null)).toEqual([]);
+    expect(collectOpenablePages([{ type: 'page', name: '本地', url: 'D:\\a.html' }])).toEqual([]);
   });
 });
 

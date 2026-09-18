@@ -15,6 +15,29 @@ export function countTotalPages(nodes) {
     return nodes.reduce((total, node) => total + countPages(node), 0);
 }
 
+export function httpUrlsOf(node) {
+    return normalizeUrls(node)
+        .map((item) => (item?.url || '').trim())
+        .filter((url) => /^https?:\/\//i.test(url));
+}
+
+export function collectOpenablePages(nodes) {
+    const pages = [];
+    const walk = (list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((node) => {
+            if (node?.type === 'page') {
+                const urls = httpUrlsOf(node);
+                if (urls.length > 0) pages.push({ title: node.name || urls[0], url: urls[0], urls });
+            } else if (node?.type === 'category') {
+                walk(node.children);
+            }
+        });
+    };
+    walk(nodes);
+    return pages;
+}
+
 export function sanitizeData(nodes) {
     if (!Array.isArray(nodes)) return [];
 

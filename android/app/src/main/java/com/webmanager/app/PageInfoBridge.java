@@ -126,6 +126,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public boolean openUrls(String json) {
+        return activity.openUrls(json);
+    }
+
+    @JavascriptInterface
     public void alert(String message) {
         JsDialog.alertSync(activity, message);
     }

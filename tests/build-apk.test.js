@@ -78,22 +78,36 @@ describe('APK 版本号', () => {
     const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
     const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
     const dialog = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'JsDialog.java'), 'utf8');
+    const tabs = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'BrowserTabsController.java'), 'utf8');
     expect(layout).toContain('pageTopInset');
     expect(layout).toContain('pageBottomInset');
+    expect(layout).toContain('pageWebHost');
+    expect(layout).toContain('refreshBtn');
+    expect(layout).toContain('tabStrip');
+    expect(layout).toContain('restoreTabsBtn');
     expect(bridge).toContain('public boolean openUrl(String url)');
+    expect(bridge).toContain('public boolean openUrls(String json)');
     expect(activity).toContain('boolean openUrl(String url)');
+    expect(activity).toContain('boolean openUrls(String json)');
     expect(activity).toContain('applyPageInsets()');
     expect(activity).toContain('setInsetSize(pageTopInset');
-    expect(activity).toContain('if (isPageOpen())');
-    expect(activity).toContain('closePage()');
+    expect(activity).toContain('tabs.handleBack()');
     expect(activity).toContain('JsChromeClient');
+    expect(tabs).toContain('MAX_TABS = 12');
+    expect(tabs).toContain('refreshActive()');
+    expect(tabs).toContain('deleteGroup(');
     expect(bridge).toContain('public void alert(String message)');
     expect(bridge).toContain('public boolean confirm(String message)');
     expect(dialog).not.toContain('网页显示');
     expect(main).toContain('installNativeDialogs');
     expect(main).toContain('window.Android.openUrl');
+    expect(main).toContain('window.Android.openUrls');
+    expect(main).toContain('batchOpenSelected');
+    expect(main).toContain('openCategoryPages');
     expect(main).toContain("window.open(url, '_blank')");
     expect(main).toContain('window.location.href = url');
+    expect(html).toContain('onclick="batchOpenSelected()"');
+    expect(html).toContain('id="openPagesMenuItem"');
   });
 
   it('APK 导出分块写文件，并支持多选导入', () => {

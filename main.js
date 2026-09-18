@@ -12,8 +12,8 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
-import { countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, normalizeUrls, resolveColumnModes, sanitizeData } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -354,7 +354,8 @@ function init() {
         applyIconMode();
         applyColumnMode();
 
-        loadThemeConfig(); applyThemeSettings(); initToolbar(); 
+        loadThemeConfig(); applyThemeSettings(); initToolbar();
+        if (isNativeApp()) document.body.classList.add('native-app');
         renderTree(); document.body.classList.add('hide-urls');
         
         const savedScroll = localStorage.getItem('lastScrollPosition');
@@ -566,6 +567,47 @@ function handleUrlOpen(url, inCurrentTab) {
         return;
     }
     if (inCurrentTab) { window.location.href = url; } else { window.open(url, '_blank'); }
+}
+
+function openPagesInApp(pages, groupName) {
+    if (!isNativeApp() || typeof window.Android?.openUrls !== 'function') return false;
+    const list = Array.isArray(pages) ? pages.filter((page) => page?.url) : [];
+    if (list.length === 0) {
+        showToast('没有可打开的网络网页');
+        return true;
+    }
+    window.Android.openUrls(JSON.stringify({
+        group: groupName || '',
+        pages: list.map((page) => ({ title: page.title || '', url: page.url })),
+    }));
+    return true;
+}
+
+function openCategoryPages(id) {
+    const node = findNode(id);
+    if (!node || node.type !== 'category') return;
+    if (!openPagesInApp(collectOpenablePages([node]), node.name)) {
+        showToast('仅 APK 支持一次打开多个网页');
+    }
+}
+
+function batchOpenSelected() {
+    const checks = document.querySelectorAll('.item-checkbox:checked');
+    if (checks.length === 0) return showToast('请先勾选要打开的网页或分类');
+    const pages = [];
+    const seen = new Set();
+    checks.forEach((cb) => {
+        const node = findNode(cb.dataset.id);
+        if (!node) return;
+        collectOpenablePages(node.type === 'category' ? [node] : [node]).forEach((page) => {
+            if (seen.has(page.url)) return;
+            seen.add(page.url);
+            pages.push(page);
+        });
+    });
+    if (!openPagesInApp(pages, pages.length > 1 ? '多选打开' : '')) {
+        showToast('仅 APK 支持一次打开多个网页');
+    }
 }
 
 function updatePositionOptions() {
@@ -1746,9 +1788,18 @@ function createNodeEl(node,level=0){
         
         const addCatBtn=document.createElement('div');
         addCatBtn.className='cat-btn'; addCatBtn.innerHTML='<i class="fas fa-folder-plus"></i>';
-        addCatBtn.onclick=(e)=>{e.stopPropagation();openAddModal('category',node.id,'inside');}; 
-        
-        actions.append(addCatBtn,addPageBtn); header.append(toggle,checkbox,nameSpan,actions); container.appendChild(header);
+        addCatBtn.onclick=(e)=>{e.stopPropagation();openAddModal('category',node.id,'inside');};
+
+        actions.append(addCatBtn,addPageBtn);
+        if (isNativeApp()) {
+            const openBtn=document.createElement('div');
+            openBtn.className='cat-btn native-open-btn';
+            openBtn.innerHTML='<i class="fas fa-up-right-from-square"></i>';
+            openBtn.title='打开该分类所有网页';
+            openBtn.onclick=(e)=>{e.stopPropagation();openCategoryPages(node.id);};
+            actions.append(openBtn);
+        }
+        header.append(toggle,checkbox,nameSpan,actions); container.appendChild(header);
         
         const childrenCont=document.createElement('div');
         childrenCont.className='children-container'; childrenCont.dataset.id=node.id;
@@ -2228,7 +2279,8 @@ async function checkLinks(){
 
 function menuAction(action){
     hideContextMenu(); const id=activeContextNodeId; const node=findNode(id); if(!node)return;
-    if(action==='pin'){ node.isPinned=!node.isPinned; save(); renderTree(); }
+    if(action==='openPages'){ openCategoryPages(id); }
+    else if(action==='pin'){ node.isPinned=!node.isPinned; save(); renderTree(); }
     else if(action==='edit'){
         isAdding=false; currentEditId=id; document.getElementById('modalTitle').innerText='编辑'; document.getElementById('editType').value = node.type;
         document.getElementById('editName').value=node.name; document.getElementById('editNote').value=node.note||'';
@@ -2479,7 +2531,7 @@ function updateSelectedCount(){const count=document.querySelectorAll('.item-chec
 function toggleSelectAll(cb){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=cb.checked);updateSelectedCount();}
 function cancelSelection(){document.querySelectorAll('.item-checkbox').forEach(c=>c.checked=false);document.getElementById('selectAllBox').checked=false;updateSelectedCount();}
 function closeModal(id){ if (id === 'toolbarEditModal' && isToolbarSorting) confirmToolbarSort(); document.getElementById(id).classList.remove('active'); if (id === 'deleteCategoryModal') window.deletingCategoryId = null; }
-function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const pinItem=document.getElementById('pinMenuItem');const node=findNode(id);if(pinItem){pinItem.innerHTML=node&&node.isPinned?'<i class="fas fa-thumbtack"></i> 取消置顶':'<i class="fas fa-thumbtack"></i> 置顶';}const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
+function showContextMenu(x,y,id,type){if(navigator.vibrate)navigator.vibrate(50);activeContextNodeId=id;activeContextNodeType=type;const menu=document.getElementById('contextMenu');const overlay=document.getElementById('menuOverlay');const pinItem=document.getElementById('pinMenuItem');const openItem=document.getElementById('openPagesMenuItem');const node=findNode(id);if(pinItem){pinItem.innerHTML=node&&node.isPinned?'<i class="fas fa-thumbtack"></i> 取消置顶':'<i class="fas fa-thumbtack"></i> 置顶';}if(openItem){openItem.style.display=isNativeApp()&&type==='category'?'flex':'none';}const winW=window.innerWidth,winH=window.innerHeight;if(x+150>winW)x=winW-160;if(y+200>winH)y=winH-210;menu.style.left=x+'px';menu.style.top=y+'px';menu.style.display='block';overlay.style.display='block';}
 function hideContextMenu(){document.getElementById('contextMenu').style.display='none';document.getElementById('menuOverlay').style.display='none';}
 document.addEventListener('click',function(e){if(!e.target.closest('.search-wrapper')){document.getElementById('searchResults').innerHTML = ''; document.body.classList.remove('search-mode'); document.body.classList.remove('search-focus'); document.getElementById('searchClearBtn').style.display='none';} if(!e.target.closest('.form-input-group')){['parentDropdownList','moveDropdownList','delMoveDropdownList','batchDelMoveDropdownList'].forEach(id=>{const list=document.getElementById(id);if(list)list.style.display='none';});}});
 window.addEventListener('scroll', function() { if(window.scrollSaveTimeout) clearTimeout(window.scrollSaveTimeout); window.scrollSaveTimeout = setTimeout(function() { localStorage.setItem('lastScrollPosition', window.scrollY); }, 200); });
@@ -2914,6 +2966,7 @@ const inlineHandlers = {
     toggleToolbar,
     toggleSelectAll,
     batchSelectSiblings,
+    batchOpenSelected,
     batchPin,
     batchCopy,
     openBatchMoveModal,
