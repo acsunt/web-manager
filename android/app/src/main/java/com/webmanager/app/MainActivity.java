@@ -3,6 +3,7 @@ package com.webmanager.app;
 import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -11,6 +12,8 @@ import android.os.Environment;
 import android.util.Base64;
 import android.view.View;
 import android.webkit.DownloadListener;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -35,9 +38,12 @@ import java.io.FileOutputStream;
 
 public class MainActivity extends AppCompatActivity {
     private WebView appWebView;
+    private WebView pageWebView;
     private FrameLayout root;
+    private FrameLayout pageContainer;
     private PageInfoBridge bridge;
     private ValueCallback<Uri[]> filePathCallback;
+    private WebView pendingWindowWebView;
     private boolean lightSystemBars = true;
     private int safeTop;
     private int safeRight;
@@ -51,12 +57,19 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         root = findViewById(R.id.rootLayout);
         appWebView = findViewById(R.id.appWebView);
+        pageContainer = findViewById(R.id.pageContainer);
+        pageWebView = findViewById(R.id.pageWebView);
         applyEdgeToEdge();
         bridge = new PageInfoBridge(this);
         setupAppWebView();
+        setupPageWebView();
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                if (isPageOpen()) {
+                    closePage();
+                    return;
+                }
                 if (appWebView.canGoBack()) {
                     appWebView.goBack();
                 } else {
@@ -69,18 +82,9 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void setupAppWebView() {
-        WebSettings settings = appWebView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setDatabaseEnabled(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        settings.setSupportZoom(false);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-
+        applyCommonWebSettings(appWebView.getSettings());
+        appWebView.getSettings().setSupportMultipleWindows(true);
+        appWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
         appWebView.setFitsSystemWindows(false);
         appWebView.setBackgroundColor(Color.TRANSPARENT);
         appWebView.addJavascriptInterface(bridge, "Android");
@@ -93,49 +97,71 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri uri = request.getUrl();
-                if (uri == null) return false;
-                String scheme = uri.getScheme();
-                if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme)) {
-                    return false;
-                }
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
-                } catch (Exception ignored) {
-                }
-                return true;
+                return interceptAppNavigation(request);
             }
         });
-        appWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
-                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
-                filePathCallback = callback;
-                Intent intent = fileChooserParams.createIntent();
-                if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
-                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                }
-                try {
-                    startActivityForResult(intent, 1001);
-                } catch (Exception e) {
-                    filePathCallback.onReceiveValue(null);
-                    filePathCallback = null;
-                    return false;
-                }
-                return true;
-            }
-        });
-        appWebView.setDownloadListener(new DownloadListener() {
-            @Override
-            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-                } catch (Exception ignored) {
-                    Toast.makeText(MainActivity.this, "无法打开下载链接", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        appWebView.setWebChromeClient(new AppChromeClient());
+        appWebView.setDownloadListener(downloadListener());
         appWebView.loadUrl("file:///android_asset/index.html");
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void setupPageWebView() {
+        applyCommonWebSettings(pageWebView.getSettings());
+        pageWebView.getSettings().setSupportMultipleWindows(true);
+        pageWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+        pageWebView.setFitsSystemWindows(false);
+        pageWebView.setBackgroundColor(Color.WHITE);
+        pageWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleExternalScheme(request.getUrl());
+            }
+        });
+        pageWebView.setWebChromeClient(new PageChromeClient());
+        pageWebView.setDownloadListener(downloadListener());
+    }
+
+    private void applyCommonWebSettings(WebSettings settings) {
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setDatabaseEnabled(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+    }
+
+    boolean openUrl(String url) {
+        if (url == null || url.trim().isEmpty()) return false;
+        String target = url.trim();
+        if (!(target.startsWith("http://") || target.startsWith("https://"))) return false;
+        runOnUiThread(() -> {
+            pageContainer.setVisibility(View.VISIBLE);
+            applyPageInsets();
+            applySystemBarIcons(true);
+            pageWebView.loadUrl(target);
+        });
+        return true;
+    }
+
+    boolean isPageOpen() {
+        return pageContainer != null && pageContainer.getVisibility() == View.VISIBLE;
+    }
+
+    void closePage() {
+        if (pageWebView != null) {
+            pageWebView.stopLoading();
+            pageWebView.loadUrl("about:blank");
+        }
+        if (pageContainer != null) {
+            pageContainer.setVisibility(View.GONE);
+        }
+        applySystemBarIcons(lightSystemBars);
     }
 
     void setSystemBarsAppearance(boolean light) {
@@ -159,16 +185,23 @@ public class MainActivity extends AppCompatActivity {
             safeBottom = Math.max(bars.bottom, cutout.bottom);
             safeLeft = Math.max(bars.left, cutout.left);
             injectSafeArea();
+            applyPageInsets();
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
     }
 
+    private void applyPageInsets() {
+        if (pageContainer == null) return;
+        pageContainer.setPadding(safeLeft, safeTop, safeRight, safeBottom);
+    }
+
     private void applySystemBarIcons(boolean light) {
+        boolean useLight = isPageOpen() || light;
         View decor = getWindow().getDecorView();
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decor);
-        controller.setAppearanceLightStatusBars(light);
-        controller.setAppearanceLightNavigationBars(light);
+        controller.setAppearanceLightStatusBars(useLight);
+        controller.setAppearanceLightNavigationBars(useLight);
     }
 
     private float cssPx(int px) {
@@ -191,6 +224,94 @@ public class MainActivity extends AppCompatActivity {
                 + ",left:" + cssPx(safeLeft)
                 + "});}})();";
         evaluateJavascript(script);
+    }
+
+    private boolean interceptAppNavigation(WebResourceRequest request) {
+        if (request == null) return false;
+        Uri uri = request.getUrl();
+        if (handleExternalScheme(uri)) return true;
+        if (!request.isForMainFrame()) return false;
+        return openHttpUrl(uri);
+    }
+
+    private boolean openHttpUrl(Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme();
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return false;
+        openUrl(uri.toString());
+        return true;
+    }
+
+    private boolean handleExternalScheme(Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme();
+        if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme) || "about".equals(scheme)) {
+            return false;
+        }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        } catch (Exception ignored) {
+        }
+        return true;
+    }
+
+    private boolean capturePopupWindow(android.os.Message resultMsg) {
+        destroyPendingWindow();
+        WebView temp = new WebView(this);
+        temp.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
+        temp.setAlpha(0f);
+        attachHiddenWebView(temp);
+        pendingWindowWebView = temp;
+        temp.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                consumePopupUrl(request == null ? null : request.getUrl());
+                return true;
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                consumePopupUrl(url == null ? null : Uri.parse(url));
+            }
+        });
+        temp.postDelayed(this::destroyPendingWindow, 8000);
+        WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+        transport.setWebView(temp);
+        resultMsg.sendToTarget();
+        return true;
+    }
+
+    private void consumePopupUrl(Uri uri) {
+        if (uri == null) return;
+        String scheme = uri.getScheme();
+        if (scheme == null || "about".equals(scheme) || "javascript".equals(scheme)) return;
+        if (handleExternalScheme(uri)) {
+            destroyPendingWindow();
+            return;
+        }
+        if (openHttpUrl(uri)) {
+            destroyPendingWindow();
+        }
+    }
+
+    private void destroyPendingWindow() {
+        if (pendingWindowWebView == null) return;
+        pendingWindowWebView.removeCallbacks(this::destroyPendingWindow);
+        pendingWindowWebView.stopLoading();
+        pendingWindowWebView.setWebViewClient(new WebViewClient());
+        detachHiddenWebView(pendingWindowWebView);
+        pendingWindowWebView.destroy();
+        pendingWindowWebView = null;
+    }
+
+    private DownloadListener downloadListener() {
+        return (url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            } catch (Exception ignored) {
+                Toast.makeText(MainActivity.this, "无法打开下载链接", Toast.LENGTH_SHORT).show();
+            }
+        };
     }
 
     void attachHiddenWebView(WebView hidden) {
@@ -267,6 +388,80 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         if (bridge != null) bridge.cancelAll();
+        destroyPendingWindow();
         super.onDestroy();
+    }
+
+    private class AppChromeClient extends WebChromeClient {
+        @Override
+        public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+            return capturePopupWindow(resultMsg);
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            JsDialog.alert(MainActivity.this, message, result);
+            return true;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+            JsDialog.confirm(MainActivity.this, message, result);
+            return true;
+        }
+
+        @Override
+        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+            JsDialog.prompt(MainActivity.this, message, defaultValue, result);
+            return true;
+        }
+
+        @Override
+        public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
+            if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+            filePathCallback = callback;
+            Intent intent = fileChooserParams.createIntent();
+            if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            }
+            try {
+                startActivityForResult(intent, 1001);
+            } catch (Exception e) {
+                filePathCallback.onReceiveValue(null);
+                filePathCallback = null;
+                return false;
+            }
+            return true;
+        }
+    }
+
+    private class PageChromeClient extends WebChromeClient {
+        @Override
+        public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+            return capturePopupWindow(resultMsg);
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            JsDialog.alert(MainActivity.this, message, result);
+            return true;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+            JsDialog.confirm(MainActivity.this, message, result);
+            return true;
+        }
+
+        @Override
+        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+            JsDialog.prompt(MainActivity.this, message, defaultValue, result);
+            return true;
+        }
+
+        @Override
+        public void onCloseWindow(WebView window) {
+            closePage();
+        }
     }
 }

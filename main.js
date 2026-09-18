@@ -560,6 +560,10 @@ function bindInteraction(element, node, type, url){
 
 function handleUrlOpen(url, inCurrentTab) {
     if (!url) return;
+    if (window.Android && typeof window.Android.openUrl === 'function') {
+        window.Android.openUrl(url);
+        return;
+    }
     if (inCurrentTab) { window.location.href = url; } else { window.open(url, '_blank'); }
 }
 

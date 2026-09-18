@@ -72,15 +72,22 @@ describe('APK 版本号', () => {
     expect(main).not.toContain('navigator.clipboard.writeText');
   });
 
-  it('APK 打开网页留在应用 WebView，不跳系统浏览器', () => {
+  it('APK 打开网页留在应用内独立层，返回键先关掉网页', () => {
     const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
-    const ui = readFileSync(join(rootDir, 'ui.js'), 'utf8');
+    const layout = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_main.xml'), 'utf8');
     const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
     const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
-    expect(bridge).not.toContain('public boolean openUrl(String url)');
-    expect(activity).not.toContain('boolean openExternalUrl(String url)');
-    expect(activity).toContain('return false;');
-    expect(ui).not.toContain('window.Android?.openUrl');
+    const dialog = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'JsDialog.java'), 'utf8');
+    expect(layout).toContain('pageContainer');
+    expect(layout).toContain('pageWebView');
+    expect(bridge).toContain('public boolean openUrl(String url)');
+    expect(activity).toContain('boolean openUrl(String url)');
+    expect(activity).toContain('pageContainer.setPadding');
+    expect(activity).toContain('if (isPageOpen())');
+    expect(activity).toContain('closePage()');
+    expect(activity).toContain('JsDialog.alert');
+    expect(dialog).not.toContain('网页显示');
+    expect(main).toContain('window.Android.openUrl');
     expect(main).toContain("window.open(url, '_blank')");
     expect(main).toContain('window.location.href = url');
   });

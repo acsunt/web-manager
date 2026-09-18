@@ -9,4 +9,20 @@
         android:id="@+id/appWebView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <FrameLayout
+        android:id="@+id/pageContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FFFFFFFF"
+        android:clickable="true"
+        android:elevation="8dp"
+        android:fitsSystemWindows="false"
+        android:visibility="gone">
+
+        <WebView
+            android:id="@+id/pageWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
 </FrameLayout>

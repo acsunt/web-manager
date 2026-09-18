@@ -121,6 +121,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public boolean openUrl(String url) {
+        return activity.openUrl(url);
+    }
+
+    @JavascriptInterface
     public boolean copyText(String text) {
         try {
             final String value = text == null ? "" : text;
