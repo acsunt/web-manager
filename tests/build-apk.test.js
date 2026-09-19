@@ -31,6 +31,7 @@ describe('APK 版本号', () => {
     expect(gradle).toContain('universalApk false');
     expect(gradle).toContain("abi == 'armeabi-v7a'");
     expect(gradle).toContain("abi == 'arm64-v8a'");
+    expect(gradle).not.toContain('abiFilters');
   });
 
   it('系统栏颜色透明，页面可以画到状态栏和导航栏后面', () => {
