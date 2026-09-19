@@ -31,7 +31,19 @@ describe('APK 版本号', () => {
     expect(gradle).toContain('universalApk false');
     expect(gradle).toContain("abi == 'armeabi-v7a'");
     expect(gradle).toContain("abi == 'arm64-v8a'");
+    expect(gradle).toContain("jniLibs.srcDirs = ['src/main/jniLibs']");
     expect(gradle).not.toContain('abiFilters');
+    expect(gradle).not.toContain('externalNativeBuild');
+    expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'cpp', 'native-lib.c'))).toBe(true);
+    expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'jniLibs', 'armeabi-v7a', 'libwebmanager.so'))).toBe(true);
+    expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'jniLibs', 'arm64-v8a', 'libwebmanager.so'))).toBe(true);
+    const native = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'cpp', 'native-lib.c'), 'utf8');
+    expect(native).toContain('Java_com_webmanager_app_MainActivity_nativeAbi');
+    const so32 = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'jniLibs', 'armeabi-v7a', 'libwebmanager.so'));
+    const so64 = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'jniLibs', 'arm64-v8a', 'libwebmanager.so'));
+    expect(so32.length).toBeGreaterThan(1000);
+    expect(so64.length).toBeGreaterThan(1000);
+    expect(so32.length).not.toBe(so64.length);
   });
 
   it('系统栏颜色透明，页面可以画到状态栏和导航栏后面', () => {
@@ -59,6 +71,8 @@ describe('APK 版本号', () => {
     expect(apkScript).toContain("join(rootDir, 'dist')");
     expect(apkScript).toContain('web-manager-v${version}-32.apk');
     expect(apkScript).toContain('web-manager-v${version}-64.apk');
+    expect(apkScript).toContain('buildNative');
+    expect(apkScript).toContain('libwebmanager.so');
     expect(htmlScript).toContain("join(rootDir, 'dist')");
     expect(htmlScript).toContain('dist/${onlineName}');
     expect(htmlScript).toContain('dist/${offlineName}');
@@ -166,6 +180,11 @@ describe('APK 版本号', () => {
     expect(html).toContain('onclick="confirmClearSiteData()"');
     expect(html).toContain('id="selectiveClearModal"');
     expect(html).toContain('id="selectiveClearSearch"');
+    expect(html).toContain('selective-clear-modal');
+    expect(html).toContain('class="selective-clear-hint"');
+    expect(html).toContain('class="modal-actions"');
+    expect(activity).toContain('System.loadLibrary("webmanager")');
+    expect(bridge).toContain('public String getNativeAbi()');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetPinSelected"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetPin"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_tab.xml'), 'utf8')).toContain('id="@+id/tabPin"');

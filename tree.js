@@ -200,10 +200,6 @@ export function collectPagesFromWorkspaces(workspaces) {
     return rows;
 }
 
-function workspaceClearLabel(ws) {
-    return ws?.group ? `${ws.group}/${ws.name}` : (ws?.name || '未命名主页');
-}
-
 function collectSelectiveClearNodes(nodes, wsId) {
     if (!Array.isArray(nodes)) return [];
     return nodes.map((node) => {
@@ -228,16 +224,50 @@ function collectSelectiveClearNodes(nodes, wsId) {
     });
 }
 
-export function collectSelectiveClearTree(workspaces) {
-    if (!Array.isArray(workspaces)) return [];
-    return workspaces.map((ws) => ({
+export function collectSelectiveClearTree(workspaces, workspaceGroups = []) {
+    const list = Array.isArray(workspaces) ? workspaces : [];
+    const groups = [];
+    (Array.isArray(workspaceGroups) ? workspaceGroups : []).forEach((g) => {
+        if (g && !groups.includes(g)) groups.push(g);
+    });
+    const groupsMap = {};
+    groups.forEach((g) => { groupsMap[g] = []; });
+    groupsMap[''] = [];
+    list.forEach((ws) => {
+        const g = ws.group || '';
+        if (g && !groups.includes(g)) {
+            groups.push(g);
+            groupsMap[g] = [];
+        }
+        groupsMap[g].push(ws);
+    });
+    const toWorkspaceNode = (ws) => ({
         type: 'workspace',
         key: `ws:${ws.id}`,
         wsId: ws.id,
         id: ws.id,
-        name: workspaceClearLabel(ws),
+        name: ws?.name || '未命名主页',
         children: collectSelectiveClearNodes(ws?.data, ws.id),
+    });
+    const out = groups.map((g) => ({
+        type: 'group',
+        key: `group:${g}`,
+        wsId: '',
+        id: g,
+        name: g,
+        children: (groupsMap[g] || []).map(toWorkspaceNode),
     }));
+    if ((groupsMap[''] || []).length) {
+        out.push({
+            type: 'group',
+            key: 'group:',
+            wsId: '',
+            id: '',
+            name: '未分类',
+            children: groupsMap[''].map(toWorkspaceNode),
+        });
+    }
+    return out;
 }
 
 export function filterSelectiveClearTree(tree, query) {

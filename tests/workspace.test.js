@@ -145,6 +145,10 @@ describe('applySelectiveClear', () => {
 
     const afterWs = applySelectiveClear(next, [{ type: 'workspace', wsId: 'ws_b', id: 'ws_b' }]);
     expect(afterWs.workspaces.map((ws) => ws.id)).toEqual(['ws_a', 'ws_c']);
+
+    const afterGroup = applySelectiveClear(sampleAppData(), [{ type: 'group', id: '办公' }]);
+    expect(afterGroup.workspaces.map((ws) => ws.id)).toEqual(['ws_b', 'ws_c']);
+    expect(afterGroup.workspaceGroups).toEqual(['个人']);
   });
 });
 

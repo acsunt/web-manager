@@ -1903,7 +1903,7 @@ function renderSelectiveClearList() {
     const selectAll = document.getElementById('selectiveClearSelectAll');
     if (!list) return;
     const query = document.getElementById('selectiveClearSearch')?.value || '';
-    const tree = filterSelectiveClearTree(collectSelectiveClearTree(appData.workspaces), query);
+    const tree = filterSelectiveClearTree(collectSelectiveClearTree(appData.workspaces, appData.workspaceGroups), query);
     list.innerHTML = '';
     if (!tree.length) {
         list.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">${query.trim() ? '无匹配项' : '暂无可清理的数据'}</div>`;
@@ -1913,18 +1913,23 @@ function renderSelectiveClearList() {
         }
         return;
     }
-    const walk = (nodes, depth) => {
+    const walk = (nodes, parent) => {
         nodes.forEach((node) => {
             const row = document.createElement('div');
-            row.className = 'selective-clear-row';
-            row.style.paddingLeft = `${8 + depth * 16}px`;
-            const icon = node.type === 'workspace' ? 'fa-house' : (node.type === 'category' ? 'fa-folder' : 'fa-file');
+            row.className = `selective-clear-row selective-clear-${node.type}`;
+            if (node.type === 'group' && !node.id) row.classList.add('is-uncat');
+            const icon = node.type === 'group' || node.type === 'category' ? 'fa-folder' : (node.type === 'workspace' ? 'fa-house' : 'fa-file');
             row.innerHTML = `<label><input type="checkbox" class="selective-clear-check" data-type="${escapeHtml(node.type)}" data-ws-id="${escapeHtml(String(node.wsId))}" data-id="${escapeHtml(String(node.id))}" onchange="onSelectiveClearCheckChange(this)"> <i class="fas ${icon}"></i> ${escapeHtml(node.name)}</label>`;
-            list.appendChild(row);
-            if (node.children && node.children.length) walk(node.children, depth + 1);
+            parent.appendChild(row);
+            if (node.children && node.children.length) {
+                const nest = document.createElement('div');
+                nest.className = 'selective-clear-children';
+                row.appendChild(nest);
+                walk(node.children, nest);
+            }
         });
     };
-    walk(tree, 0);
+    walk(tree, list);
     updateSelectiveClearSelectAllState();
 }
 
@@ -1948,31 +1953,14 @@ function setSelectiveClearChecked(checkbox, checked) {
 
 function childSelectiveClearChecks(checkbox) {
     const row = checkbox.closest('.selective-clear-row');
-    if (!row) return [];
-    const depth = parseInt(row.style.paddingLeft, 10) || 0;
-    const checks = [];
-    let next = row.nextElementSibling;
-    while (next && next.classList.contains('selective-clear-row')) {
-        const nextDepth = parseInt(next.style.paddingLeft, 10) || 0;
-        if (nextDepth <= depth) break;
-        const child = next.querySelector('.selective-clear-check');
-        if (child) checks.push(child);
-        next = next.nextElementSibling;
-    }
-    return checks;
+    const nest = row?.querySelector(':scope > .selective-clear-children');
+    return nest ? Array.from(nest.querySelectorAll('.selective-clear-check')) : [];
 }
 
 function parentSelectiveClearCheck(checkbox) {
     const row = checkbox.closest('.selective-clear-row');
-    if (!row) return null;
-    const depth = parseInt(row.style.paddingLeft, 10) || 0;
-    let prev = row.previousElementSibling;
-    while (prev && prev.classList.contains('selective-clear-row')) {
-        const prevDepth = parseInt(prev.style.paddingLeft, 10) || 0;
-        if (prevDepth < depth) return prev.querySelector('.selective-clear-check');
-        prev = prev.previousElementSibling;
-    }
-    return null;
+    const parentRow = row?.parentElement?.closest('.selective-clear-row');
+    return parentRow?.querySelector(':scope > label .selective-clear-check') || null;
 }
 
 function syncSelectiveClearAncestors(checkbox) {
@@ -2010,7 +1998,7 @@ function updateSelectiveClearSelectAllState() {
 function performSelectiveClearPages() {
     const checks = Array.from(document.querySelectorAll('.selective-clear-check:checked'));
     if (checks.length === 0) return alert('请先勾选需要清理的主页、分类或网页');
-    if (!confirm(`确定清理这 ${checks.length} 项吗？仅删除勾选项，不影响主题和未勾选项。`)) return;
+    if (!confirm(`确定清理选中的主页、分类或网页吗？仅删除勾选项，不影响主题和未勾选项。`)) return;
     const selected = checks.map((cb) => ({
         type: cb.dataset.type,
         wsId: cb.dataset.wsId,
@@ -2022,7 +2010,7 @@ function performSelectiveClearPages() {
     renderTree();
     renderWorkspaceList();
     closeModal('selectiveClearModal');
-    showToast(`已清理 ${checks.length} 项`, 1500);
+    showToast('已清理选中项', 1500);
 }
 
 // ================= 树形视图渲染 =================

@@ -81,6 +81,24 @@ public class MainActivity extends AppCompatActivity {
     private static final long SAMPLE_THROTTLE_MS = 180;
     private static final int FILE_CHOOSER_REQUEST = 1001;
 
+    static {
+        try {
+            System.loadLibrary("webmanager");
+        } catch (UnsatisfiedLinkError ignored) {
+            // 网页壳不依赖 native，缺库时仍可运行
+        }
+    }
+
+    private static native String nativeAbi();
+
+    String nativeAbiName() {
+        try {
+            return nativeAbi();
+        } catch (UnsatisfiedLinkError ignored) {
+            return "";
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

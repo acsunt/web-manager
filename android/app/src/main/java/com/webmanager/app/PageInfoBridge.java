@@ -166,6 +166,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public String getNativeAbi() {
+        return activity.nativeAbiName();
+    }
+
+    @JavascriptInterface
     public boolean copyText(String text) {
         try {
             final String value = text == null ? "" : text;

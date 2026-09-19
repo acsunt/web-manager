@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { cleanDistArtifacts } from './dist-artifacts.js';
 import { uploadDistToRelease } from './upload-apk.js';
+import { buildNative } from './build-native.js';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(rootDir, 'android');
@@ -86,6 +87,9 @@ async function main() {
     const version = readVersion();
     cleanDistArtifacts(distDir, version);
     copyHtmlIntoAssets(version);
+    const so32 = join(androidDir, 'app', 'src', 'main', 'jniLibs', 'armeabi-v7a', 'libwebmanager.so');
+    const so64 = join(androidDir, 'app', 'src', 'main', 'jniLibs', 'arm64-v8a', 'libwebmanager.so');
+    if (!existsSync(so32) || !existsSync(so64)) buildNative();
     console.log(`APK versionName = ${version}（与网页标题一致）`);
     await runGradle();
 

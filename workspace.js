@@ -73,6 +73,12 @@ export function groupPagesByWorkspace(pages) {
 export function applySelectiveClear(appData, selected, now = Date.now()) {
     if (!appData) return createDefaultAppData(now);
     const items = Array.isArray(selected) ? selected : [];
+    const groupNames = [...new Set(items
+        .filter((item) => item && item.type === 'group' && item.id != null)
+        .map((item) => String(item.id)))];
+    groupNames.forEach((name) => {
+        appData = removeWorkspaceGroup(appData, name, now);
+    });
     const workspaceIds = [...new Set(items
         .filter((item) => item && item.type === 'workspace' && item.wsId != null)
         .map((item) => item.wsId))];
@@ -81,6 +87,7 @@ export function applySelectiveClear(appData, selected, now = Date.now()) {
     }
     const remaining = items.filter((item) => (
         item
+        && item.type !== 'group'
         && item.type !== 'workspace'
         && item.wsId != null
         && item.id != null

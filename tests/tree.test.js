@@ -121,16 +121,16 @@ describe('collectPagesFromWorkspaces', () => {
 });
 
 describe('collectSelectiveClearTree', () => {
-  it('按主页、分类、网页分层，方便分级删除勾选', () => {
+  it('按主页分类、主页、分类、网页分层，方便分级删除勾选', () => {
     const tree = collectSelectiveClearTree([
       { id: 'ws_a', name: '工作', group: '办公', data: sampleTree() },
       { id: 'ws_b', name: '生活', group: '', data: [{ id: 'p3', type: 'page', name: '笔记' }] },
-    ]);
-    expect(tree).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'workspace', key: 'ws:ws_a', name: '办公/工作' }),
-      expect.objectContaining({ type: 'workspace', key: 'ws:ws_b', name: '生活' }),
-    ]));
-    const work = tree.find((item) => item.id === 'ws_a');
+    ], ['办公']);
+    expect(tree[0]).toMatchObject({ type: 'group', name: '办公' });
+    expect(tree[0].children[0]).toMatchObject({ type: 'workspace', id: 'ws_a', name: '工作' });
+    expect(tree[1]).toMatchObject({ type: 'group', name: '未分类' });
+    expect(tree[1].children[0]).toMatchObject({ type: 'workspace', id: 'ws_b', name: '生活' });
+    const work = tree[0].children[0];
     expect(work.children[0]).toMatchObject({ type: 'category', id: 'cat-root', name: '工作' });
     expect(work.children[0].children).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'page', id: 'page-1', name: '文档' }),
@@ -141,13 +141,14 @@ describe('collectSelectiveClearTree', () => {
 
 describe('filterSelectiveClearTree', () => {
   it('按名称搜索，保留匹配节点及其祖先', () => {
-    const tree = collectSelectiveClearTree([{ id: 'ws_a', name: '工作', group: '办公', data: sampleTree() }]);
+    const tree = collectSelectiveClearTree([{ id: 'ws_a', name: '工作', group: '办公', data: sampleTree() }], ['办公']);
     const filtered = filterSelectiveClearTree(tree, '深层');
     expect(filtered).toHaveLength(1);
-    expect(filtered[0].children[0].children).toEqual([
+    expect(filtered[0]).toMatchObject({ type: 'group', name: '办公' });
+    expect(filtered[0].children[0].children[0].children).toEqual([
       expect.objectContaining({ type: 'category', id: 'cat-nested' }),
     ]);
-    expect(filtered[0].children[0].children[0].children).toEqual([
+    expect(filtered[0].children[0].children[0].children[0].children).toEqual([
       expect.objectContaining({ type: 'page', id: 'page-2', name: '深层网页' }),
     ]);
   });

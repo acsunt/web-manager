@@ -17,6 +17,8 @@ def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionPa
 android {
     namespace 'com.webmanager.app'
     compileSdk 35
+    // 安装器按 APK 内 lib/<abi>/*.so 判断 32/64 位。没有 native 库时，ABI 分包也会打出两份几乎一样大的纯 Java APK，并常被显示成 32 位。
+    // 预编译 .so 放在 jniLibs，不依赖本机 CMake。源码在 src/main/cpp，可用 npm run native 重编。
 
     defaultConfig {
         applicationId 'com.webmanager.app'
@@ -24,6 +26,12 @@ android {
         targetSdk 35
         versionCode appVersionCode
         versionName appVersionName
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
     }
 
     splits {

@@ -6,6 +6,7 @@
     "build": "node scripts/build-single-html.js",
     "vendor": "node scripts/offline-vendor.js",
     "apk": "node scripts/build-apk.js",
+    "native": "node scripts/build-native.js",
     "apk:upload": "node scripts/upload-apk.js",
     "test": "vitest run",
     "test:watch": "vitest",
