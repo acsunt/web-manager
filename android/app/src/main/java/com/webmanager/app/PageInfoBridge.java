@@ -141,6 +141,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public int clearPageSiteData(String json) {
+        return activity.clearPageSiteData(json);
+    }
+
+    @JavascriptInterface
     public boolean openUrl(String url) {
         return activity.openUrl(url);
     }

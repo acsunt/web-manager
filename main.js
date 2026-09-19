@@ -20,7 +20,7 @@ import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
     getCurrentWorkspaceTree,
-    applySelectiveClear,
+    collectSelectiveClearPages,
     migratePersistedAppData,
     removeWorkspaceGroup,
     removeWorkspacesByIds,
@@ -1911,6 +1911,7 @@ function renderSelectiveClearList() {
             selectAll.checked = false;
             selectAll.indeterminate = false;
         }
+        updateSelectiveClearSubmitLabel();
         return;
     }
     const walk = (nodes, parent) => {
@@ -1943,6 +1944,27 @@ function openSelectiveClearModal() {
 
 function filterSelectiveClearList() {
     renderSelectiveClearList();
+}
+
+function selectedSelectiveClearItems() {
+    return Array.from(document.querySelectorAll('.selective-clear-check:checked')).map((cb) => ({
+        type: cb.dataset.type,
+        wsId: cb.dataset.wsId,
+        id: cb.dataset.id,
+    }));
+}
+
+function selectedSelectiveClearPages() {
+    return collectSelectiveClearPages(appData, selectedSelectiveClearItems());
+}
+
+function updateSelectiveClearSubmitLabel() {
+    const btn = document.getElementById('selectiveClearSubmitBtn');
+    if (!btn) return;
+    const count = selectedSelectiveClearPages().length;
+    btn.innerHTML = count > 0
+        ? `<i class="fas fa-broom"></i> 清理选中（${count} 个网页）`
+        : '<i class="fas fa-broom"></i> 清理选中';
 }
 
 function setSelectiveClearChecked(checkbox, checked) {
@@ -1993,24 +2015,43 @@ function updateSelectiveClearSelectAllState() {
     const selectedCount = checks.filter((cb) => cb.checked).length;
     selectAll.checked = checks.length > 0 && selectedCount === checks.length;
     selectAll.indeterminate = selectedCount > 0 && selectedCount < checks.length;
+    updateSelectiveClearSubmitLabel();
+}
+
+function uniquePageUrls(pages) {
+    const urls = [];
+    const seen = new Set();
+    (Array.isArray(pages) ? pages : []).forEach((page) => {
+        const list = Array.isArray(page?.urls) && page.urls.length
+            ? page.urls
+            : (page?.url ? [page.url] : []);
+        list.forEach((raw) => {
+            const url = String(raw || '').trim();
+            if (!url || seen.has(url)) return;
+            seen.add(url);
+            urls.push(url);
+        });
+    });
+    return urls;
+}
+
+function clearSelectedPageSiteData(pages) {
+    const urls = uniquePageUrls(pages);
+    if (!urls.length) return pages.length;
+    if (typeof window.Android?.clearPageSiteData !== 'function') return pages.length;
+    try {
+        window.Android.clearPageSiteData(JSON.stringify(urls));
+    } catch (e) { /* 无原生桥时仍按勾选网页数提示 */ }
+    return pages.length;
 }
 
 function performSelectiveClearPages() {
-    const checks = Array.from(document.querySelectorAll('.selective-clear-check:checked'));
-    if (checks.length === 0) return alert('请先勾选需要清理的主页、分类或网页');
-    if (!confirm(`确定清理选中的主页、分类或网页吗？仅删除勾选项，不影响主题和未勾选项。`)) return;
-    const selected = checks.map((cb) => ({
-        type: cb.dataset.type,
-        wsId: cb.dataset.wsId,
-        id: cb.dataset.id,
-    }));
-    appData = applySelectiveClear(appData, selected);
-    updateDataPointer();
-    save();
-    renderTree();
-    renderWorkspaceList();
+    const pages = selectedSelectiveClearPages();
+    if (pages.length === 0) return alert('请先勾选需要清理本地数据的主页、分类或网页');
+    if (!confirm(`确定清理选中的 ${pages.length} 个网页的本地站点数据吗？\n书签会保留，打开后相当于重新导入或换浏览器访问。`)) return;
+    const cleared = clearSelectedPageSiteData(pages);
     closeModal('selectiveClearModal');
-    showToast('已清理选中项', 1500);
+    showToast(`已清理 ${cleared} 个网页的本地数据`, 1800);
 }
 
 // ================= 树形视图渲染 =================

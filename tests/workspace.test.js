@@ -9,6 +9,8 @@ import {
   getCurrentWorkspaceTree,
   migratePersistedAppData,
   applySelectiveClear,
+  collectSelectiveClearPages,
+  collectSelectiveClearUrls,
   groupPagesByWorkspace,
   removeWorkspaceGroup,
   removeWorkspacesByIds,
@@ -130,25 +132,23 @@ describe('groupPagesByWorkspace', () => {
 });
 
 describe('applySelectiveClear', () => {
-  it('勾选主页时整页删除，勾选分类或网页时只删对应节点', () => {
+  it('勾选主页、分类或网页时收集对应网页，不删书签树', () => {
     const appData = sampleAppData();
     appData.workspaces[0].data = [
-      { id: 'cat-1', type: 'category', name: '分类', children: [{ id: 'p1', type: 'page', name: '文档' }] },
-      { id: 'p2', type: 'page', name: '笔记' },
+      { id: 'cat-1', type: 'category', name: '分类', children: [{ id: 'p1', type: 'page', name: '文档', url: 'https://a.example/doc' }] },
+      { id: 'p2', type: 'page', name: '笔记', url: 'https://a.example/note' },
     ];
-    const next = applySelectiveClear(appData, [
+    const pages = applySelectiveClear(appData, [
       { type: 'category', wsId: 'ws_a', id: 'cat-1' },
-      { type: 'page', wsId: 'ws_b', id: 'p-keep' },
+      { type: 'page', wsId: 'ws_c', id: 'p2' },
     ]);
-    expect(next.workspaces.find((ws) => ws.id === 'ws_a').data.map((node) => node.id)).toEqual(['p2']);
-    expect(next.workspaces.find((ws) => ws.id === 'ws_b')).toBeTruthy();
-
-    const afterWs = applySelectiveClear(next, [{ type: 'workspace', wsId: 'ws_b', id: 'ws_b' }]);
-    expect(afterWs.workspaces.map((ws) => ws.id)).toEqual(['ws_a', 'ws_c']);
-
-    const afterGroup = applySelectiveClear(sampleAppData(), [{ type: 'group', id: '办公' }]);
-    expect(afterGroup.workspaces.map((ws) => ws.id)).toEqual(['ws_b', 'ws_c']);
-    expect(afterGroup.workspaceGroups).toEqual(['个人']);
+    expect(pages.map((page) => page.id)).toEqual(['p1', 'p2']);
+    expect(appData.workspaces.find((ws) => ws.id === 'ws_a').data.map((node) => node.id)).toEqual(['cat-1', 'p2']);
+    expect(collectSelectiveClearPages(appData, [{ type: 'workspace', wsId: 'ws_a', id: 'ws_a' }]).map((page) => page.id)).toEqual(['p1', 'p2']);
+    expect(collectSelectiveClearUrls(appData, [{ type: 'group', id: '办公' }])).toEqual([
+      'https://a.example/doc',
+      'https://a.example/note',
+    ]);
   });
 });
 

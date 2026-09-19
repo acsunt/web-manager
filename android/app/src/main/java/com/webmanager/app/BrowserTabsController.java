@@ -592,6 +592,25 @@ final class BrowserTabsController {
         activity.setPageWindow(false);
     }
 
+    void reloadMatchingUrls(List<String> urls) {
+        if (urls == null || urls.isEmpty()) return;
+        Set<String> targets = new HashSet<>();
+        for (String url : urls) {
+            if (url != null && !url.trim().isEmpty()) targets.add(url.trim());
+        }
+        for (Tab tab : tabs) {
+            if (tab.webView == null) continue;
+            String current = tab.url == null ? "" : tab.url.trim();
+            String loaded = tab.webView.getUrl() == null ? "" : tab.webView.getUrl().trim();
+            if (!targets.contains(current) && !targets.contains(loaded)) continue;
+            tab.webView.clearCache(true);
+            tab.webView.clearFormData();
+            tab.webView.clearHistory();
+            if (!current.isEmpty()) tab.webView.loadUrl(current);
+            else if (!loaded.isEmpty()) tab.webView.loadUrl(loaded);
+        }
+    }
+
     private Tab addTab(String title, String url, String groupId) {
         Tab tab = new Tab();
         tab.id = UUID.randomUUID().toString();

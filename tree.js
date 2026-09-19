@@ -194,6 +194,7 @@ export function collectPagesFromWorkspaces(workspaces) {
                 name: page.name || '未命名网页',
                 path: page.path || '根目录',
                 url: (urls[0] && urls[0].url) || '',
+                urls: urls.map((item) => String(item?.url || '').trim()).filter(Boolean),
             });
         });
     });

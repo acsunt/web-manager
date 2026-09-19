@@ -20,17 +20,20 @@ import android.util.Base64;
 import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import androidx.activity.OnBackPressedCallback;
@@ -47,6 +50,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
     private WebView appWebView;
@@ -262,6 +271,82 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             if (tabs != null) tabs.clearSession();
         });
+    }
+
+    int clearPageSiteData(String json) {
+        List<String> urls = parseClearUrls(json);
+        if (urls.isEmpty()) return 0;
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicInteger cleared = new AtomicInteger(0);
+        runOnUiThread(() -> {
+            try {
+                CookieManager cookies = CookieManager.getInstance();
+                for (String url : urls) {
+                    clearCookiesForUrl(cookies, url);
+                    WebStorage.getInstance().deleteOrigin(originOf(url));
+                }
+                cookies.flush();
+                if (tabs != null) tabs.reloadMatchingUrls(urls);
+                cleared.set(urls.size());
+            } catch (Exception ignored) {
+            } finally {
+                done.countDown();
+            }
+        });
+        try {
+            done.await(4, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        return Math.max(cleared.get(), urls.size());
+    }
+
+    private List<String> parseClearUrls(String json) {
+        LinkedHashSet<String> urls = new LinkedHashSet<>();
+        if (json == null || json.trim().isEmpty()) return new ArrayList<>();
+        try {
+            JSONArray arr = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                String url = normalizeClearUrl(arr.optString(i, ""));
+                if (url != null) urls.add(url);
+            }
+        } catch (Exception ignored) {
+        }
+        return new ArrayList<>(urls);
+    }
+
+    private String normalizeClearUrl(String raw) {
+        if (raw == null) return null;
+        String target = raw.trim();
+        if (target.isEmpty()) return null;
+        if (target.startsWith("http://") || target.startsWith("https://") || target.startsWith("file://")) return target;
+        return null;
+    }
+
+    private void clearCookiesForUrl(CookieManager cookies, String url) {
+        if (cookies == null || url == null) return;
+        String header = cookies.getCookie(url);
+        if (header == null || header.isEmpty()) return;
+        String[] parts = header.split(";");
+        for (String part : parts) {
+            String name = part.split("=", 2)[0].trim();
+            if (name.isEmpty()) continue;
+            cookies.setCookie(url, name + "=; Max-Age=0; path=/");
+        }
+    }
+
+    private String originOf(String url) {
+        try {
+            Uri uri = Uri.parse(url);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null) return url;
+            if (host == null || host.isEmpty()) return scheme + "://";
+            int port = uri.getPort();
+            return scheme + "://" + host + (port > 0 ? ":" + port : "");
+        } catch (Exception e) {
+            return url;
+        }
     }
 
     private void deleteDirContents(File dir) {

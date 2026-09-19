@@ -1,4 +1,4 @@
-import { deleteNode } from './tree.js';
+import { collectPagesFromWorkspaces, findNode } from './tree.js';
 
 export function createDefaultAppData(now = Date.now()) {
     const id = 'ws_' + now;
@@ -70,42 +70,67 @@ export function groupPagesByWorkspace(pages) {
     return groups;
 }
 
-export function applySelectiveClear(appData, selected, now = Date.now()) {
-    if (!appData) return createDefaultAppData(now);
+function pageKey(wsId, id) {
+    return `${String(wsId)}:${String(id)}`;
+}
+
+function collectSelectedPageIds(appData, selected) {
     const items = Array.isArray(selected) ? selected : [];
-    const groupNames = [...new Set(items
-        .filter((item) => item && item.type === 'group' && item.id != null)
-        .map((item) => String(item.id)))];
-    groupNames.forEach((name) => {
-        appData = removeWorkspaceGroup(appData, name, now);
+    const ids = new Set();
+    const markWorkspace = (wsId) => {
+        const ws = appData?.workspaces?.find((entry) => String(entry.id) === String(wsId));
+        collectPagesFromWorkspaces(ws ? [ws] : []).forEach((page) => ids.add(pageKey(page.wsId, page.id)));
+    };
+    items.forEach((item) => {
+        if (!item) return;
+        if (item.type === 'group') {
+            const groupName = String(item.id || '');
+            (appData?.workspaces || [])
+                .filter((ws) => String(ws.group || '') === groupName)
+                .forEach((ws) => markWorkspace(ws.id));
+            return;
+        }
+        if (item.type === 'workspace' && item.wsId != null) {
+            markWorkspace(item.wsId);
+            return;
+        }
+        if (item.wsId == null || item.id == null) return;
+        const ws = appData?.workspaces?.find((entry) => String(entry.id) === String(item.wsId));
+        if (!ws) return;
+        if (item.type === 'page') {
+            ids.add(pageKey(item.wsId, item.id));
+            return;
+        }
+        if (item.type === 'category') {
+            const node = findNode(item.id, ws.data);
+            collectPagesFromWorkspaces([{ ...ws, data: node?.children || [] }]).forEach((page) => {
+                ids.add(pageKey(item.wsId, page.id));
+            });
+        }
     });
-    const workspaceIds = [...new Set(items
-        .filter((item) => item && item.type === 'workspace' && item.wsId != null)
-        .map((item) => item.wsId))];
-    if (workspaceIds.length) {
-        appData = removeWorkspacesByIds(appData, workspaceIds, now);
-    }
-    const remaining = items.filter((item) => (
-        item
-        && item.type !== 'group'
-        && item.type !== 'workspace'
-        && item.wsId != null
-        && item.id != null
-        && !workspaceIds.map(String).includes(String(item.wsId))
-    ));
-    remaining
-        .filter((item) => item.type === 'category')
-        .forEach((item) => {
-            const ws = appData.workspaces.find((entry) => String(entry.id) === String(item.wsId));
-            if (ws) deleteNode(item.id, ws.data);
+    return ids;
+}
+
+export function collectSelectiveClearPages(appData, selected) {
+    const ids = collectSelectedPageIds(appData, selected);
+    return collectPagesFromWorkspaces(appData?.workspaces).filter((page) => ids.has(pageKey(page.wsId, page.id)));
+}
+
+export function collectSelectiveClearUrls(appData, selected) {
+    const urls = [];
+    const seen = new Set();
+    collectSelectiveClearPages(appData, selected).forEach((page) => {
+        (Array.isArray(page?.urls) ? page.urls : []).forEach((url) => {
+            if (!url || seen.has(url)) return;
+            seen.add(url);
+            urls.push(url);
         });
-    remaining
-        .filter((item) => item.type === 'page')
-        .forEach((item) => {
-            const ws = appData.workspaces.find((entry) => String(entry.id) === String(item.wsId));
-            if (ws) deleteNode(item.id, ws.data);
-        });
-    return ensureValidCurrentWorkspace(appData, now);
+    });
+    return urls;
+}
+
+export function applySelectiveClear(appData, selected) {
+    return collectSelectiveClearPages(appData, selected);
 }
 
 export function migratePersistedAppData(raw, now = Date.now()) {
