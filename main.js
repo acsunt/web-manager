@@ -17,7 +17,7 @@ import {
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree } from './utils.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -2591,7 +2591,11 @@ function exportJsonFile(isAll = false){
     
     if (ids.length === 0) return alert("请至少选择一个主页进行导出"); 
     let workspacesToExport = ids.map(id => appData.workspaces.find(w => w.id === id)).filter(Boolean);
-    const treeJson = (nodes) => JSON.stringify(hideIcons ? stripIconFieldsFromTree(nodes) : nodes, null, 2);
+    const treeJson = (nodes) => JSON.stringify(
+        stripRedundantUrlFromTree(hideIcons ? stripIconFieldsFromTree(nodes) : nodes),
+        null,
+        2
+    );
     
     if (ids.length === 1) { 
         const ws = workspacesToExport[0]; const wsCount = countTotalPages(ws.data); const wsDispName = ws.group ? `${ws.group}_${ws.name}`.replace(/\//g, '_') : ws.name;

@@ -242,6 +242,17 @@ export function stripIconFieldsFromTree(nodes) {
     });
 }
 
+export function stripRedundantUrlFromTree(nodes) {
+    if (!Array.isArray(nodes)) return [];
+    return nodes.map((node) => {
+        if (!node || typeof node !== 'object') return node;
+        const next = { ...node };
+        if (Array.isArray(next.urls) && next.urls.length > 0) delete next.url;
+        if (Array.isArray(next.children)) next.children = stripRedundantUrlFromTree(next.children);
+        return next;
+    });
+}
+
 export function parseColumnMode(value, fallback) {
     const n = parseInt(value, 10);
     if (Number.isInteger(n) && n >= 0 && n <= 8) return n;

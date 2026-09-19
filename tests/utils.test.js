@@ -19,6 +19,7 @@ import {
   resolveColumnModes,
   parseHideIconsPref,
   stripIconFieldsFromTree,
+  stripRedundantUrlFromTree,
 } from '../utils.js';
 
 describe('normalizeUrls', () => {
@@ -442,5 +443,56 @@ describe('stripIconFieldsFromTree', () => {
     }]);
     expect(tree[0].children[0].iconType).toBe('custom');
     expect(tree[0].children[0].recognizedName).toBe('识别名');
+  });
+});
+
+describe('stripRedundantUrlFromTree', () => {
+  it('有 urls 时去掉多余的 url，不改原树', () => {
+    const tree = [{
+      type: 'category',
+      name: '分类',
+      children: [{
+        type: 'page',
+        name: '网页',
+        url: 'https://a.com',
+        urls: [{ url: 'https://a.com', name: '' }, { url: 'https://b.com', name: '备用' }],
+      }],
+    }];
+    expect(stripRedundantUrlFromTree(tree)).toEqual([{
+      type: 'category',
+      name: '分类',
+      children: [{
+        type: 'page',
+        name: '网页',
+        urls: [{ url: 'https://a.com', name: '' }, { url: 'https://b.com', name: '备用' }],
+      }],
+    }]);
+    expect(tree[0].children[0].url).toBe('https://a.com');
+  });
+
+  it('只有旧 url 字段时原样保留', () => {
+    expect(stripRedundantUrlFromTree([{
+      type: 'page',
+      name: '旧页',
+      url: 'https://legacy.com',
+    }])).toEqual([{
+      type: 'page',
+      name: '旧页',
+      url: 'https://legacy.com',
+    }]);
+  });
+
+  it('urls 为空时仍保留 url', () => {
+    expect(stripRedundantUrlFromTree([{
+      type: 'page',
+      name: '网页',
+      url: 'https://a.com',
+      urls: [],
+    }])).toEqual([{
+      type: 'page',
+      name: '网页',
+      url: 'https://a.com',
+      urls: [],
+    }]);
   });
 });
