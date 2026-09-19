@@ -271,6 +271,15 @@ body.hide-local-tags .url-type-badge { display: none !important; }
 .toolbar-config-checkbox { order: 1; margin: 0; transform: scale(1.1); accent-color: var(--primary-color); cursor: pointer; }
 .toolbar-sort-active .toolbar-config-checkbox { display: none; }
 .toolbar-sort-controls { display: flex; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+.toolbar-hide-icons-item { display: flex; align-items: center; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); cursor: pointer; gap: 8px; }
+.toolbar-hide-icons-item:hover { background: var(--bg-color); }
+body.hide-icons #iconModeBtn,
+body.hide-icons #iconGlobalConfigBtn,
+body.hide-icons #checkAllIconsBtn,
+body.hide-icons #exportIconSettingsRow,
+body.hide-icons #fetchInfoBtn,
+body.hide-icons #iconEditGroup,
+body.hide-icons #recognizedNameGroup { display: none !important; }
 
 .preview-list { list-style: none; padding: 0; margin: 0; }
 .preview-link-item { padding: 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; display: flex; align-items: center; transition: background 0.2s; }

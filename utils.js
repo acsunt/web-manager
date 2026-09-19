@@ -223,6 +223,24 @@ export function escapeHtml(value) {
 
 export const DEFAULT_LIST_COLUMN_MODE = 3;
 export const DEFAULT_ICON_COLUMN_MODE = 0;
+export const HIDE_ICONS_STORAGE_KEY = 'webManagerHideIcons';
+export const ICON_FEATURE_FIELDS = ['iconType', 'customIcon', 'recognizedName'];
+
+export function parseHideIconsPref(value) {
+    if (value == null || value === '') return true;
+    return String(value) !== 'false';
+}
+
+export function stripIconFieldsFromTree(nodes) {
+    if (!Array.isArray(nodes)) return [];
+    return nodes.map((node) => {
+        if (!node || typeof node !== 'object') return node;
+        const next = { ...node };
+        ICON_FEATURE_FIELDS.forEach((key) => { delete next[key]; });
+        if (Array.isArray(next.children)) next.children = stripIconFieldsFromTree(next.children);
+        return next;
+    });
+}
 
 export function parseColumnMode(value, fallback) {
     const n = parseInt(value, 10);

@@ -16,7 +16,7 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, normalizeUrls, parseBookmarkHtml, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -83,6 +83,7 @@ let isLocalTagVisible = false;
 let isTestMode = false; 
 
 let isIconMode = false;
+let hideIcons = true;
 let iconShape = 'square';
 
 let toolbarSortable = null;
@@ -362,7 +363,9 @@ function init() {
         if (savedLocalTagVisible === 'true') { isLocalTagVisible = true; const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.add('active'); document.body.classList.remove('hide-local-tags'); } else { isLocalTagVisible = false; document.body.classList.add('hide-local-tags'); const btn = document.getElementById('localTagToggleBtn'); if (btn) btn.classList.remove('active'); }
 
         isIconMode = localStorage.getItem('webManagerIconMode') === 'true';
+        hideIcons = parseHideIconsPref(localStorage.getItem(HIDE_ICONS_STORAGE_KEY));
         iconShape = localStorage.getItem('webManagerIconShape') || 'square';
+        applyHideIconsMode();
         applyIconMode();
         applyColumnMode();
 
@@ -421,13 +424,21 @@ function syncBrowserChrome() {
     try { window.Android.setBrowserChromeVisible(isBrowserWidgetEnabled()); } catch (e) { /* 网页没有原生桥 */ }
 }
 
+function isIconFeatureItem(item) {
+    return item && item.id === 'iconGlobalConfigBtn';
+}
+
 function renderToolbar() {
     const container = document.getElementById('toolbarBtnRow');
     const frag = document.createDocumentFragment();
     toolbarConfig.forEach(item => {
         if (isBrowserWidgetItem(item)) return;
         const btn = document.getElementById(item.id);
-        if (btn) { btn.style.display = item.show ? '' : 'none'; frag.appendChild(btn); }
+        if (btn) {
+            const show = item.show && !(hideIcons && isIconFeatureItem(item));
+            btn.style.display = show ? '' : 'none';
+            frag.appendChild(btn);
+        }
     });
     container.appendChild(frag);
     syncBrowserChrome();
@@ -441,12 +452,15 @@ function openToolbarEditModal() {
     list.innerHTML = ''; list.className = 'toolbar-config-list cols-' + toolbarColMode; updateToolbarColBtn();
     toolbarConfig.forEach(item => {
         if (isBrowserWidgetItem(item) && !isNativeApp()) return;
+        if (hideIcons && isIconFeatureItem(item)) return;
         const div = document.createElement('div');
         div.className = 'toolbar-config-item'; div.dataset.id = item.id;
         div.onclick = function(e) { if(isToolbarSorting) return; if (e.target.type !== 'checkbox') { const cb = div.querySelector('.toolbar-config-checkbox'); cb.checked = !cb.checked; saveToolbarCheckboxState(); } };
         div.innerHTML = `<input type="checkbox" class="toolbar-config-checkbox" ${item.show ? 'checked' : ''} onchange="saveToolbarCheckboxState()"> <span class="toolbar-config-name">${item.name}</span>`;
         list.appendChild(div);
     });
+    const hideIconsToggle = document.getElementById('hideIconsToggle');
+    if (hideIconsToggle) hideIconsToggle.checked = hideIcons;
     isToolbarSorting = false; document.getElementById('toolbarSortStartBtn').style.display = 'flex'; document.getElementById('toolbarSortActions').style.display = 'none'; list.classList.remove('toolbar-sort-active');
     if (toolbarSortable) { toolbarSortable.destroy(); toolbarSortable = null; }
     document.getElementById('toolbarEditModal').classList.add('active');
@@ -467,6 +481,11 @@ function confirmToolbarSort() {
     if (widget && !newConfig.find(isBrowserWidgetItem)) {
         const ioIndex = newConfig.findIndex(item => item.id === 'ioBtn');
         newConfig.splice(ioIndex >= 0 ? ioIndex + 1 : Math.max(0, newConfig.length - 1), 0, widget);
+    }
+    const iconItem = toolbarConfig.find(isIconFeatureItem);
+    if (iconItem && !newConfig.find(isIconFeatureItem)) {
+        const autoIndex = newConfig.findIndex(item => item.id === 'autoRefreshToggleBtn');
+        newConfig.splice(autoIndex >= 0 ? autoIndex + 1 : Math.max(0, newConfig.length - 1), 0, iconItem);
     }
     toolbarConfig = newConfig;
     localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig));
@@ -761,6 +780,7 @@ document.getElementById('urlListContainer').addEventListener('input', (e) => {
 });
 
 async function fetchPageInfo() {
+    if (hideIcons) return;
     const urlInputs = document.querySelectorAll('#urlListContainer .url-value-input');
     if(urlInputs.length === 0) return;
     let targetUrl = urlInputs[0].value.trim();
@@ -885,6 +905,7 @@ function getIconHtml(node) {
 
 // ====== 图标设置相关 ======
 function openIconGlobalModal() {
+    if (hideIcons) return;
     document.querySelector(`input[name="globalIconShape"][value="${iconShape}"]`).checked = true;
     document.querySelectorAll('input[name="batchIconType"]').forEach(r => {
         r.onchange = (e) => {
@@ -1096,8 +1117,8 @@ async function applyBatchIconName() {
 // ================= 网页与分类的保存流程 =================
 // 新增和编辑共用此入口：先规范化网址并检查重复，再更新树结构和持久化数据。
 function saveData(){
-    const recognizedRaw = (document.getElementById('editRecognizedName')?.value || '').trim();
-    const autoOverwrite = document.getElementById('autoTitleCheck')?.checked;
+    const recognizedRaw = hideIcons ? '' : (document.getElementById('editRecognizedName')?.value || '').trim();
+    const autoOverwrite = !hideIcons && document.getElementById('autoTitleCheck')?.checked;
     const nameRaw = document.getElementById('editName').value;
     const note=document.getElementById('editNote').value; const parentId=document.getElementById('selectedParentId').value;
     const relPos = document.querySelector('input[name="relPosition"]:checked').value; const addToTop = (document.querySelector('input[name="insidePos"]:checked').value === 'top'); const editPos = document.querySelector('input[name="editPos"]:checked') ? document.querySelector('input[name="editPos"]:checked').value : 'keep';
@@ -1115,8 +1136,10 @@ function saveData(){
         });
         if (newUrls.length === 0) return alert('请至少填写一个有效的网址');
         
-        iconType = document.querySelector('input[name="iconType"]:checked').value;
-        customIcon = document.getElementById('customIconData').value;
+        if (!hideIcons) {
+            iconType = document.querySelector('input[name="iconType"]:checked').value;
+            customIcon = document.getElementById('customIconData').value;
+        }
     }
 
     if (newUrls.length > 0) {
@@ -1165,10 +1188,13 @@ function saveData(){
         const newNode = {
             id:Date.now(), type:addType, name:name, children:addType==='category'?[]:undefined,
             urls:addType==='page'?newUrls:undefined, url:addType==='page'?(newUrls.length>0?newUrls[0].url:'') : undefined,
-            note:addType==='page'?note:undefined, isPinned:false, collapsed:false,
-            iconType: addType==='page'?iconType:undefined, customIcon: addType==='page'?customIcon:undefined,
-            recognizedName: addType==='page'?(recognizedRaw||undefined):undefined
+            note:addType==='page'?note:undefined, isPinned:false, collapsed:false
         };
+        if (!hideIcons && addType==='page') {
+            newNode.iconType = iconType;
+            newNode.customIcon = customIcon;
+            if (recognizedRaw) newNode.recognizedName = recognizedRaw;
+        }
         if (insertIndex !== -1) { if (relPos === 'before') targetList.splice(insertIndex, 0, newNode); else targetList.splice(insertIndex + 1, 0, newNode); } else { if (addToTop) targetList.unshift(newNode); else targetList.push(newNode); }
         changeMsg = addType==='page' ? `已保存 (新增 ${newUrls.length} 个网址)` : '分类已添加';
     } else {
@@ -1177,8 +1203,10 @@ function saveData(){
             const oldUrls = normalizeUrls(node); const oldJson = JSON.stringify(oldUrls); node.name=name;
             if(node.type==='page'){
                 node.urls = newUrls; node.url = newUrls.length > 0 ? newUrls[0].url : ''; node.note = note;
-                node.iconType = iconType; node.customIcon = customIcon;
-                node.recognizedName = recognizedRaw || undefined;
+                if (!hideIcons) {
+                    node.iconType = iconType; node.customIcon = customIcon;
+                    node.recognizedName = recognizedRaw || undefined;
+                }
                 const newJson = JSON.stringify(newUrls);
                 if (oldJson !== newJson) changeMsg = (newUrls.length !== oldUrls.length) ? `网址数量变化: ${oldUrls.length} -> ${newUrls.length}` : '网址更新成功'; else changeMsg = '修改已保存';
             } else { changeMsg = '已保存'; }
@@ -2163,7 +2191,7 @@ function createNodeEl(node,level=0){
     } else { 
         const card=document.createElement('div'); 
         card.className='page-card'; card.dataset.id=node.id; card.dataset.type='page'; card.id='node-'+node.id; 
-        if(node.isPinned && !isIconMode) card.style.backgroundColor="var(--highlight-color, #fffbf0)"; 
+        if(node.isPinned && !(isIconMode && !hideIcons)) card.style.backgroundColor="var(--highlight-color, #fffbf0)"; 
         
         const urls = normalizeUrls(node); 
         const mainUrl = urls.length > 0 ? urls[0].url : ''; 
@@ -2176,7 +2204,7 @@ function createNodeEl(node,level=0){
         checkbox.type='checkbox'; checkbox.className='item-checkbox'; checkbox.dataset.id=node.id; checkbox.dataset.type='page'; 
         checkbox.onclick=(e)=>e.stopPropagation(); checkbox.onchange=updateSelectedCount; 
 
-        if (isIconMode) {
+        if (isIconMode && !hideIcons) {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = getIconHtml(node);
             header.appendChild(tempDiv.firstChild);
@@ -2484,10 +2512,11 @@ function exportJsonFile(isAll = false){
     
     if (ids.length === 0) return alert("请至少选择一个主页进行导出"); 
     let workspacesToExport = ids.map(id => appData.workspaces.find(w => w.id === id)).filter(Boolean);
+    const treeJson = (nodes) => JSON.stringify(hideIcons ? stripIconFieldsFromTree(nodes) : nodes, null, 2);
     
     if (ids.length === 1) { 
         const ws = workspacesToExport[0]; const wsCount = countTotalPages(ws.data); const wsDispName = ws.group ? `${ws.group}_${ws.name}`.replace(/\//g, '_') : ws.name;
-        const content = JSON.stringify(ws.data, null, 2); const blob = new Blob([content], {type: "application/json"}); downloadBlob(blob, `${wsDispName} (${wsCount}).json`); 
+        const content = treeJson(ws.data); const blob = new Blob([content], {type: "application/json"}); downloadBlob(blob, `${wsDispName} (${wsCount}).json`); 
     } else { 
         const zip = new JSZip(); let groupOrder = appData.workspaceGroups || []; let existingGroupsInExport = [...new Set(workspacesToExport.map(w => w.group || ''))];
         existingGroupsInExport.sort((a,b) => { if (a === '') return -1; if (b === '') return 1; const idxA = groupOrder.indexOf(a); const idxB = groupOrder.indexOf(b); if (idxA!==-1 && idxB!==-1) return idxA - idxB; if (idxA!==-1) return -1; if (idxB!==-1) return 1; return a.localeCompare(b); });
@@ -2496,7 +2525,7 @@ function exportJsonFile(isAll = false){
         let wsIndexMap = {}; let totalOverallCount = 0; 
         workspacesToExport.forEach(ws => {
             const g = ws.group || ''; if (wsIndexMap[g] === undefined) wsIndexMap[g] = 0; const wsCount = countTotalPages(ws.data); totalOverallCount += wsCount; 
-            const wsDispName = ws.name.replace(/\//g, '_'); const content = JSON.stringify(ws.data, null, 2); const paddedIndex = String(wsIndexMap[g]).padStart(3, '0'); const folderName = groupFolderMap[g];
+            const wsDispName = ws.name.replace(/\//g, '_'); const content = treeJson(ws.data); const paddedIndex = String(wsIndexMap[g]).padStart(3, '0'); const folderName = groupFolderMap[g];
             zip.folder(folderName).file(`${paddedIndex}_${wsDispName} (${wsCount}).json`, content); wsIndexMap[g]++;
         }); 
         zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, `workspaces_backup_trees (${totalOverallCount}页).zip`); }); 
@@ -2625,10 +2654,10 @@ function menuAction(action){
         document.getElementById('urlGroup').style.display=node.type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=node.type==='page'?'block':'none';
         document.getElementById('parentSelectGroup').style.display='block'; document.getElementById('parentDropdownList').style.display='none';
         
-        document.getElementById('iconEditGroup').style.display=node.type==='page'?'block':'none';
+        document.getElementById('iconEditGroup').style.display=(!hideIcons && node.type==='page')?'block':'none';
         const recognizedGroup = document.getElementById('recognizedNameGroup');
-        if (recognizedGroup) recognizedGroup.style.display = node.type === 'page' ? 'block' : 'none';
-        if(node.type === 'page') {
+        if (recognizedGroup) recognizedGroup.style.display = (!hideIcons && node.type === 'page') ? 'block' : 'none';
+        if(!hideIcons && node.type === 'page') {
             const iType = node.iconType || 'auto';
             const matchedRadio = document.querySelector(`input[name="iconType"][value="${iType}"]`);
             if(matchedRadio) matchedRadio.checked = true;
@@ -2748,10 +2777,10 @@ function openAddModal(type, preSelectedParentId=null, relativePos='inside', pres
     if (recognizedInput) recognizedInput.value = '';
     document.getElementById('autoTitleCheck').checked = false;
     const recognizedGroup = document.getElementById('recognizedNameGroup');
-    if (recognizedGroup) recognizedGroup.style.display = type === 'page' ? 'block' : 'none';
+    if (recognizedGroup) recognizedGroup.style.display = (!hideIcons && type === 'page') ? 'block' : 'none';
     
-    document.getElementById('iconEditGroup').style.display=type==='page'?'block':'none';
-    if(type === 'page') {
+    document.getElementById('iconEditGroup').style.display=(!hideIcons && type==='page')?'block':'none';
+    if(!hideIcons && type === 'page') {
         document.querySelector('input[name="iconType"][value="auto"]').checked = true;
         document.getElementById('customIconData').value = '';
         document.getElementById('imgUrlPanel').style.display = 'none';
@@ -2874,7 +2903,7 @@ window.addEventListener('scroll', function() { if(window.scrollSaveTimeout) clea
 function save() { localStorage.setItem('webManagerDataProMax', JSON.stringify(appData)); }
 
 function setColumnMode(val) { 
-    if (isIconMode) {
+    if (isIconMode && !hideIcons) {
         iconColumnMode = val;
         localStorage.setItem('iconColumnMode', iconColumnMode);
     } else {
@@ -2889,7 +2918,7 @@ function applyColumnMode() {
     const btn = document.getElementById('colModeBtn'); 
     document.body.classList.remove('col-mode-auto', 'col-mode-1', 'col-mode-2', 'col-mode-3', 'col-mode-4', 'col-mode-5', 'col-mode-6', 'col-mode-7', 'col-mode-8'); 
     
-    let currentMode = isIconMode ? iconColumnMode : listColumnMode;
+    let currentMode = (isIconMode && !hideIcons) ? iconColumnMode : listColumnMode;
 
     if (currentMode >= 1 && currentMode <= 8) { 
         document.body.classList.add(`col-mode-${currentMode}`); 
@@ -2903,6 +2932,7 @@ function applyColumnMode() {
 }
 
 function toggleIconMode() {
+    if (hideIcons) return;
     isIconMode = !isIconMode;
     localStorage.setItem('webManagerIconMode', isIconMode);
     applyIconMode();
@@ -2935,17 +2965,53 @@ function applyAlignState(btn){
 
 function applyIconMode() {
     const btn = document.getElementById('iconModeBtn');
-    if (isIconMode) {
+    const showIconMode = isIconMode && !hideIcons;
+    if (showIconMode) {
         document.body.classList.add('icon-mode');
         if (btn) btn.classList.add('active');
     } else {
         document.body.classList.remove('icon-mode');
         if (btn) btn.classList.remove('active');
     }
-    if (iconShape === 'circle') {
+    if (iconShape === 'circle' && !hideIcons) {
         document.body.classList.add('icon-shape-circle');
     } else {
         document.body.classList.remove('icon-shape-circle');
+    }
+}
+
+function applyHideIconsMode() {
+    if (hideIcons) document.body.classList.add('hide-icons');
+    else document.body.classList.remove('hide-icons');
+    const hideIconsToggle = document.getElementById('hideIconsToggle');
+    if (hideIconsToggle) hideIconsToggle.checked = hideIcons;
+    const exportHint = document.getElementById('exportFileHint');
+    if (exportHint) {
+        exportHint.textContent = hideIcons
+            ? '(支持导出 JSON 或 ZIP 结构目录打包)'
+            : '(支持导出 JSON 或 ZIP 结构目录打包，或单独的图标配置)';
+    }
+    renderToolbar();
+    applyIconMode();
+    applyColumnMode();
+}
+
+function toggleHideIcons(checked) {
+    hideIcons = !!checked;
+    localStorage.setItem(HIDE_ICONS_STORAGE_KEY, String(hideIcons));
+    applyHideIconsMode();
+    renderTree();
+    if (document.getElementById('toolbarEditModal')?.classList.contains('active')) {
+        openToolbarEditModal();
+    }
+    const editModal = document.getElementById('editModal');
+    if (editModal?.classList.contains('active')) {
+        const type = isAdding ? addType : document.getElementById('editType').value;
+        const show = !hideIcons && type === 'page';
+        document.getElementById('iconEditGroup').style.display = show ? 'block' : 'none';
+        const recognizedGroup = document.getElementById('recognizedNameGroup');
+        if (recognizedGroup) recognizedGroup.style.display = show ? 'block' : 'none';
+        if (show && type === 'page') updateIconPreview();
     }
 }
 
@@ -3007,6 +3073,7 @@ function deleteCssPreset() {
 // ==== 覆盖重写的方法 (修复和增强功能) ====
 
 function exportIconSettings() {
+    if (hideIcons) return;
     let iconData = [];
     appData.workspaces.forEach(ws => {
         function traverse(nodes) {
@@ -3223,6 +3290,7 @@ function importBookmarkHtml(content) {
 // ================= 全站图标并发识别 =================
 // 使用固定数量 worker 控制请求并发；暂停和终止状态由报告窗口统一管理。
 async function checkAllIcons() {
+    if (hideIcons) return;
     closeModal('toolsModal');
     let pages = [];
     appData.workspaces.forEach(ws => { 
@@ -3400,6 +3468,7 @@ const inlineHandlers = {
     toggleExpandAll,
     toggleSortMode,
     toggleIconMode,
+    toggleHideIcons,
     openWorkspaceModal,
     openColModeMenu,
     toggleToolbar,

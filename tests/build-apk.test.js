@@ -304,8 +304,8 @@ describe('APK 版本号', () => {
     const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
     expect(html).toContain('id="recognizedNameGroup"');
     expect(html).toMatch(/id="recognizedNameGroup"[^>]*style="display: none;/);
-    expect(main).toContain("recognizedGroup.style.display = type === 'page' ? 'block' : 'none'");
-    expect(main).toContain("recognizedGroup.style.display = node.type === 'page' ? 'block' : 'none'");
+    expect(main).toContain("recognizedGroup.style.display = (!hideIcons && type === 'page') ? 'block' : 'none'");
+    expect(main).toContain("recognizedGroup.style.display = (!hideIcons && node.type === 'page') ? 'block' : 'none'");
     expect(main).toContain("currentType === 'page' && autoOverwrite && recognizedRaw");
     expect(readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8')).toContain('copyHtmlIntoAssets');
   });

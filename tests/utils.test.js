@@ -17,6 +17,8 @@ import {
   parseSearchHistory,
   rememberSearchQuery,
   resolveColumnModes,
+  parseHideIconsPref,
+  stripIconFieldsFromTree,
 } from '../utils.js';
 
 describe('normalizeUrls', () => {
@@ -399,5 +401,46 @@ describe('resolveColumnModes', () => {
       iconColumnMode: 0,
       clearLegacyColumnMode: false,
     });
+  });
+});
+
+describe('parseHideIconsPref', () => {
+  it('缺省或空值默认隐藏图标', () => {
+    expect(parseHideIconsPref(null)).toBe(true);
+    expect(parseHideIconsPref('')).toBe(true);
+    expect(parseHideIconsPref(undefined)).toBe(true);
+  });
+
+  it('只有显式 false 才显示图标功能', () => {
+    expect(parseHideIconsPref('false')).toBe(false);
+    expect(parseHideIconsPref('true')).toBe(true);
+  });
+});
+
+describe('stripIconFieldsFromTree', () => {
+  it('导出时去掉图标和识别名称，不改原树', () => {
+    const tree = [{
+      type: 'category',
+      name: '分类',
+      children: [{
+        type: 'page',
+        name: '网页',
+        url: 'https://a.com',
+        iconType: 'custom',
+        customIcon: 'data:image/png;base64,aaa',
+        recognizedName: '识别名',
+      }],
+    }];
+    expect(stripIconFieldsFromTree(tree)).toEqual([{
+      type: 'category',
+      name: '分类',
+      children: [{
+        type: 'page',
+        name: '网页',
+        url: 'https://a.com',
+      }],
+    }]);
+    expect(tree[0].children[0].iconType).toBe('custom');
+    expect(tree[0].children[0].recognizedName).toBe('识别名');
   });
 });
