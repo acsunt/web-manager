@@ -38,6 +38,10 @@ function findOfflineHtml(version) {
 function copyHtmlIntoAssets(version) {
     mkdirSync(assetsDir, { recursive: true });
     copyFileSync(findOfflineHtml(version), join(assetsDir, 'index.html'));
+    const autofill = join(assetsDir, 'password-autofill.js');
+    if (!existsSync(autofill)) {
+        throw new Error('找不到 android/app/src/main/assets/password-autofill.js');
+    }
 }
 
 function gradleCommand() {

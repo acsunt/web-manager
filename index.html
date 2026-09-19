@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.38</title>
+    <title>网页管理系统 v13.0.39</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -459,6 +459,7 @@
                 <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkDuplicates()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
                 <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkLinks()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
                 <button class="btn primary" id="checkAllIconsBtn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkAllIcons()"><i class="fas fa-icons"></i> 一键识别所有图标 (全站)</button>
+                <button class="btn primary native-only-btn" id="passwordManagerBtn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openPasswordManager()"><i class="fas fa-key"></i> 密码管理</button>
             </div>
             <hr style="border:0; border-top:1px solid var(--border-color); margin:8px 0 15px;">
             <div class="form-group" style="margin-bottom:0;">
@@ -474,6 +475,20 @@
                 </div>
                 <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openSelectiveClearModal()"><i class="fas fa-filter"></i> 分级删除</button>
                 <div class="text-muted" style="margin:0; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">勾选主页、分类或单个网页后，只清对应范围的本地站点数据，书签本身保留。</div>
+            </div>
+        </div>
+    </div>
+    <div id="passwordManagerModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <span>密码管理</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('passwordManagerModal')"></i>
+            </div>
+            <p class="pwd-manager-hint">这里列出打开网页时保存过的登录账号。网站、账号、密码都可以改，点保存才生效，点取消还原。</p>
+            <div id="passwordManagerEmpty" class="pwd-manager-empty">还没有保存过账号密码。在网站登录页输入并提交后会自动保存。</div>
+            <div id="passwordManagerList" class="pwd-list"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal('passwordManagerModal')">关闭</button>
             </div>
         </div>
     </div>

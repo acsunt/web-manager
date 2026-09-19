@@ -176,6 +176,18 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public String getSavedPasswords() {
+        SavedPasswordStore store = activity.passwordStore();
+        return store == null ? "[]" : store.read();
+    }
+
+    @JavascriptInterface
+    public boolean saveSavedPasswords(String json) {
+        SavedPasswordStore store = activity.passwordStore();
+        return store != null && store.write(json);
+    }
+
+    @JavascriptInterface
     public boolean copyText(String text) {
         try {
             final String value = text == null ? "" : text;

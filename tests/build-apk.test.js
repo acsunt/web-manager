@@ -309,4 +309,33 @@ describe('APK 版本号', () => {
     expect(main).toContain("currentType === 'page' && autoOverwrite && recognizedRaw");
     expect(readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8')).toContain('copyHtmlIntoAssets');
   });
+
+  it('APK 本地保存网站登录账号，工具箱可管理，页面可自动填入', () => {
+    const main = readFileSync(join(rootDir, 'main.js'), 'utf8');
+    const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
+    const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
+    const store = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'SavedPasswordStore.java'), 'utf8');
+    const autofill = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'assets', 'password-autofill.js'), 'utf8');
+    const apkScript = readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8');
+    const css = readFileSync(join(rootDir, 'style.css'), 'utf8');
+    expect(html).toContain('id="passwordManagerBtn"');
+    expect(html).toContain('native-only-btn');
+    expect(html).toContain('id="passwordManagerModal"');
+    expect(html).toContain('id="passwordManagerList"');
+    expect(css).toContain('body:not(.native-app) .native-only-btn');
+    expect(main).toContain('openPasswordManager');
+    expect(store).toContain('web_manager_passwords');
+    expect(store).toContain('SharedPreferences');
+    expect(bridge).toContain('public String getSavedPasswords()');
+    expect(bridge).toContain('public boolean saveSavedPasswords(String json)');
+    expect(activity).toContain('queryPasswords');
+    expect(activity).toContain('saveLogin');
+    expect(activity).toContain('injectPasswordAutofill');
+    expect(activity).toContain('password-autofill.js');
+    expect(autofill).toContain('wm-pass-suggest');
+    expect(autofill).toContain('WebManagerChrome.queryPasswords');
+    expect(autofill).toContain('WebManagerChrome.saveLogin');
+    expect(apkScript).toContain('password-autofill.js');
+    expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'assets', 'password-autofill.js'))).toBe(true);
+  });
 });

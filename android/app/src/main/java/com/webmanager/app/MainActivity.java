@@ -70,7 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private View browserBar;
     private View restoreTabsBtn;
     private PageInfoBridge bridge;
+    private SavedPasswordStore passwordStore;
     private BrowserTabsController tabs;
+    private String passwordAutofillScript;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
     private String pendingImportJson;
@@ -125,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
         browserBar = findViewById(R.id.browserBar);
         restoreTabsBtn = findViewById(R.id.restoreTabsBtn);
         applyEdgeToEdge();
+        passwordStore = new SavedPasswordStore(this);
         bridge = new PageInfoBridge(this);
         tabs = new BrowserTabsController(this);
         tabs.restoreState();
@@ -250,10 +253,36 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    SavedPasswordStore passwordStore() {
+        return passwordStore;
+    }
+
     String consumeImportFile() {
         String json = pendingImportJson;
         pendingImportJson = null;
         return json == null ? "" : json;
+    }
+
+    void injectPasswordAutofill(WebView view) {
+        String script = passwordAutofillScript();
+        if (view == null || script.isEmpty()) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        view.evaluateJavascript(script, null);
+    }
+
+    private String passwordAutofillScript() {
+        if (passwordAutofillScript != null) return passwordAutofillScript;
+        try (InputStream in = getAssets().open("password-autofill.js")) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            passwordAutofillScript = out.toString("UTF-8");
+        } catch (Exception e) {
+            passwordAutofillScript = "";
+        }
+        return passwordAutofillScript;
     }
 
     void clearAppCache() {
@@ -831,6 +860,16 @@ public class MainActivity extends AppCompatActivity {
                 if (tabs != null) tabs.updateViewState(webView, json);
             });
         }
+
+        @JavascriptInterface
+        public String queryPasswords(String url, String typed) {
+            return passwordStore == null ? "[]" : passwordStore.query(url, typed);
+        }
+
+        @JavascriptInterface
+        public void saveLogin(String json) {
+            if (passwordStore != null) passwordStore.capture(json);
+        }
     }
 
     private float cssPx(int px) {
@@ -1267,6 +1306,7 @@ public class MainActivity extends AppCompatActivity {
                 tabs.updateUrl(view, url);
                 tabs.restoreViewState(view);
             }
+            injectPasswordAutofill(view);
             if (!isActivePage(view)) return;
             bindPageChrome(view);
             refreshPageChrome(view, true);

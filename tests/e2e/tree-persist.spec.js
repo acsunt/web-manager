@@ -87,6 +87,7 @@ test('隐藏图标默认开启，取消后相关功能才出现，本地图标�
   await page.locator('#toolsBtn').click();
   await expect(page.locator('#toolsModal.active')).toBeVisible();
   await expect(page.locator('#checkAllIconsBtn')).toBeHidden();
+  await expect(page.locator('#passwordManagerBtn')).toBeHidden();
   await page.locator('#toolsModal.active .close-modal-btn').click();
 
   await page.locator('#ioBtn').click();

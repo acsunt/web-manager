@@ -15,6 +15,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
+import { cancelPasswordDraft, openPasswordManager, savePasswordDraft } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
 import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree } from './utils.js';
 import {
@@ -3444,6 +3445,9 @@ const inlineHandlers = {
     toggleEditMode,
     openAddModal,
     openToolsModal,
+    openPasswordManager,
+    savePasswordDraft,
+    cancelPasswordDraft,
     clearAllData,
     openThemeModal,
     toggleCountDisplay,
