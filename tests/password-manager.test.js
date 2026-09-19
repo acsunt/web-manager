@@ -50,6 +50,7 @@ describe('password-manager', () => {
     expect(card.classList.contains('editing')).toBe(false);
     expect(card.querySelector('.pwd-title').textContent).toBe('Example Site');
     expect(card.querySelector('.pwd-sub').textContent).toBe('example.com');
+    expect(card.querySelector('.pwd-title-input').value).toBe('Example Site');
     expect(card.querySelector('.pwd-username').value).toBe('alice');
     expect(card.querySelector('.pwd-password').value).toBe('old');
     expect(card.querySelector('.pwd-actions').hidden).toBe(true);
@@ -61,9 +62,11 @@ describe('password-manager', () => {
     const card = document.querySelector('.pwd-card');
     card.querySelector('[data-pwd-act="edit"]').click();
     expect(card.classList.contains('editing')).toBe(true);
+    const title = card.querySelector('.pwd-title-input');
     const website = card.querySelector('.pwd-website');
     const username = card.querySelector('.pwd-username');
     const password = card.querySelector('.pwd-password');
+    title.value = '新标题';
     website.value = 'new.com';
     username.value = 'neo';
     password.value = 'secret';
@@ -71,11 +74,13 @@ describe('password-manager', () => {
     expect(card.querySelector('.pwd-actions').hidden).toBe(false);
 
     cancelPasswordDraft('p1');
+    expect(title.value).toBe('Example Site');
     expect(website.value).toBe('example.com');
     expect(username.value).toBe('alice');
     expect(password.value).toBe('old');
     expect(window.Android.saveSavedPasswords).not.toHaveBeenCalled();
 
+    title.value = '新标题';
     website.value = 'new.com';
     username.value = 'neo';
     password.value = 'secret';
@@ -83,12 +88,26 @@ describe('password-manager', () => {
     expect(window.Android.saveSavedPasswords).toHaveBeenCalledTimes(1);
     const saved = JSON.parse(window.Android.saveSavedPasswords.mock.calls[0][0]);
     expect(saved[0]).toEqual(expect.objectContaining({
+      title: '新标题',
       website: 'new.com',
       username: 'neo',
       password: 'secret',
     }));
     expect(card.classList.contains('editing')).toBe(false);
-    expect(card.querySelector('.pwd-title').textContent).toBe('Example Site');
+    expect(card.querySelector('.pwd-title').textContent).toBe('新标题');
+  });
+
+  it('编辑时输入框右侧小叉可清空内容', () => {
+    openPasswordManager();
+    const card = document.querySelector('.pwd-card');
+    card.querySelector('[data-pwd-act="edit"]').click();
+    const username = card.querySelector('.pwd-username');
+    const clearBtn = username.closest('.pwd-input-wrap').querySelector('.pwd-clear-btn');
+    expect(clearBtn.hidden).toBe(false);
+    clearBtn.click();
+    expect(username.value).toBe('');
+    expect(clearBtn.hidden).toBe(true);
+    expect(card.querySelector('.pwd-actions').hidden).toBe(false);
   });
 
   it('可以单条删除', () => {

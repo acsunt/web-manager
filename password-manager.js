@@ -28,10 +28,27 @@ function rowDraft(card) {
     return {
         id: card?.dataset?.id || '',
         website: card?.querySelector('.pwd-website')?.value ?? '',
-        title: card?.dataset?.title ?? '',
+        title: card?.querySelector('.pwd-title-input')?.value ?? card?.dataset?.title ?? '',
         username: card?.querySelector('.pwd-username')?.value ?? '',
         password: card?.querySelector('.pwd-password')?.value ?? '',
     };
+}
+
+function fieldHtml(label, className, value) {
+    const filled = String(value ?? '');
+    return `<label>${label}</label>
+        <div class="pwd-input-wrap">
+            <input class="form-control ${className}" value="${escapeHtml(filled)}" autocomplete="off">
+            <button type="button" class="pwd-clear-btn" data-pwd-act="clear" aria-label="清空"${filled ? '' : ' hidden'}>&times;</button>
+        </div>`;
+}
+
+function syncClearButtons(card) {
+    card?.querySelectorAll('.pwd-input-wrap').forEach((wrap) => {
+        const input = wrap.querySelector('input');
+        const btn = wrap.querySelector('.pwd-clear-btn');
+        if (btn) btn.hidden = !String(input?.value ?? '');
+    });
 }
 
 function setActionsVisible(card, visible) {
@@ -94,6 +111,7 @@ function bindPasswordManagerList(listEl) {
         const id = card.dataset.id;
         const original = drafts.get(id);
         if (!original) return;
+        syncClearButtons(card);
         setActionsVisible(card, card.classList.contains('editing') && !credentialsEqual(original, rowDraft(card)));
     });
     listEl.addEventListener('change', (event) => {
@@ -104,6 +122,15 @@ function bindPasswordManagerList(listEl) {
         const card = event.target.closest('.pwd-card');
         if (!card) return;
         if (btn) {
+            if (btn.dataset.pwdAct === 'clear') {
+                const input = btn.closest('.pwd-input-wrap')?.querySelector('input');
+                if (input) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.focus();
+                }
+                return;
+            }
             if (btn.dataset.pwdAct === 'edit') enterEdit(card);
             if (btn.dataset.pwdAct === 'save') savePasswordDraft(card.dataset.id);
             if (btn.dataset.pwdAct === 'cancel') exitEdit(card, true);
@@ -145,12 +172,10 @@ export function renderPasswordManager() {
                 <button type="button" class="btn small danger pwd-delete-btn" data-pwd-act="delete">删除</button>
             </div>
             <div class="pwd-fields">
-                <label>网站</label>
-                <input class="form-control pwd-website" value="${escapeHtml(item.website)}" autocomplete="off">
-                <label>账号</label>
-                <input class="form-control pwd-username" value="${escapeHtml(item.username)}" autocomplete="off">
-                <label>密码</label>
-                <input class="form-control pwd-password" value="${escapeHtml(item.password)}" autocomplete="off">
+                ${fieldHtml('标题', 'pwd-title-input', item.title || '')}
+                ${fieldHtml('网站', 'pwd-website', item.website)}
+                ${fieldHtml('账号', 'pwd-username', item.username)}
+                ${fieldHtml('密码', 'pwd-password', item.password)}
                 <div class="pwd-actions" hidden>
                     <button type="button" class="btn" data-pwd-act="cancel">取消</button>
                     <button type="button" class="btn primary" data-pwd-act="save">保存</button>
@@ -194,10 +219,12 @@ export function savePasswordDraft(id) {
         return;
     }
     drafts.set(id, snapshotCredential(draft));
+    card.dataset.title = draft.title || '';
     const title = card.querySelector('.pwd-title');
     const sub = card.querySelector('.pwd-sub');
     if (title) title.textContent = draft.title || draft.website || '未填写网站';
     if (sub) sub.textContent = draft.website;
+    syncClearButtons(card);
     card.classList.remove('editing');
     setActionsVisible(card, false);
     showToast('已保存');
@@ -207,12 +234,15 @@ export function cancelPasswordDraft(id) {
     const card = cardById(id);
     const original = drafts.get(id);
     if (!card || !original) return;
+    const title = card.querySelector('.pwd-title-input');
     const website = card.querySelector('.pwd-website');
     const username = card.querySelector('.pwd-username');
     const password = card.querySelector('.pwd-password');
+    if (title) title.value = original.title;
     if (website) website.value = original.website;
     if (username) username.value = original.username;
     if (password) password.value = original.password;
+    syncClearButtons(card);
     setActionsVisible(card, false);
 }
 

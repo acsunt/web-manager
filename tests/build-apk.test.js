@@ -239,6 +239,11 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('toggleDesktopActive(');
     expect(tabs).toContain('toggleExtrasVisible(');
     expect(tabs).toContain('setOnLongClickListener');
+    expect(tabs).toContain('canonicalUrl(');
+    expect(tabs).toContain('urlsMatch(');
+    expect(tabs).toContain('tabScroll.setVisibility(extras)');
+    expect(tabs).toContain('Gravity.END');
+    expect(layout).toContain('id="@+id/browserActionsRow"');
     expect(tabs).toContain('DESKTOP_UA');
     expect(tabs).toContain('PREF_PAGES');
     expect(tabs).toContain('PREF_EXTRAS');
@@ -335,7 +340,8 @@ describe('APK 版本号', () => {
     expect(html).toContain('id="toolsApkSection"');
     expect(html).toContain('id="toolbarCheckedCount"');
     expect(html).toContain('toolbar-col-count');
-    expect(html).toContain('默认只显示网站标题');
+    expect(html).toContain('默认只显示打开网页时的标题');
+    expect(html).toContain('点编辑后再改标题、账号密码');
     expect(autofill).toContain('document.title');
     expect(store).toContain('item.put("title", title)');
     expect(html).toContain('APK专用');
@@ -343,6 +349,8 @@ describe('APK 版本号', () => {
     expect(html).toContain('id="passwordManagerList"');
     expect(css).toContain('body:not(.native-app) .apk-only-section');
     expect(css).toContain('body.native-app .html-only-item');
+    expect(css).toContain('.pwd-clear-btn');
+    expect(css).toContain('.pwd-input-wrap');
     expect(main).toContain('openPasswordManager');
     expect(store).toContain('web_manager_passwords');
     expect(store).toContain('SharedPreferences');

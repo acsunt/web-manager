@@ -8,12 +8,14 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.DragEvent;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -56,7 +58,9 @@ final class BrowserTabsController {
     private final LinearLayout tabStrip;
     private final LinearLayout tabOverflowStrip;
     private final HorizontalScrollView groupScroll;
+    private final HorizontalScrollView tabScroll;
     private final HorizontalScrollView tabOverflowScroll;
+    private final LinearLayout browserActionsRow;
     private final ImageButton categoryBtn;
     private final ImageButton homeBtn;
     private final ImageButton refreshBtn;
@@ -119,7 +123,9 @@ final class BrowserTabsController {
         this.tabStrip = activity.findViewById(R.id.tabStrip);
         this.tabOverflowStrip = activity.findViewById(R.id.tabOverflowStrip);
         this.groupScroll = activity.findViewById(R.id.groupScroll);
+        this.tabScroll = activity.findViewById(R.id.tabScroll);
         this.tabOverflowScroll = activity.findViewById(R.id.tabOverflowScroll);
+        this.browserActionsRow = activity.findViewById(R.id.browserActionsRow);
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.homeBtn = activity.findViewById(R.id.homeBtn);
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
@@ -207,11 +213,11 @@ final class BrowserTabsController {
             opened++;
         }
         if (last == null) return false;
-        activeGroupId = groupId;
+        activeGroupId = last.groupId == null ? UNGROUPED : last.groupId;
         showTab(last.id);
-        if (opened == 0 && valid.size() > 1) {
-            toast("这些网页已经打开");
-        } else if (opened < valid.size()) {
+        if (opened == 0) {
+            if (valid.size() > 1) toast("这些网页已经打开");
+        } else if (opened < valid.size() && tabs.size() >= MAX_TABS) {
             toast("最多同时打开 " + MAX_TABS + " 个网页");
         }
         return true;
@@ -1300,6 +1306,12 @@ final class BrowserTabsController {
         if (refreshBtn != null) refreshBtn.setVisibility(extras);
         if (desktopBtn != null) desktopBtn.setVisibility(extras);
         if (pagesBtn != null) pagesBtn.setVisibility(extras);
+        if (tabScroll != null) tabScroll.setVisibility(extras);
+        if (browserActionsRow != null) {
+            browserActionsRow.setGravity(extrasVisible
+                    ? Gravity.START | Gravity.CENTER_VERTICAL
+                    : Gravity.END | Gravity.CENTER_VERTICAL);
+        }
         if (groupScroll != null && (!extrasVisible || !groupsVisible)) {
             groupScroll.setVisibility(View.GONE);
         }
@@ -1792,12 +1804,27 @@ final class BrowserTabsController {
     }
 
     private Tab findTabByUrl(String url, String groupId) {
+        String canonical = canonicalUrl(url);
+        if (canonical == null) return null;
+        String group = groupId == null ? UNGROUPED : groupId;
+        Tab sameGroup = null;
+        Tab other = null;
         for (Tab tab : tabs) {
-            if (url.equals(tab.url) && ((groupId == null ? UNGROUPED : groupId).equals(tab.groupId))) {
-                return tab;
+            if (!urlsMatch(tab, canonical)) continue;
+            if (group.equals(tab.groupId)) {
+                sameGroup = tab;
+                break;
             }
+            if (other == null) other = tab;
         }
-        return null;
+        return sameGroup != null ? sameGroup : other;
+    }
+
+    private boolean urlsMatch(Tab tab, String canonical) {
+        if (tab == null || canonical == null) return false;
+        if (canonical.equals(canonicalUrl(tab.url))) return true;
+        if (tab.webView == null) return false;
+        return canonical.equals(canonicalUrl(tab.webView.getUrl()));
     }
 
     private Tab firstInGroup(String groupId) {
@@ -2083,6 +2110,28 @@ final class BrowserTabsController {
             return "file://" + target;
         }
         return null;
+    }
+
+    private String canonicalUrl(String url) {
+        String normalized = normalizeUrl(url);
+        if (normalized == null) return null;
+        try {
+            Uri uri = Uri.parse(normalized);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
+            int port = uri.getPort();
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            if (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            String query = uri.getEncodedQuery();
+            StringBuilder out = new StringBuilder();
+            out.append(scheme).append("://").append(host);
+            if (port != -1) out.append(':').append(port);
+            out.append(path);
+            if (query != null && !query.isEmpty()) out.append('?').append(query);
+            return out.toString();
+        } catch (Exception ignored) {
+            return normalized;
+        }
     }
 
     private void toast(String message) {

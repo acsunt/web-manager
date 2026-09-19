@@ -176,11 +176,16 @@ body.native-app .html-only-item { display: none !important; }
 .pwd-summary { flex: 1; min-width: 0; }
 .pwd-title { font-weight: 600; font-size: calc(14px * var(--text-scale, 1)); color: var(--text-color); word-break: break-all; }
 .pwd-sub { font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary); margin-top: 2px; word-break: break-all; }
+.pwd-card.editing .pwd-title,
 .pwd-card.editing .pwd-sub,
 .pwd-card.editing .pwd-edit-btn { display: none; }
 .pwd-card:not(.editing) .pwd-fields { display: none; }
 .pwd-card.pwd-checked { border-color: var(--primary-color); }
 .pwd-card label { font-size: calc(12px * var(--text-scale, 1)); font-weight: 600; color: var(--text-secondary); }
+.pwd-input-wrap { position: relative; }
+.pwd-input-wrap .form-control { padding-right: 34px; }
+.pwd-clear-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border: none; background: transparent; color: var(--text-secondary); font-size: 18px; line-height: 1; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
+.pwd-clear-btn[hidden] { display: none !important; }
 .pwd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .pwd-actions[hidden] { display: none !important; }
 .apk-only-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }

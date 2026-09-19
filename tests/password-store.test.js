@@ -111,6 +111,12 @@ describe('applyCredentialEdit', () => {
     }));
   });
 
+  it('保存时可以改打开网页时的标题', () => {
+    const list = [{ id: '1', website: 'old.com', title: '旧标题', username: 'old', password: 'old' }];
+    const next = applyCredentialEdit(list, '1', { website: 'old.com', title: '新标题', username: 'old', password: 'old' });
+    expect(next[0].title).toBe('新标题');
+  });
+
   it('网站或账号为空时不改', () => {
     const list = [{ id: '1', website: 'old.com', username: 'old', password: 'old' }];
     expect(applyCredentialEdit(list, '1', { website: '', username: 'neo', password: 'x' })[0].website).toBe('old.com');
