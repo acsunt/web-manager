@@ -226,6 +226,38 @@ public class MainActivity extends AppCompatActivity {
         return json == null ? "" : json;
     }
 
+    void clearAppCache() {
+        runOnUiThread(() -> {
+            if (appWebView != null) {
+                appWebView.clearCache(true);
+                appWebView.clearFormData();
+            }
+            if (tabs != null) tabs.clearRuntimeCache();
+            deleteDirContents(getCacheDir());
+            File codeCache = getCodeCacheDir();
+            if (codeCache != null) deleteDirContents(codeCache);
+            Toast.makeText(this, "缓存已清除", Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    void clearBrowserSession() {
+        runOnUiThread(() -> {
+            if (tabs != null) tabs.clearSession();
+        });
+    }
+
+    private void deleteDirContents(File dir) {
+        if (dir == null || !dir.isDirectory()) return;
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isDirectory()) {
+                deleteDirContents(file);
+            }
+            file.delete();
+        }
+    }
+
     void refreshPageChrome(WebView webView) {
         refreshPageChrome(webView, true);
     }
@@ -848,14 +880,43 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             byte[] bytes = readAllBytes(in);
+            String name = queryDisplayName(uri);
             JSONObject payload = new JSONObject();
-            payload.put("name", queryDisplayName(uri));
+            payload.put("name", name);
             payload.put("mime", mime == null ? "" : mime);
             payload.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP));
+            if (isHtmlImport(name, mime)) {
+                payload.put("fileUrl", copyHtmlToLocalFile(name, bytes));
+            }
             pendingImportJson = payload.toString();
         } catch (Exception e) {
             runOnUiThread(() -> Toast.makeText(this, "外部文件读取失败", Toast.LENGTH_SHORT).show());
         }
+    }
+
+    private boolean isHtmlImport(String name, String mime) {
+        String n = name == null ? "" : name.toLowerCase();
+        String m = mime == null ? "" : mime.toLowerCase();
+        return n.endsWith(".html") || n.endsWith(".htm") || m.contains("html") || m.contains("xhtml");
+    }
+
+    private File importHtmlDir() {
+        File dir = new File(getFilesDir(), "imported-html");
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
+    }
+
+    private String copyHtmlToLocalFile(String displayName, byte[] bytes) throws Exception {
+        String safe = (displayName == null || displayName.trim().isEmpty())
+                ? "page.html"
+                : displayName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        String lower = safe.toLowerCase();
+        if (!lower.endsWith(".html") && !lower.endsWith(".htm")) safe += ".html";
+        File out = new File(importHtmlDir(), System.currentTimeMillis() + "_" + safe);
+        try (FileOutputStream fos = new FileOutputStream(out)) {
+            fos.write(bytes == null ? new byte[0] : bytes);
+        }
+        return "file://" + out.getAbsolutePath();
     }
 
     private void deliverPendingImport() {

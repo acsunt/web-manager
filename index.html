@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.30</title>
+    <title>网页管理系统 v13.0.31</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -461,6 +461,38 @@
                 <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkDuplicates()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
                 <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkLinks()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
                 <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkAllIcons()"><i class="fas fa-icons"></i> 一键识别所有图标 (全站)</button>
+            </div>
+            <hr style="border:0; border-top:1px solid var(--border-color); margin:8px 0 15px;">
+            <div class="form-group" style="margin-bottom:0;">
+                <div style="font-weight:600; margin-bottom:8px; font-size:calc(14px * var(--text-scale, 1));">数据管理</div>
+                <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="clearRuntimeCache()"><i class="fas fa-broom"></i> 清除缓存</button>
+                <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">只清图片、预加载和网页加载缓存，不改网站数据与核心配置。</div>
+                <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmClearSiteData()"><i class="fas fa-eraser"></i> 清空数据</button>
+                <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">还原网站数据和主页按钮，操作前会二次确认。</div>
+                <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openSelectiveClearModal()"><i class="fas fa-filter"></i> 分级删除</button>
+                <div class="text-muted" style="margin:0; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">按网站勾选清理，避免一删了之。</div>
+            </div>
+        </div>
+    </div>
+    <div id="selectiveClearModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span>分级删除</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('selectiveClearModal')"></i>
+            </div>
+            <p style="color:var(--text-secondary); margin-bottom:10px; font-size:calc(13px * var(--text-scale, 1));">勾选需要清理的网站数据，未勾选的网页和主题配置会保留。</p>
+            <div class="form-group">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">
+                    <span>选择网页</span>
+                    <label style="font-weight:normal; font-size:calc(12px * var(--text-scale, 1)); display:flex; align-items:center;">
+                        <input type="checkbox" id="selectiveClearSelectAll" onchange="toggleSelectAllSelectiveClear(this)" style="margin-right:4px;"> 全选
+                    </label>
+                </label>
+                <div id="selectiveClearList" class="checkbox-list" style="margin-bottom: 15px; max-height:240px; overflow-y:auto; padding:5px;"></div>
+                <button class="btn danger" style="width:100%; justify-content:center;" onclick="performSelectiveClearPages()"><i class="fas fa-trash"></i> 清理选中</button>
+            </div>
+            <div style="text-align: right; margin-top: 15px;">
+                <button class="btn" onclick="closeModal('selectiveClearModal')">取消</button>
             </div>
         </div>
     </div>

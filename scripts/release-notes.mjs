@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SECTIONS = ['新增', '优化', '修复'];
 const HEADING_RE = /^(新增|优化|修复)\s*[:：]?\s*(.*)$/;
@@ -69,14 +70,50 @@ function git(command) {
     return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 
+function tryGit(command) {
+    try {
+        return git(command);
+    } catch {
+        return '';
+    }
+}
+
+function previousVersionTag(version) {
+    const parts = String(version || '').split('.').map((part) => Number(part));
+    if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) return '';
+    const [major, minor, patch] = parts;
+    if (patch > 0) return `v${major}.${minor}.${patch - 1}`;
+    return '';
+}
+
+function readTitleVersion() {
+    const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'), 'utf8');
+    const match = html.match(/<title>[^<]*\bv(\d+\.\d+\.\d+)\b/);
+    return match ? match[1] : '';
+}
+
+function ensureTag(tag) {
+    if (!tag) return false;
+    if (tryGit(`git rev-parse --verify ${tag}^{commit}`)) return true;
+    try {
+        execSync(`git fetch origin tag ${tag} --no-tags`, {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+    } catch {
+        return false;
+    }
+    return Boolean(tryGit(`git rev-parse --verify ${tag}^{commit}`));
+}
+
 function collectCommitText(mode) {
     if (mode === 'github') {
-        try {
-            const prevTag = git('git describe --tags --abbrev=0 HEAD^');
-            return git(`git log ${prevTag}..HEAD --format=%B`);
-        } catch {
-            return git('git log -1 --format=%B');
+        const prevTag = previousVersionTag(readTitleVersion());
+        if (ensureTag(prevTag)) {
+            const text = tryGit(`git log ${prevTag}..HEAD --format=%B`);
+            if (text) return text;
         }
+        return git('git log -1 --format=%B');
     }
 
     try {
@@ -127,4 +164,4 @@ if (isDirectRun) {
     }
 }
 
-export { parseReleaseNotes, formatReleaseNotes, formatGithubReleaseBody, validateReleaseNotes };
+export { parseReleaseNotes, formatReleaseNotes, formatGithubReleaseBody, previousVersionTag, validateReleaseNotes };

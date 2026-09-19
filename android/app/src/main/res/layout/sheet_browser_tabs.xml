@@ -111,6 +111,15 @@
             android:textSize="14sp" />
 
         <TextView
+            android:id="@+id/sheetPinSelected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="置顶"
+            android:textColor="@color/browser_accent"
+            android:textSize="14sp" />
+
+        <TextView
             android:id="@+id/sheetMoveSelected"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

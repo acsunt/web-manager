@@ -11,6 +11,15 @@
     android:paddingStart="12dp"
     android:paddingEnd="4dp">
 
+    <ImageView
+        android:id="@+id/tabPin"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginEnd="4dp"
+        android:contentDescription="已置顶"
+        android:src="@drawable/ic_browser_pin"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/tabTitle"
         android:layout_width="0dp"

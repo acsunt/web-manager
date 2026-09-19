@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { formatGithubReleaseBody, formatReleaseNotes, parseReleaseNotes, validateReleaseNotes } from '../scripts/release-notes.mjs';
+import { formatGithubReleaseBody, formatReleaseNotes, parseReleaseNotes, previousVersionTag, validateReleaseNotes } from '../scripts/release-notes.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -43,6 +43,16 @@ describe('Release 说明', () => {
       修复: ['单文件打包白屏'],
     });
     expect(md).toBe('## 新增\n\n- Android 壳\n\n## 修复\n\n- 单文件打包白屏');
+  });
+
+  it('GitHub 说明只取当前版本相对上一 PATCH 的提交，不沿用本地旧 tag', () => {
+    expect(previousVersionTag('13.0.30')).toBe('v13.0.29');
+    expect(previousVersionTag('13.0.1')).toBe('v13.0.0');
+    expect(previousVersionTag('13.0.0')).toBe('');
+    const src = readFileSync(join(rootDir, 'scripts/release-notes.mjs'), 'utf8');
+    expect(src).toContain('previousVersionTag(readTitleVersion())');
+    expect(src).toContain('git fetch origin tag ${tag} --no-tags');
+    expect(src).not.toContain('git describe --tags --abbrev=0 HEAD^');
   });
 
   it('GitHub 正文带上 HTML 和 APK 下载说明', () => {

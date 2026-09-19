@@ -7,6 +7,8 @@ import {
   findNode,
   findParent,
   getAllPages,
+  collectPagesFromWorkspaces,
+  deleteNodesByIds,
   insertByOrderedPeers,
   insertIntoPinZone,
   nodesForDisplay,
@@ -89,6 +91,30 @@ describe('deleteNode', () => {
     const tree = sampleTree();
     expect(deleteNode('missing', tree)).toBe(false);
     expect(tree).toEqual(sampleTree());
+  });
+});
+
+describe('deleteNodesByIds', () => {
+  it('按 id 批量删除网页，保留未勾选的分类和网页', () => {
+    const tree = sampleTree();
+    expect(deleteNodesByIds(tree, ['page-1', 'page-root'])).toBe(2);
+    expect(findNode('page-1', tree)).toBeNull();
+    expect(findNode('page-root', tree)).toBeNull();
+    expect(findNode('cat-nested', tree)).toMatchObject({ name: '子分类' });
+    expect(findNode('page-2', tree)).toMatchObject({ name: '深层网页' });
+  });
+});
+
+describe('collectPagesFromWorkspaces', () => {
+  it('收集各主页网页，并带上主页标签和网址', () => {
+    const rows = collectPagesFromWorkspaces([
+      { id: 'ws_a', name: '工作', group: '办公', data: sampleTree() },
+      { id: 'ws_b', name: '生活', group: '', data: [{ id: 'p3', type: 'page', name: '笔记', url: 'file:///x.html' }] },
+    ]);
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ wsId: 'ws_a', wsLabel: '办公/工作', id: 'page-1', name: '文档' }),
+      expect.objectContaining({ wsId: 'ws_b', wsLabel: '生活', id: 'p3', url: 'file:///x.html' }),
+    ]));
   });
 });
 

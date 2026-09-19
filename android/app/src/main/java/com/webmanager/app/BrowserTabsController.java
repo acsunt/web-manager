@@ -24,6 +24,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -266,6 +267,7 @@ final class BrowserTabsController {
                 obj.put("groupId", tab.groupId == null ? UNGROUPED : tab.groupId);
                 obj.put("scrollX", tab.scrollX);
                 obj.put("scrollY", tab.scrollY);
+                obj.put("pinned", tab.pinned);
                 obj.put("viewState", tab.viewStateJson == null ? "" : tab.viewStateJson);
                 tabArr.put(obj);
                 keepIds.add(tab.id);
@@ -319,6 +321,7 @@ final class BrowserTabsController {
                     tab.groupId = obj.optString("groupId", UNGROUPED);
                     tab.scrollX = obj.optInt("scrollX", 0);
                     tab.scrollY = obj.optInt("scrollY", 0);
+                    tab.pinned = obj.optBoolean("pinned", false);
                     tab.viewStateJson = obj.optString("viewState", "");
                     tab.pendingViewRestore = true;
                     tab.webView = activity.createPageWebView();
@@ -327,6 +330,7 @@ final class BrowserTabsController {
                     tabs.add(tab);
                 }
             }
+            sortTabsByPin();
             activeTabId = root.optString("activeTabId", "");
             activeGroupId = root.optString("activeGroupId", UNGROUPED);
             groupsVisible = root.optBoolean("groupsVisible", false);
@@ -527,7 +531,7 @@ final class BrowserTabsController {
         tab.groupId = activeGroupId == null ? UNGROUPED : activeGroupId;
         tab.webView = webView;
         attachWebView(tab);
-        tabs.add(tab);
+        insertTab(tab);
         showTab(tab.id);
         return tab;
     }
@@ -539,11 +543,28 @@ final class BrowserTabsController {
         tabs.clear();
         groups.clear();
         selectedIds.clear();
+        collapsedGroupIds.clear();
         groupsVisible = false;
         activeTabId = null;
         activeGroupId = UNGROUPED;
         host.removeAllViews();
         renderStrips();
+    }
+
+    void clearRuntimeCache() {
+        for (Tab tab : tabs) {
+            if (tab.webView != null) {
+                tab.webView.clearCache(true);
+                tab.webView.clearFormData();
+            }
+        }
+    }
+
+    void clearSession() {
+        destroyAll();
+        pruneStateFiles(new HashSet<String>());
+        persistFullState();
+        activity.setPageWindow(false);
     }
 
     private Tab addTab(String title, String url, String groupId) {
@@ -555,7 +576,7 @@ final class BrowserTabsController {
         tab.webView = activity.createPageWebView();
         attachWebView(tab);
         tab.webView.loadUrl(url);
-        tabs.add(tab);
+        insertTab(tab);
         return tab;
     }
 
@@ -773,6 +794,11 @@ final class BrowserTabsController {
         boolean active = tab.id.equals(activeTabId);
         chip.setTag(tab.id);
         styleChip(chip, title, active);
+        ImageView pin = chip.findViewById(R.id.tabPin);
+        if (pin != null) {
+            pin.setVisibility(tab.pinned ? View.VISIBLE : View.GONE);
+            pin.setColorFilter(tab.pinned ? chromeAccent : chromeMuted, PorterDuff.Mode.SRC_IN);
+        }
         ImageButton close = chip.findViewById(R.id.tabClose);
         if (close != null) close.setColorFilter(chromeMuted, PorterDuff.Mode.SRC_IN);
         chip.setOnClickListener(v -> showTab(tab.id));
@@ -786,8 +812,9 @@ final class BrowserTabsController {
 
     private void showTabActions(Tab tab) {
         new AlertDialog.Builder(activity, alertTheme())
-                .setItems(new CharSequence[]{"移动到分组", "关闭"}, (dialog, which) -> {
-                    if (which == 0) pickGroupFor(singletonList(tab.id));
+                .setItems(new CharSequence[]{tab.pinned ? "取消置顶" : "置顶", "移动到分组", "关闭"}, (dialog, which) -> {
+                    if (which == 0) togglePinTab(tab.id);
+                    else if (which == 1) pickGroupFor(singletonList(tab.id));
                     else closeTab(tab.id);
                 })
                 .show();
@@ -814,6 +841,8 @@ final class BrowserTabsController {
         View collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
         if (collapseAll != null) collapseAll.setOnClickListener(v -> toggleAllGroupsCollapsed());
         dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectVisible());
+        View pinSelected = dialog.findViewById(R.id.sheetPinSelected);
+        if (pinSelected != null) pinSelected.setOnClickListener(v -> togglePinTabs(selectedList()));
         dialog.findViewById(R.id.sheetMoveSelected).setOnClickListener(v -> pickGroupFor(selectedList()));
         dialog.findViewById(R.id.sheetCloseSelected).setOnClickListener(v -> {
             List<String> ids = selectedList();
@@ -951,6 +980,12 @@ final class BrowserTabsController {
                 dismissSheet();
                 return true;
             });
+            ImageButton pin = row.findViewById(R.id.sheetPin);
+            if (pin != null) {
+                pin.setOnClickListener(v -> togglePinTab(tab.id));
+                pin.setContentDescription(tab.pinned ? "取消置顶" : "置顶网页");
+                tint(pin, tab.pinned ? sheetAccent() : sheetMuted());
+            }
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
             enableTabDrag(row.findViewById(R.id.sheetTabHandle), row, tab.id);
@@ -1228,7 +1263,10 @@ final class BrowserTabsController {
         Tab target = findTabById(toId);
         Tab moved = tabs.remove(from);
         if (to > from) to--;
-        if (target != null) moved.groupId = target.groupId;
+        if (target != null) {
+            moved.groupId = target.groupId;
+            moved.pinned = target.pinned;
+        }
         tabs.add(to, moved);
         pruneEmptyGroups();
         renderStrips();
@@ -1238,17 +1276,78 @@ final class BrowserTabsController {
     private void moveTabToGroup(String tabId, String groupId) {
         Tab tab = findTabById(tabId);
         if (tab == null) return;
-        String targetGroup = groupId == null ? UNGROUPED : groupId;
-        tab.groupId = targetGroup;
-        tabs.remove(tab);
-        int insert = tabs.size();
-        for (int i = 0; i < tabs.size(); i++) {
-            if (targetGroup.equals(tabs.get(i).groupId)) insert = i + 1;
-        }
-        tabs.add(insert, tab);
+        tab.groupId = groupId == null ? UNGROUPED : groupId;
+        insertTab(tab);
         pruneEmptyGroups();
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void insertTab(Tab tab) {
+        if (tab == null) return;
+        tabs.remove(tab);
+        String groupId = tab.groupId == null ? UNGROUPED : tab.groupId;
+        int insert = tabs.size();
+        boolean placed = false;
+        for (int i = 0; i < tabs.size(); i++) {
+            Tab item = tabs.get(i);
+            if (!groupId.equals(item.groupId)) {
+                if (placed) {
+                    insert = i;
+                    break;
+                }
+                continue;
+            }
+            placed = true;
+            if (tab.pinned && !item.pinned) {
+                insert = i;
+                break;
+            }
+            insert = i + 1;
+        }
+        tabs.add(insert, tab);
+    }
+
+    private void sortTabsByPin() {
+        List<Tab> ordered = new ArrayList<>(tabs);
+        tabs.clear();
+        for (Tab tab : ordered) insertTab(tab);
+    }
+
+    private void togglePinTab(String tabId) {
+        Tab tab = findTabById(tabId);
+        if (tab == null) return;
+        tab.pinned = !tab.pinned;
+        insertTab(tab);
+        persistState();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        toast(tab.pinned ? "已置顶" : "已取消置顶");
+    }
+
+    private void togglePinTabs(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            toast("请先勾选网页");
+            return;
+        }
+        boolean pin = false;
+        for (String id : ids) {
+            Tab tab = findTabById(id);
+            if (tab != null && !tab.pinned) {
+                pin = true;
+                break;
+            }
+        }
+        for (String id : ids) {
+            Tab tab = findTabById(id);
+            if (tab == null) continue;
+            tab.pinned = pin;
+            insertTab(tab);
+        }
+        persistState();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        toast(pin ? "已置顶所选网页" : "已取消置顶");
     }
 
     private int indexOfTab(String tabId) {
@@ -1472,6 +1571,13 @@ final class BrowserTabsController {
             styleChip(chip, title, active);
             ImageButton close = chip.findViewById(R.id.tabClose);
             if (close != null) close.setColorFilter(chromeMuted, PorterDuff.Mode.SRC_IN);
+            ImageView pin = chip.findViewById(R.id.tabPin);
+            if (pin != null) {
+                Tab tab = tag == null ? null : findTabById(String.valueOf(tag));
+                boolean pinned = tab != null && tab.pinned;
+                pin.setVisibility(pinned ? View.VISIBLE : View.GONE);
+                pin.setColorFilter(pinned ? chromeAccent : chromeMuted, PorterDuff.Mode.SRC_IN);
+            }
         }
     }
 
@@ -1636,6 +1742,7 @@ final class BrowserTabsController {
         WebView webView;
         int scrollX;
         int scrollY;
+        boolean pinned;
         String viewStateJson = "";
         boolean pendingViewRestore;
     }

@@ -34,6 +34,21 @@ export function deleteNode(id, list) {
     return false;
 }
 
+export function deleteNodesByIds(list, ids) {
+    const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map((id) => String(id)));
+    if (!Array.isArray(list) || idSet.size === 0) return 0;
+    let removed = 0;
+    for (let i = list.length - 1; i >= 0; i--) {
+        if (idSet.has(String(list[i].id))) {
+            list.splice(i, 1);
+            removed++;
+            continue;
+        }
+        if (list[i].children) removed += deleteNodesByIds(list[i].children, ids);
+    }
+    return removed;
+}
+
 export function nodesForDisplay(nodes) {
     if (!Array.isArray(nodes)) return [];
     const pinned = [];
@@ -161,4 +176,26 @@ export function getAllPages(nodes, path = '') {
         }
     });
     return pages;
+}
+
+export function collectPagesFromWorkspaces(workspaces) {
+    if (!Array.isArray(workspaces)) return [];
+    const rows = [];
+    workspaces.forEach((ws) => {
+        const wsLabel = ws?.group ? `${ws.group}/${ws.name}` : (ws?.name || '未命名主页');
+        getAllPages(ws?.data).forEach((page) => {
+            const urls = Array.isArray(page.urls) && page.urls.length > 0
+                ? page.urls
+                : (page.url ? [{ url: page.url, name: '' }] : []);
+            rows.push({
+                wsId: ws.id,
+                wsLabel,
+                id: page.id,
+                name: page.name || '未命名网页',
+                path: page.path || '根目录',
+                url: (urls[0] && urls[0].url) || '',
+            });
+        });
+    });
+    return rows;
 }

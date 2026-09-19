@@ -53,6 +53,21 @@ export function removeWorkspaceGroup(appData, groupName, now = Date.now()) {
     return ensureValidCurrentWorkspace(appData, now);
 }
 
+export function resetAppData(now = Date.now()) {
+    return createDefaultAppData(now);
+}
+
+export function groupPagesByWorkspace(pages) {
+    const groups = new Map();
+    (Array.isArray(pages) ? pages : []).forEach((page) => {
+        if (!page || page.wsId == null) return;
+        const key = String(page.wsId);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(page);
+    });
+    return groups;
+}
+
 export function migratePersistedAppData(raw, now = Date.now()) {
     if (raw == null || raw === '') {
         return { appData: createDefaultAppData(now), didMigrateLegacyArray: false };

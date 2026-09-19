@@ -6,6 +6,8 @@ import {
     deleteNode as deleteNodeInTree,
     findNode as findNodeInTree,
     findParent as findParentInTree,
+    collectPagesFromWorkspaces,
+    deleteNodesByIds,
     getAllPages,
     insertByOrderedPeers,
     insertIntoPinZone,
@@ -13,14 +15,16 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, looksLikeBookmarkHtml, normalizeUrls, parseBookmarkHtml, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
+import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, normalizeUrls, parseBookmarkHtml, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
     getCurrentWorkspaceTree,
+    groupPagesByWorkspace,
     migratePersistedAppData,
     removeWorkspaceGroup,
     removeWorkspacesByIds,
+    resetAppData,
 } from './workspace.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
@@ -1855,7 +1859,96 @@ function updateClearSelectAllState() {
     selectAll.indeterminate = selectedCount > 0 && selectedCount < workspaceChecks.length;
 }
 function performClearSelectedWorkspaces() { const checks = document.querySelectorAll('.ws-clear-check:checked'); if (checks.length === 0) { alert("请先勾选需要删除的主页"); return; } if (confirm(`确定要删除这 ${checks.length} 个主页吗？`)) { const idsToDelete = Array.from(checks).map(c => c.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); showToast("选定主页已删除"); closeModal('clearDataOptionsModal'); } }
-function performClearData(type) { if (type === 'all') { if (confirm("确定要完全初始化系统吗？\n这将删除所有的资料、主页归属并重置所有主题参数。")) { appData = createDefaultAppData(); data = appData.workspaces[0].data; save(); themeConfig = createDefaultThemeConfig(); saveThemeConfig(); applyThemeSettings(); document.getElementById('darkModeToggle').checked = false; updateSliderValuesFromConfig(); updateBgPreviewUI(); renderTree(); renderWorkspaceList(); showToast("系统已完全重置", 1500); } } closeModal('clearDataOptionsModal'); }
+function performClearData(type) { if (type === 'all') { if (confirm("确定要完全初始化系统吗？\n这将删除所有的资料、主页归属并重置所有主题参数。")) { resetSiteData(false); showToast("系统已完全重置", 1500); } } closeModal('clearDataOptionsModal'); }
+
+function clearRuntimeCache() {
+    closeModal('toolsModal');
+    try { if (typeof window.Android?.clearAppCache === 'function') window.Android.clearAppCache(); } catch (e) {}
+    showToast('已清除临时缓存，网站数据和配置未改动', 1800);
+}
+
+function resetSiteData(keepTheme = false) {
+    appData = resetAppData();
+    data = appData.workspaces[0].data;
+    save();
+    if (!keepTheme) {
+        themeConfig = createDefaultThemeConfig();
+        saveThemeConfig();
+        applyThemeSettings();
+        const darkToggle = document.getElementById('darkModeToggle');
+        if (darkToggle) darkToggle.checked = false;
+        updateSliderValuesFromConfig();
+        updateBgPreviewUI();
+    }
+    try { if (typeof window.Android?.clearBrowserSession === 'function') window.Android.clearBrowserSession(); } catch (e) {}
+    renderTree();
+    renderWorkspaceList();
+}
+
+function confirmClearSiteData() {
+    if (!confirm('确定清空全部网站数据吗？\n主页按钮和本地网站数据将还原为初始状态，主题配置会保留。')) return;
+    if (!confirm('再次确认：此操作不可撤销。')) return;
+    resetSiteData(true);
+    closeModal('toolsModal');
+    closeModal('clearDataOptionsModal');
+    showToast('网站数据已清空', 1500);
+}
+
+function openSelectiveClearModal() {
+    closeModal('toolsModal');
+    const list = document.getElementById('selectiveClearList');
+    const selectAll = document.getElementById('selectiveClearSelectAll');
+    if (!list) return;
+    list.innerHTML = '';
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+    }
+    const pages = collectPagesFromWorkspaces(appData.workspaces);
+    if (pages.length === 0) {
+        list.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">暂无可清理的网页</div>';
+    } else {
+        pages.forEach((page) => {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            const label = `[${page.wsLabel}] ${page.path} / ${page.name}`;
+            div.innerHTML = `<label><input type="checkbox" class="page-clear-check" data-ws-id="${escapeHtml(String(page.wsId))}" value="${escapeHtml(String(page.id))}" onchange="updateSelectiveClearSelectAllState()"> ${escapeHtml(label)}</label>`;
+            list.appendChild(div);
+        });
+    }
+    document.getElementById('selectiveClearModal').classList.add('active');
+}
+
+function toggleSelectAllSelectiveClear(checkbox) {
+    document.querySelectorAll('.page-clear-check').forEach((cb) => { cb.checked = checkbox.checked; });
+}
+
+function updateSelectiveClearSelectAllState() {
+    const selectAll = document.getElementById('selectiveClearSelectAll');
+    if (!selectAll) return;
+    const checks = Array.from(document.querySelectorAll('.page-clear-check'));
+    const selectedCount = checks.filter((cb) => cb.checked).length;
+    selectAll.checked = checks.length > 0 && selectedCount === checks.length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < checks.length;
+}
+
+function performSelectiveClearPages() {
+    const checks = Array.from(document.querySelectorAll('.page-clear-check:checked'));
+    if (checks.length === 0) return alert('请先勾选需要清理的网页');
+    if (!confirm(`确定清理这 ${checks.length} 个网站的数据吗？仅删除勾选网页，不影响主题和未勾选项。`)) return;
+    const grouped = groupPagesByWorkspace(checks.map((cb) => ({ wsId: cb.dataset.wsId, id: cb.value })));
+    grouped.forEach((pages, wsId) => {
+        const ws = appData.workspaces.find((item) => String(item.id) === String(wsId));
+        if (!ws) return;
+        deleteNodesByIds(ws.data, pages.map((page) => page.id));
+    });
+    updateDataPointer();
+    save();
+    renderTree();
+    renderWorkspaceList();
+    closeModal('selectiveClearModal');
+    showToast(`已清理 ${checks.length} 个网页`, 1500);
+}
 
 // ================= 树形视图渲染 =================
 // 数据是唯一状态源；每次变更后从 data 重建 DOM，避免界面顺序与持久化结构脱节。
@@ -2532,8 +2625,8 @@ function confirmDeleteCategory(mode){
     }
 }
 
-function openAddModal(type, preSelectedParentId=null, relativePos='inside') {
-    isAdding=true; addType=type; document.getElementById('modalTitle').innerText=type==='category'?'新增分类':'新增网页'; document.getElementById('editName').value=''; document.getElementById('editNote').value=''; document.getElementById('urlGroup').style.display=type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=type==='page'?'block':'none';
+function openAddModal(type, preSelectedParentId=null, relativePos='inside', preset=null) {
+    isAdding=true; addType=type; document.getElementById('modalTitle').innerText=type==='category'?'新增分类':'新增网页'; document.getElementById('editName').value=preset?.name || ''; document.getElementById('editNote').value=preset?.note || ''; document.getElementById('urlGroup').style.display=type==='page'?'block':'none'; document.getElementById('noteGroup').style.display=type==='page'?'block':'none';
     const recognizedInput = document.getElementById('editRecognizedName');
     if (recognizedInput) recognizedInput.value = '';
     document.getElementById('autoTitleCheck').checked = false;
@@ -2550,7 +2643,7 @@ function openAddModal(type, preSelectedParentId=null, relativePos='inside') {
 
     const container = document.getElementById('urlListContainer'); container.innerHTML = ''; isUrlSortMode = false; document.getElementById('urlSortToggleBtn').classList.remove('active'); document.getElementById('urlListContainer').classList.remove('sort-active'); 
     if(urlSortable) { urlSortable.destroy(); urlSortable = null; } 
-    if (type === 'page') addUrlRow(); 
+    if (type === 'page') addUrlRow(preset?.url || '', preset?.urlName || ''); 
     
     document.getElementById('parentSelectGroup').style.display='block'; document.getElementById('parentDropdownList').style.display='none'; 
     const relGroup = document.getElementById('relativePositionGroup'), siblingGroup = document.getElementById('siblingPositionGroup'), relInsideLabel = document.getElementById('relInsideLabel'), editPosGrp = document.getElementById('editPositionGroup');
@@ -2831,13 +2924,17 @@ function consumeNativeImport() {
     if (!payload) return;
     try {
         const parsed = JSON.parse(payload);
-        importNativeBackup(parsed.name, parsed.mime, parsed.base64);
+        importNativeBackup(parsed.name, parsed.mime, parsed.base64, parsed.fileUrl);
     } catch (e) {
         showToast('外部文件读取失败', 1500);
     }
 }
 
-function importNativeBackup(filename, mime, base64) {
+function importNativeBackup(filename, mime, base64, fileUrl) {
+    if (isHtmlFile(filename, mime) && fileUrl) {
+        importLocalHtmlPage(filename, fileUrl);
+        return;
+    }
     if (!base64) return;
     try {
         const binary = atob(String(base64));
@@ -2846,13 +2943,28 @@ function importNativeBackup(filename, mime, base64) {
         const lowerName = String(filename || '').toLowerCase();
         const type = mime
             || (lowerName.endsWith('.zip') ? 'application/zip'
-                : (lowerName.endsWith('.html') || lowerName.endsWith('.htm') ? 'text/html' : 'application/json'));
+                : (isHtmlFile(filename, mime) ? 'text/html' : 'application/json'));
         const blob = new Blob([bytes], { type });
         blob.name = filename || 'import.json';
         importBackupFile(blob);
     } catch (e) {
         showToast('外部文件导入失败', 1500);
     }
+}
+
+function importLocalHtmlPage(filename, fileUrl) {
+    const url = String(fileUrl || '').trim();
+    if (!url) {
+        showToast('本地 HTML 路径无效', 1500);
+        return;
+    }
+    openAddModal('page', null, 'inside', {
+        name: htmlFileTitle(filename),
+        url,
+        note: '由外部 HTML 导入',
+    });
+    if (typeof window.Android?.openUrl === 'function') window.Android.openUrl(url);
+    showToast('已打开本地 HTML，可保存为新增网页', 1800);
 }
 
 function importFromFile(input) {
@@ -3239,6 +3351,12 @@ const inlineHandlers = {
     performClearBg,
     performClearSelectedWorkspaces,
     performClearData,
+    clearRuntimeCache,
+    confirmClearSiteData,
+    openSelectiveClearModal,
+    toggleSelectAllSelectiveClear,
+    updateSelectiveClearSelectAllState,
+    performSelectiveClearPages,
     exportThemeSettings,
     importThemeSettings,
     toggleDarkMode,
@@ -3292,6 +3410,7 @@ const expectedInlineHandlerNames = collectInlineHandlerNames();
     'removeUrlRow',
     'jumpToNode',
     'updateClearSelectAllState',
+    'updateSelectiveClearSelectAllState',
 ].forEach((name) => expectedInlineHandlerNames.add(name));
 registerInlineHandlers(inlineHandlers, expectedInlineHandlerNames);
 

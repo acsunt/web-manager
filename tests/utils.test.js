@@ -7,6 +7,8 @@ import {
   collectOpenablePages,
   sanitizeData,
   looksLikeBookmarkHtml,
+  isHtmlFile,
+  htmlFileTitle,
   parseBookmarkHtml,
   isLocalUrl,
   isOpenableUrl,
@@ -267,6 +269,21 @@ describe('parseBookmarkHtml', () => {
     expect(looksLikeBookmarkHtml('', 'notes.htm', 'text/plain')).toBe(true);
     expect(looksLikeBookmarkHtml('<a href="https://a.com">A</a></a>', '', 'text/html')).toBe(true);
     expect(looksLikeBookmarkHtml('{"workspaces":[]}', 'backup.json')).toBe(false);
+  });
+});
+
+describe('isHtmlFile / htmlFileTitle', () => {
+  it('按扩展名和 MIME 识别 HTML', () => {
+    expect(isHtmlFile('notes.html')).toBe(true);
+    expect(isHtmlFile('page.HTM')).toBe(true);
+    expect(isHtmlFile('a.bin', 'text/html')).toBe(true);
+    expect(isHtmlFile('backup.json', 'application/json')).toBe(false);
+  });
+
+  it('从文件名去掉扩展名作为网页名称', () => {
+    expect(htmlFileTitle('我的主页.html')).toBe('我的主页');
+    expect(htmlFileTitle('C:\\\\docs\\\\a.htm')).toBe('a');
+    expect(htmlFileTitle('')).toBe('本地网页');
   });
 });
 

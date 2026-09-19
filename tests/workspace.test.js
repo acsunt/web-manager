@@ -8,6 +8,7 @@ import {
   ensureWorkspaceGroups,
   getCurrentWorkspaceTree,
   migratePersistedAppData,
+  groupPagesByWorkspace,
   removeWorkspaceGroup,
   removeWorkspacesByIds,
 } from '../workspace.js';
@@ -112,6 +113,18 @@ describe('ensureValidCurrentWorkspace / removeWorkspacesByIds', () => {
   it('workspaces 为空时同样重建默认主页', () => {
     const next = ensureValidCurrentWorkspace({ workspaces: [], workspaceGroups: ['办公'], currentId: 'ws_a' }, 444);
     expect(next).toEqual(createDefaultAppData(444));
+  });
+});
+
+describe('groupPagesByWorkspace', () => {
+  it('按主页 id 分组，方便分级删除', () => {
+    const grouped = groupPagesByWorkspace([
+      { wsId: 'ws_a', id: 'p1' },
+      { wsId: 'ws_b', id: 'p2' },
+      { wsId: 'ws_a', id: 'p3' },
+    ]);
+    expect([...grouped.keys()]).toEqual(['ws_a', 'ws_b']);
+    expect(grouped.get('ws_a').map((page) => page.id)).toEqual(['p1', 'p3']);
   });
 });
 

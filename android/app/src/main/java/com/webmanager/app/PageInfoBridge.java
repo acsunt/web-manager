@@ -131,6 +131,16 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void clearAppCache() {
+        activity.clearAppCache();
+    }
+
+    @JavascriptInterface
+    public void clearBrowserSession() {
+        activity.clearBrowserSession();
+    }
+
+    @JavascriptInterface
     public boolean openUrl(String url) {
         return activity.openUrl(url);
     }

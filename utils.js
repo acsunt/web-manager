@@ -137,6 +137,17 @@ function parseGenericHtmlLinks(html) {
     return pages;
 }
 
+export function isHtmlFile(filename = '', mime = '') {
+    const name = String(filename || '').toLowerCase();
+    const type = String(mime || '').toLowerCase();
+    return name.endsWith('.html') || name.endsWith('.htm') || type.includes('html') || type.includes('xhtml');
+}
+
+export function htmlFileTitle(filename = '') {
+    const name = String(filename || '').replace(/\\/g, '/').split('/').pop() || '';
+    return name.replace(/\.(html|htm)$/i, '').trim() || '本地网页';
+}
+
 export function looksLikeBookmarkHtml(html, filename = '', mime = '') {
     const name = String(filename || '').toLowerCase();
     const type = String(mime || '').toLowerCase();
