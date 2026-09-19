@@ -73,6 +73,8 @@ final class BrowserTabsController {
     private boolean chromeVisible;
     private boolean restoring;
     private String sheetQuery = "";
+    private boolean selectMode;
+    private boolean sortMode;
     private boolean appDarkMode;
     private int chromeColor = 0;
     private int chromeText = Color.parseColor("#2C3E50");
@@ -247,6 +249,15 @@ final class BrowserTabsController {
                 JSONObject obj = new JSONObject();
                 obj.put("id", group.id);
                 obj.put("name", group.name);
+                JSONArray closedArr = new JSONArray();
+                for (ClosedPage page : group.closedPages) {
+                    JSONObject closed = new JSONObject();
+                    closed.put("title", page.title == null ? "" : page.title);
+                    closed.put("url", page.url == null ? "" : page.url);
+                    closed.put("pinned", page.pinned);
+                    closedArr.put(closed);
+                }
+                obj.put("closedPages", closedArr);
                 groupArr.put(obj);
             }
             Set<String> keepIds = new HashSet<>();
@@ -304,6 +315,20 @@ final class BrowserTabsController {
                     group.id = obj.optString("id", UUID.randomUUID().toString());
                     group.name = obj.optString("name", "");
                     if (group.name.trim().isEmpty()) continue;
+                    JSONArray closedArr = obj.optJSONArray("closedPages");
+                    if (closedArr != null) {
+                        for (int j = 0; j < closedArr.length(); j++) {
+                            JSONObject closed = closedArr.optJSONObject(j);
+                            if (closed == null) continue;
+                            String closedUrl = closed.optString("url", "");
+                            if (closedUrl.trim().isEmpty()) continue;
+                            group.closedPages.add(new ClosedPage(
+                                    closed.optString("title", ""),
+                                    closedUrl,
+                                    closed.optBoolean("pinned", false)
+                            ));
+                        }
+                    }
                     groups.add(group);
                 }
             }
@@ -577,6 +602,7 @@ final class BrowserTabsController {
         attachWebView(tab);
         tab.webView.loadUrl(url);
         insertTab(tab);
+        forgetClosedPage(tab.groupId, url);
         return tab;
     }
 
@@ -626,10 +652,19 @@ final class BrowserTabsController {
     }
 
     private void closeTab(String tabId) {
+        closeTab(tabId, true);
+    }
+
+    private void deleteTab(String tabId) {
+        closeTab(tabId, false);
+    }
+
+    private void closeTab(String tabId, boolean remember) {
         Tab tab = findTabById(tabId);
         if (tab == null) return;
         int index = tabs.indexOf(tab);
         String groupId = tab.groupId;
+        if (remember) rememberClosedTab(tab);
         destroyTab(tab);
         tabs.remove(tab);
         selectedIds.remove(tabId);
@@ -642,8 +677,10 @@ final class BrowserTabsController {
         if (tabs.isEmpty()) {
             activeGroupId = UNGROUPED;
             activity.setPageWindow(false);
-            dismissSheet();
-            dismissGroupManager();
+            if (groups.isEmpty()) {
+                dismissSheet();
+                dismissGroupManager();
+            }
         }
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
@@ -675,7 +712,32 @@ final class BrowserTabsController {
     }
 
     private void closeTabs(List<String> ids) {
-        for (String id : ids) closeTab(id);
+        for (String id : ids) closeTab(id, true);
+    }
+
+    private void deleteTabs(List<String> ids) {
+        for (String id : ids) closeTab(id, false);
+    }
+
+    private void rememberClosedTab(Tab tab) {
+        if (tab == null || UNGROUPED.equals(tab.groupId == null ? UNGROUPED : tab.groupId)) return;
+        Group group = findGroup(tab.groupId);
+        if (group == null) return;
+        String url = tab.url == null ? "" : tab.url.trim();
+        if (url.isEmpty()) return;
+        for (ClosedPage page : group.closedPages) {
+            if (url.equals(page.url)) return;
+        }
+        group.closedPages.add(new ClosedPage(displayTitle(tab), url, tab.pinned));
+    }
+
+    private void forgetClosedPage(String groupId, String url) {
+        Group group = findGroup(groupId);
+        if (group == null || url == null || url.trim().isEmpty()) return;
+        Iterator<ClosedPage> it = group.closedPages.iterator();
+        while (it.hasNext()) {
+            if (url.equals(it.next().url)) it.remove();
+        }
     }
 
     private void moveTabs(List<String> ids, String groupId) {
@@ -700,7 +762,7 @@ final class BrowserTabsController {
         for (Tab tab : tabs) {
             if (groupId.equals(tab.groupId)) ids.add(tab.id);
         }
-        closeTabs(ids);
+        deleteTabs(ids);
         Iterator<Group> it = groups.iterator();
         while (it.hasNext()) {
             if (groupId.equals(it.next().id)) it.remove();
@@ -712,6 +774,7 @@ final class BrowserTabsController {
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
         refreshGroupManager();
+        persistState();
     }
 
     private String ensureGroup(String name) {
@@ -729,7 +792,7 @@ final class BrowserTabsController {
         Iterator<Group> it = groups.iterator();
         while (it.hasNext()) {
             Group group = it.next();
-            if (countInGroup(group.id) == 0) {
+            if (countInGroup(group.id) == 0 && group.closedPages.isEmpty()) {
                 collapsedGroupIds.remove(group.id);
                 it.remove();
             }
@@ -838,9 +901,13 @@ final class BrowserTabsController {
         dialog.findViewById(R.id.sheetDone).setOnClickListener(v -> dialog.dismiss());
         View manageGroups = dialog.findViewById(R.id.sheetManageGroups);
         if (manageGroups != null) manageGroups.setOnClickListener(v -> showGroupManager());
+        View selectModeBtn = dialog.findViewById(R.id.sheetSelectMode);
+        if (selectModeBtn != null) selectModeBtn.setOnClickListener(v -> toggleSelectMode());
+        View sortModeBtn = dialog.findViewById(R.id.sheetSortMode);
+        if (sortModeBtn != null) sortModeBtn.setOnClickListener(v -> toggleSortMode());
         View collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
         if (collapseAll != null) collapseAll.setOnClickListener(v -> toggleAllGroupsCollapsed());
-        dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectVisible());
+        dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectAllVisible());
         View pinSelected = dialog.findViewById(R.id.sheetPinSelected);
         if (pinSelected != null) pinSelected.setOnClickListener(v -> togglePinTabs(selectedList()));
         dialog.findViewById(R.id.sheetMoveSelected).setOnClickListener(v -> pickGroupFor(selectedList()));
@@ -920,14 +987,25 @@ final class BrowserTabsController {
         if (collapseAll != null) {
             collapseAll.setText(areAllGroupsCollapsed() ? "展开" : "折叠");
         }
+        TextView selectModeBtn = dialog.findViewById(R.id.sheetSelectMode);
+        if (selectModeBtn != null) selectModeBtn.setText(selectMode ? "完成多选" : "多选");
+        TextView sortModeBtn = dialog.findViewById(R.id.sheetSortMode);
+        if (sortModeBtn != null) sortModeBtn.setText(sortMode ? "完成排序" : "排序");
+        int batchVisibility = selectMode ? View.VISIBLE : View.GONE;
+        setVisible(dialog, R.id.sheetSelectCount, batchVisibility);
+        setVisible(dialog, R.id.sheetSelectAll, batchVisibility);
+        setVisible(dialog, R.id.sheetPinSelected, batchVisibility);
+        setVisible(dialog, R.id.sheetMoveSelected, batchVisibility);
+        setVisible(dialog, R.id.sheetCloseSelected, batchVisibility);
         applySheetChrome(dialog);
     }
 
     private void appendGroupSection(LinearLayout list, String name, String groupId) {
         List<Tab> items = filteredTabsInGroup(groupId);
-        if (items.isEmpty() && (UNGROUPED.equals(groupId) || !sheetQuery.trim().isEmpty())) return;
+        if (items.isEmpty()) return;
         View header = inflater.inflate(R.layout.item_browser_sheet_group, list, false);
         TextView title = header.findViewById(R.id.sheetGroupTitle);
+        TextView closeGroup = header.findViewById(R.id.sheetGroupClose);
         TextView rename = header.findViewById(R.id.sheetGroupRename);
         TextView delete = header.findViewById(R.id.sheetGroupDelete);
         ImageButton handle = header.findViewById(R.id.sheetGroupHandle);
@@ -940,16 +1018,20 @@ final class BrowserTabsController {
         toggle.setOnClickListener(toggleClick);
         title.setOnClickListener(toggleClick);
         header.setOnDragListener((v, event) -> handleGroupDrop(event, groupId));
+        if (closeGroup != null) {
+            closeGroup.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+            closeGroup.setOnClickListener(v -> confirmCloseGroup(groupId, name));
+            closeGroup.setTextColor(sheetAccent());
+        }
         if (UNGROUPED.equals(groupId)) {
             handle.setVisibility(View.GONE);
-            rename.setVisibility(View.GONE);
-            delete.setText("关闭");
-            delete.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-            delete.setOnClickListener(v -> confirmCloseGroup(groupId, name));
+            if (rename != null) rename.setVisibility(View.GONE);
+            if (delete != null) delete.setVisibility(View.GONE);
         } else {
-            rename.setOnClickListener(v -> promptRenameGroup(groupId, name));
-            delete.setOnClickListener(v -> confirmDeleteGroup(groupId, name));
-            enableGroupDrag(handle, header, groupId);
+            if (rename != null) rename.setOnClickListener(v -> promptRenameGroup(groupId, name));
+            if (delete != null) delete.setOnClickListener(v -> confirmDeleteGroup(groupId, name));
+            handle.setVisibility(sortMode ? View.VISIBLE : View.GONE);
+            if (sortMode) enableGroupDrag(handle, header, groupId);
         }
         list.addView(header);
         tint(handle, sheetMuted());
@@ -965,6 +1047,7 @@ final class BrowserTabsController {
             CheckBox check = row.findViewById(R.id.sheetCheck);
             titleView.setText(displayTitle(tab));
             urlView.setText(tab.url);
+            check.setVisibility(selectMode ? View.VISIBLE : View.GONE);
             check.setChecked(selectedIds.contains(tab.id));
             check.setOnCheckedChangeListener((button, checked) -> {
                 if (checked) selectedIds.add(tab.id);
@@ -974,10 +1057,12 @@ final class BrowserTabsController {
                     if (countView != null) countView.setText("已选 " + selectedIds.size());
                 }
             });
-            row.setOnClickListener(v -> check.setChecked(!check.isChecked()));
-            row.setOnLongClickListener(v -> {
+            row.setOnClickListener(v -> {
                 showTab(tab.id);
                 dismissSheet();
+            });
+            row.setOnLongClickListener(v -> {
+                showTabActions(tab);
                 return true;
             });
             ImageButton pin = row.findViewById(R.id.sheetPin);
@@ -988,10 +1073,15 @@ final class BrowserTabsController {
             }
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
-            enableTabDrag(row.findViewById(R.id.sheetTabHandle), row, tab.id);
-            tint(row.findViewById(R.id.sheetTabHandle), sheetMuted());
+            View deleteTabBtn = row.findViewById(R.id.sheetDelete);
+            if (deleteTabBtn != null) deleteTabBtn.setOnClickListener(v -> deleteTab(tab.id));
+            View handleView = row.findViewById(R.id.sheetTabHandle);
+            handleView.setVisibility(sortMode ? View.VISIBLE : View.GONE);
+            if (sortMode) enableTabDrag(handleView, row, tab.id);
+            tint(handleView, sheetMuted());
             tint(row.findViewById(R.id.sheetMove), sheetMuted());
             tint(row.findViewById(R.id.sheetClose), sheetMuted());
+            tint(deleteTabBtn, SHEET_DANGER);
             titleView.setTextColor(sheetText());
             urlView.setTextColor(sheetMuted());
             check.setButtonTintList(android.content.res.ColorStateList.valueOf(sheetAccent()));
@@ -1133,8 +1223,20 @@ final class BrowserTabsController {
             TextView title = row.findViewById(R.id.manageGroupTitle);
             title.setText(group.name + " (" + countInGroup(group.id) + ")");
             title.setTextColor(sheetText());
+            TextView closeGroup = row.findViewById(R.id.manageGroupClose);
+            TextView openGroup = row.findViewById(R.id.manageGroupOpen);
             TextView rename = row.findViewById(R.id.manageGroupRename);
             TextView delete = row.findViewById(R.id.manageGroupDelete);
+            if (closeGroup != null) {
+                closeGroup.setTextColor(sheetAccent());
+                closeGroup.setVisibility(countInGroup(group.id) > 0 ? View.VISIBLE : View.GONE);
+                closeGroup.setOnClickListener(v -> confirmCloseGroup(group.id, group.name));
+            }
+            if (openGroup != null) {
+                openGroup.setTextColor(sheetAccent());
+                openGroup.setVisibility(group.closedPages.isEmpty() ? View.GONE : View.VISIBLE);
+                openGroup.setOnClickListener(v -> reopenGroupTabs(group.id));
+            }
             if (rename != null) rename.setTextColor(sheetAccent());
             if (delete != null) delete.setTextColor(SHEET_DANGER);
             tint(row.findViewById(R.id.manageGroupHandle), sheetMuted());
@@ -1404,7 +1506,21 @@ final class BrowserTabsController {
         return -1;
     }
 
-    private void toggleSelectVisible() {
+    private void toggleSelectMode() {
+        selectMode = !selectMode;
+        if (!selectMode) selectedIds.clear();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void toggleSortMode() {
+        sortMode = !sortMode;
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void toggleSelectAllVisible() {
+        if (!selectMode) {
+            selectMode = true;
+        }
         List<Tab> visible = visibleTabs();
         if (visible.isEmpty()) {
             toast("没有可选择的网页");
@@ -1424,9 +1540,52 @@ final class BrowserTabsController {
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
     }
 
+    private void reopenGroupTabs(String groupId) {
+        Group group = findGroup(groupId);
+        if (group == null || group.closedPages.isEmpty()) {
+            toast("没有可打开的网页");
+            return;
+        }
+        List<ClosedPage> pages = new ArrayList<>(group.closedPages);
+        Tab last = null;
+        int opened = 0;
+        int skipped = 0;
+        for (ClosedPage page : pages) {
+            Tab existing = findTabByUrl(page.url, groupId);
+            if (existing != null) {
+                last = existing;
+                forgetClosedPage(groupId, page.url);
+                continue;
+            }
+            if (tabs.size() >= MAX_TABS) {
+                skipped++;
+                continue;
+            }
+            last = addTab(page.title, page.url, groupId);
+            last.pinned = page.pinned;
+            insertTab(last);
+            opened++;
+        }
+        if (last != null) showTab(last.id);
+        persistState();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        refreshGroupManager();
+        if (skipped > 0) toast("最多同时打开 " + MAX_TABS + " 个网页");
+        else if (opened == 0 && last != null) toast("这些网页已经打开");
+    }
+
+    private Group findGroup(String groupId) {
+        if (groupId == null) return null;
+        for (Group group : groups) {
+            if (groupId.equals(group.id)) return group;
+        }
+        return null;
+    }
+
     private void confirmDeleteGroup(String groupId, String name) {
         new AlertDialog.Builder(activity, alertTheme())
-                .setMessage("删除分组「" + name + "」并关闭其中打开的网页？")
+                .setMessage("删除分组「" + name + "」并删除其中打开和已关闭的网页？")
                 .setPositiveButton("删除", (dialog, which) -> deleteGroup(groupId))
                 .setNegativeButton("取消", null)
                 .show();
@@ -1662,8 +1821,11 @@ final class BrowserTabsController {
         setText(dialog, R.id.sheetHeading, sheetText());
         setText(dialog, R.id.sheetManageGroups, sheetAccent());
         setText(dialog, R.id.sheetSelectCount, sheetMuted());
+        setText(dialog, R.id.sheetSelectMode, sheetAccent());
+        setText(dialog, R.id.sheetSortMode, sheetAccent());
         setText(dialog, R.id.sheetCollapseAll, sheetAccent());
         setText(dialog, R.id.sheetSelectAll, sheetAccent());
+        setText(dialog, R.id.sheetPinSelected, sheetAccent());
         setText(dialog, R.id.sheetMoveSelected, sheetAccent());
         setText(dialog, R.id.sheetCloseSelected, SHEET_DANGER);
         setText(dialog, R.id.sheetDone, sheetAccent());
@@ -1695,6 +1857,11 @@ final class BrowserTabsController {
     private void setText(Dialog dialog, int id, int color) {
         View view = dialog.findViewById(id);
         if (view instanceof TextView) ((TextView) view).setTextColor(color);
+    }
+
+    private void setVisible(Dialog dialog, int id, int visibility) {
+        View view = dialog.findViewById(id);
+        if (view != null) view.setVisibility(visibility);
     }
 
     private GradientDrawable roundedSurface(int color, float radiusDp) {
@@ -1750,6 +1917,19 @@ final class BrowserTabsController {
     static final class Group {
         String id;
         String name;
+        final List<ClosedPage> closedPages = new ArrayList<>();
+    }
+
+    static final class ClosedPage {
+        final String title;
+        final String url;
+        final boolean pinned;
+
+        ClosedPage(String title, String url, boolean pinned) {
+            this.title = title;
+            this.url = url;
+            this.pinned = pinned;
+        }
     }
 
     static final class PageSpec {

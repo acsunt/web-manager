@@ -23,7 +23,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="拖拽调整顺序，可改名或删除"
+        android:text="可关闭、打开、改名或删除分组"
         android:textColor="@color/browser_text_muted"
         android:textSize="13sp" />
 

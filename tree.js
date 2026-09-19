@@ -199,3 +199,60 @@ export function collectPagesFromWorkspaces(workspaces) {
     });
     return rows;
 }
+
+function workspaceClearLabel(ws) {
+    return ws?.group ? `${ws.group}/${ws.name}` : (ws?.name || '未命名主页');
+}
+
+function collectSelectiveClearNodes(nodes, wsId) {
+    if (!Array.isArray(nodes)) return [];
+    return nodes.map((node) => {
+        if (node?.type === 'category') {
+            return {
+                type: 'category',
+                key: `cat:${wsId}:${node.id}`,
+                wsId,
+                id: node.id,
+                name: node.name || '未命名分类',
+                children: collectSelectiveClearNodes(node.children, wsId),
+            };
+        }
+        return {
+            type: 'page',
+            key: `page:${wsId}:${node.id}`,
+            wsId,
+            id: node.id,
+            name: node.name || '未命名网页',
+            children: [],
+        };
+    });
+}
+
+export function collectSelectiveClearTree(workspaces) {
+    if (!Array.isArray(workspaces)) return [];
+    return workspaces.map((ws) => ({
+        type: 'workspace',
+        key: `ws:${ws.id}`,
+        wsId: ws.id,
+        id: ws.id,
+        name: workspaceClearLabel(ws),
+        children: collectSelectiveClearNodes(ws?.data, ws.id),
+    }));
+}
+
+export function filterSelectiveClearTree(tree, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return Array.isArray(tree) ? tree : [];
+    const filterNodes = (nodes) => {
+        const out = [];
+        (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+            const selfMatch = String(node?.name || '').toLowerCase().includes(q);
+            const children = selfMatch ? (node.children || []) : filterNodes(node.children);
+            if (selfMatch || children.length) {
+                out.push({ ...node, children });
+            }
+        });
+        return out;
+    };
+    return filterNodes(tree);
+}

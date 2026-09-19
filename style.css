@@ -444,3 +444,7 @@ body.icon-shape-circle .avatar-container img, body.icon-shape-circle .avatar-con
 .delete-move-input-wrap { flex-grow: 1; position: relative; }
 .delete-move-input-wrap .clear-input-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; display: none; color: #999; }
 .delete-move-input-wrap .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; z-index: 20; display: none; margin-top: 2px; }
+
+.selective-clear-row { padding: 4px 0; }
+.selective-clear-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: calc(13px * var(--text-scale, 1)); }
+.selective-clear-row i { color: var(--text-secondary); width: 14px; text-align: center; }

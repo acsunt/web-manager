@@ -89,14 +89,17 @@ async function main() {
     console.log(`APK versionName = ${version}（与网页标题一致）`);
     await runGradle();
 
-    const apkPath = join(androidDir, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
-    const namedApk = join(distDir, `web-manager-v${version}.apk`);
-    if (existsSync(apkPath)) {
-        copyFileSync(apkPath, namedApk);
-        console.log(`已生成：dist/web-manager-v${version}.apk`);
-    } else {
-        throw new Error('Gradle 成功但未找到 app-debug.apk');
+    const apkPath32 = join(androidDir, 'app', 'build', 'outputs', 'apk', 'debug', 'app-armeabi-v7a-debug.apk');
+    const apkPath64 = join(androidDir, 'app', 'build', 'outputs', 'apk', 'debug', 'app-arm64-v8a-debug.apk');
+    const namedApk32 = join(distDir, `web-manager-v${version}-32.apk`);
+    const namedApk64 = join(distDir, `web-manager-v${version}-64.apk`);
+    if (!existsSync(apkPath32) || !existsSync(apkPath64)) {
+        throw new Error('Gradle 成功但未找到 32/64 位 app-debug.apk');
     }
+    copyFileSync(apkPath32, namedApk32);
+    copyFileSync(apkPath64, namedApk64);
+    console.log(`已生成：dist/web-manager-v${version}-32.apk`);
+    console.log(`已生成：dist/web-manager-v${version}-64.apk`);
 
     if (process.env.SKIP_UPLOAD === '1') {
         console.log('SKIP_UPLOAD=1，跳过上传 GitHub Release');

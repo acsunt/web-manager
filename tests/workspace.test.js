@@ -8,6 +8,7 @@ import {
   ensureWorkspaceGroups,
   getCurrentWorkspaceTree,
   migratePersistedAppData,
+  applySelectiveClear,
   groupPagesByWorkspace,
   removeWorkspaceGroup,
   removeWorkspacesByIds,
@@ -125,6 +126,25 @@ describe('groupPagesByWorkspace', () => {
     ]);
     expect([...grouped.keys()]).toEqual(['ws_a', 'ws_b']);
     expect(grouped.get('ws_a').map((page) => page.id)).toEqual(['p1', 'p3']);
+  });
+});
+
+describe('applySelectiveClear', () => {
+  it('勾选主页时整页删除，勾选分类或网页时只删对应节点', () => {
+    const appData = sampleAppData();
+    appData.workspaces[0].data = [
+      { id: 'cat-1', type: 'category', name: '分类', children: [{ id: 'p1', type: 'page', name: '文档' }] },
+      { id: 'p2', type: 'page', name: '笔记' },
+    ];
+    const next = applySelectiveClear(appData, [
+      { type: 'category', wsId: 'ws_a', id: 'cat-1' },
+      { type: 'page', wsId: 'ws_b', id: 'p-keep' },
+    ]);
+    expect(next.workspaces.find((ws) => ws.id === 'ws_a').data.map((node) => node.id)).toEqual(['p2']);
+    expect(next.workspaces.find((ws) => ws.id === 'ws_b')).toBeTruthy();
+
+    const afterWs = applySelectiveClear(next, [{ type: 'workspace', wsId: 'ws_b', id: 'ws_b' }]);
+    expect(afterWs.workspaces.map((ws) => ws.id)).toEqual(['ws_a', 'ws_c']);
   });
 });
 

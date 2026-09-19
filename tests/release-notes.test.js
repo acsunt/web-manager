@@ -59,11 +59,13 @@ describe('Release 说明', () => {
     const body = formatGithubReleaseBody('新增 Android 壳\n修复 白屏', {
       online: 'wan-v13.0.14-yes.html',
       offline: 'wan-v13.0.14-no.html',
-      apk: 'web-manager-v13.0.14.apk',
+      apk32: 'web-manager-v13.0.14-32.apk',
+      apk64: 'web-manager-v13.0.14-64.apk',
     });
     expect(body).toContain('## 新增');
     expect(body).toContain('## 修复');
-    expect(body).toContain('web-manager-v13.0.14.apk');
+    expect(body).toContain('web-manager-v13.0.14-32.apk');
+    expect(body).toContain('web-manager-v13.0.14-64.apk');
   });
 });
 
@@ -72,7 +74,8 @@ describe('Release 工作流', () => {
     const upload = readFileSync(join(rootDir, 'scripts/upload-apk.js'), 'utf8');
     expect(upload).toContain('wan-v${version}-yes.html');
     expect(upload).toContain('wan-v${version}-no.html');
-    expect(upload).toContain('web-manager-v${version}.apk');
+    expect(upload).toContain('web-manager-v${version}-32.apk');
+    expect(upload).toContain('web-manager-v${version}-64.apk');
     expect(upload).toContain("['release', 'create'");
     expect(upload).toContain('uploadDistToRelease');
   });

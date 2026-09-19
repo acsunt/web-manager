@@ -7,16 +7,17 @@ alwaysApply: true
 
 分工：
 
-- **本机 `npm run apk`**：先打单文件 HTML，再打 APK，然后把三份都上传到同一 Release `vX.Y.Z`
+- **本机 `npm run apk`**：先打单文件 HTML，再打 APK，然后把四份都上传到同一 Release `vX.Y.Z`
   - `dist/wan-vX.Y.Z-yes.html`
   - `dist/wan-vX.Y.Z-no.html`
-  - `dist/web-manager-vX.Y.Z.apk`（版本名跟 `index.html` 标题同一串数字）
+  - `dist/web-manager-vX.Y.Z-32.apk`（32 位 armeabi-v7a）
+  - `dist/web-manager-vX.Y.Z-64.apk`（64 位 arm64-v8a）
 - **GitHub Actions**：不要再打包 HTML，也不要另写一套 Release 说明
 
 本地打包默认输出到仓库根目录的 `dist/`，不要改到别的目录：
 
 - `npm run build` → `dist/wan-vX.Y.Z-yes.html`、`dist/wan-vX.Y.Z-no.html`
-- `npm run apk` → 先打上述 HTML，再打 `dist/web-manager-vX.Y.Z.apk`
+- `npm run apk` → 先打上述 HTML，再打 `dist/web-manager-vX.Y.Z-32.apk`、`dist/web-manager-vX.Y.Z-64.apk`
 
 离线 HTML 用的 Font Awesome / Cropper / Sortable / JSZip 放在 `vendor/`。打包直接读本地，不要每次从 CDN 下载。缺文件时先 `npm run vendor`。
 

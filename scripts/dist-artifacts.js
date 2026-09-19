@@ -5,12 +5,13 @@ function currentArtifactNames(version) {
     return [
         `wan-v${version}-yes.html`,
         `wan-v${version}-no.html`,
-        `web-manager-v${version}.apk`,
+        `web-manager-v${version}-32.apk`,
+        `web-manager-v${version}-64.apk`,
     ];
 }
 
 function isManagedArtifact(name) {
-    return /^(wan-v\d+\.\d+\.\d+-(?:yes|no)\.html|web-manager-v\d+\.\d+\.\d+\.apk)$/.test(name);
+    return /^(wan-v\d+\.\d+\.\d+-(?:yes|no)\.html|web-manager-v\d+\.\d+\.\d+(?:-32|-64)?\.apk)$/.test(name);
 }
 
 function cleanDistArtifacts(distDir, version) {

@@ -26,6 +26,13 @@ describe('APK 版本号', () => {
     expect(gradle).not.toContain("getProperty('versionName', '0.0.0')");
   });
 
+  it('分别打包 32 位和 64 位 APK', () => {
+    expect(gradle).toContain("include 'armeabi-v7a', 'arm64-v8a'");
+    expect(gradle).toContain('universalApk false');
+    expect(gradle).toContain("abi == 'armeabi-v7a'");
+    expect(gradle).toContain("abi == 'arm64-v8a'");
+  });
+
   it('系统栏颜色透明，页面可以画到状态栏和导航栏后面', () => {
     expect(theme).toContain('android:statusBarColor">@android:color/transparent');
     expect(theme).toContain('android:navigationBarColor">@android:color/transparent');
@@ -49,7 +56,8 @@ describe('APK 版本号', () => {
     const apkScript = readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8');
     const htmlScript = readFileSync(join(rootDir, 'scripts', 'build-single-html.js'), 'utf8');
     expect(apkScript).toContain("join(rootDir, 'dist')");
-    expect(apkScript).toContain('web-manager-v${version}.apk');
+    expect(apkScript).toContain('web-manager-v${version}-32.apk');
+    expect(apkScript).toContain('web-manager-v${version}-64.apk');
     expect(htmlScript).toContain("join(rootDir, 'dist')");
     expect(htmlScript).toContain('dist/${onlineName}');
     expect(htmlScript).toContain('dist/${offlineName}');
@@ -150,9 +158,13 @@ describe('APK 版本号', () => {
     expect(main).toContain('clearRuntimeCache');
     expect(main).toContain('confirmClearSiteData');
     expect(main).toContain('openSelectiveClearModal');
+    expect(main).toContain('filterSelectiveClearList');
+    expect(main).toContain('onSelectiveClearCheckChange');
+    expect(main).not.toContain("note: '由外部 HTML 导入'");
     expect(html).toContain('onclick="clearRuntimeCache()"');
     expect(html).toContain('onclick="confirmClearSiteData()"');
     expect(html).toContain('id="selectiveClearModal"');
+    expect(html).toContain('id="selectiveClearSearch"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetPinSelected"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetPin"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_tab.xml'), 'utf8')).toContain('id="@+id/tabPin"');
@@ -167,7 +179,15 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('promptRenameGroup(');
     expect(tabs).toContain('reorderGroups(');
     expect(tabs).toContain('reorderTabs(');
-    expect(tabs).toContain('toggleSelectVisible(');
+    expect(tabs).toContain('toggleSelectMode(');
+    expect(tabs).toContain('toggleSortMode(');
+    expect(tabs).toContain('reopenGroupTabs(');
+    expect(tabs).toContain('closedPages');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetSelectMode"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetSortMode"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetDelete"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_group.xml'), 'utf8')).toContain('id="@+id/sheetGroupClose"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_manage_group.xml'), 'utf8')).toContain('id="@+id/manageGroupOpen"');
     expect(tabs).toContain('toggleGroupCollapsed(');
     expect(tabs).toContain('confirmCloseGroup(');
     expect(tabs).toContain('closeGroupTabs(');

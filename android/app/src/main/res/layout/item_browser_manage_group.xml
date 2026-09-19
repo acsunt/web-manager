@@ -33,6 +33,24 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/manageGroupClose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:text="关闭"
+        android:textColor="@color/browser_accent"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/manageGroupOpen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:text="打开"
+        android:textColor="@color/browser_accent"
+        android:textSize="14sp" />
+
+    <TextView
         android:id="@+id/manageGroupRename"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

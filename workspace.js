@@ -1,3 +1,5 @@
+import { deleteNode } from './tree.js';
+
 export function createDefaultAppData(now = Date.now()) {
     const id = 'ws_' + now;
     return {
@@ -66,6 +68,37 @@ export function groupPagesByWorkspace(pages) {
         groups.get(key).push(page);
     });
     return groups;
+}
+
+export function applySelectiveClear(appData, selected, now = Date.now()) {
+    if (!appData) return createDefaultAppData(now);
+    const items = Array.isArray(selected) ? selected : [];
+    const workspaceIds = [...new Set(items
+        .filter((item) => item && item.type === 'workspace' && item.wsId != null)
+        .map((item) => item.wsId))];
+    if (workspaceIds.length) {
+        appData = removeWorkspacesByIds(appData, workspaceIds, now);
+    }
+    const remaining = items.filter((item) => (
+        item
+        && item.type !== 'workspace'
+        && item.wsId != null
+        && item.id != null
+        && !workspaceIds.map(String).includes(String(item.wsId))
+    ));
+    remaining
+        .filter((item) => item.type === 'category')
+        .forEach((item) => {
+            const ws = appData.workspaces.find((entry) => String(entry.id) === String(item.wsId));
+            if (ws) deleteNode(item.id, ws.data);
+        });
+    remaining
+        .filter((item) => item.type === 'page')
+        .forEach((item) => {
+            const ws = appData.workspaces.find((entry) => String(entry.id) === String(item.wsId));
+            if (ws) deleteNode(item.id, ws.data);
+        });
+    return ensureValidCurrentWorkspace(appData, now);
 }
 
 export function migratePersistedAppData(raw, now = Date.now()) {

@@ -20,7 +20,8 @@ function distArtifacts(version) {
     return [
         `wan-v${version}-yes.html`,
         `wan-v${version}-no.html`,
-        `web-manager-v${version}.apk`,
+        `web-manager-v${version}-32.apk`,
+        `web-manager-v${version}-64.apk`,
     ].map((name) => ({ name, path: join(distDir, name) }));
 }
 
@@ -33,7 +34,8 @@ function writeReleaseNotes(version) {
             ...process.env,
             ONLINE: `wan-v${version}-yes.html`,
             OFFLINE: `wan-v${version}-no.html`,
-            APK: `web-manager-v${version}.apk`,
+            APK32: `web-manager-v${version}-32.apk`,
+            APK64: `web-manager-v${version}-64.apk`,
             NOTES_FILE: notesPath,
         },
     });
