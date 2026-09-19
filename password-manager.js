@@ -28,6 +28,7 @@ function rowDraft(card) {
     return {
         id: card?.dataset?.id || '',
         website: card?.querySelector('.pwd-website')?.value ?? '',
+        title: card?.dataset?.title ?? '',
         username: card?.querySelector('.pwd-username')?.value ?? '',
         password: card?.querySelector('.pwd-password')?.value ?? '',
     };
@@ -132,11 +133,12 @@ export function renderPasswordManager() {
     if (toolbar) toolbar.hidden = list.length === 0;
     listEl.innerHTML = list.map((item) => {
         drafts.set(item.id, snapshotCredential(item));
-        return `<div class="pwd-card" data-id="${escapeHtml(item.id)}">
+        const heading = item.title || item.website || '未填写网站';
+        return `<div class="pwd-card" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title || '')}">
             <div class="pwd-card-head">
                 <label class="pwd-select-wrap"><input type="checkbox" class="pwd-select"></label>
                 <div class="pwd-summary">
-                    <div class="pwd-title">${escapeHtml(item.website || '未填写网站')}</div>
+                    <div class="pwd-title">${escapeHtml(heading)}</div>
                     <div class="pwd-sub">${escapeHtml(item.website)}</div>
                 </div>
                 <button type="button" class="btn small pwd-edit-btn" data-pwd-act="edit">编辑</button>
@@ -194,7 +196,7 @@ export function savePasswordDraft(id) {
     drafts.set(id, snapshotCredential(draft));
     const title = card.querySelector('.pwd-title');
     const sub = card.querySelector('.pwd-sub');
-    if (title) title.textContent = draft.website || '未填写网站';
+    if (title) title.textContent = draft.title || draft.website || '未填写网站';
     if (sub) sub.textContent = draft.website;
     card.classList.remove('editing');
     setActionsVisible(card, false);

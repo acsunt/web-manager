@@ -125,6 +125,7 @@
         try {
             WebManagerChrome.saveLogin(JSON.stringify({
                 url: location.href,
+                title: document.title || '',
                 username: user.value,
                 password: pwd.value
             }));

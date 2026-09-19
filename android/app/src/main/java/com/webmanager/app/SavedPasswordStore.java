@@ -64,6 +64,7 @@ final class SavedPasswordStore {
             String url = obj.optString("url");
             String username = obj.optString("username").trim();
             String password = obj.optString("password");
+            String title = obj.optString("title").trim();
             String website = originOf(url);
             if (website.isEmpty() || username.isEmpty() || password.isEmpty()) return;
             JSONArray list = new JSONArray(read());
@@ -79,7 +80,9 @@ final class SavedPasswordStore {
             }
             JSONObject item = found >= 0 ? list.getJSONObject(found) : new JSONObject();
             if (found < 0) item.put("id", "p_" + System.currentTimeMillis());
+            if (title.isEmpty()) title = item.optString("title").trim();
             item.put("website", website);
+            item.put("title", title);
             item.put("username", username);
             item.put("password", password);
             item.put("updatedAt", System.currentTimeMillis());

@@ -31,7 +31,7 @@ describe('password-manager', () => {
     mountManager();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockStore([
-      { id: 'p1', website: 'example.com', username: 'alice', password: 'old' },
+      { id: 'p1', website: 'example.com', title: 'Example Site', username: 'alice', password: 'old' },
       { id: 'p2', website: 'other.com', username: 'bob', password: 'two' },
     ]);
   });
@@ -48,11 +48,12 @@ describe('password-manager', () => {
     expect(modal.classList.contains('active')).toBe(true);
     const card = document.querySelector('.pwd-card');
     expect(card.classList.contains('editing')).toBe(false);
-    expect(card.querySelector('.pwd-title').textContent).toBe('example.com');
+    expect(card.querySelector('.pwd-title').textContent).toBe('Example Site');
     expect(card.querySelector('.pwd-sub').textContent).toBe('example.com');
     expect(card.querySelector('.pwd-username').value).toBe('alice');
     expect(card.querySelector('.pwd-password').value).toBe('old');
     expect(card.querySelector('.pwd-actions').hidden).toBe(true);
+    expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(true);
   });
 
   it('点编辑后才改账号密码，保存写入，取消还原', () => {
@@ -87,7 +88,7 @@ describe('password-manager', () => {
       password: 'secret',
     }));
     expect(card.classList.contains('editing')).toBe(false);
-    expect(card.querySelector('.pwd-title').textContent).toBe('new.com');
+    expect(card.querySelector('.pwd-title').textContent).toBe('Example Site');
   });
 
   it('可以单条删除', () => {
@@ -103,6 +104,7 @@ describe('password-manager', () => {
     openPasswordManager();
     togglePasswordSelectMode();
     expect(document.getElementById('passwordManagerModal').classList.contains('pwd-selecting')).toBe(true);
+    expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(false);
     document.querySelectorAll('.pwd-select').forEach((el) => { el.checked = true; });
     document.querySelector('.pwd-select').dispatchEvent(new Event('change', { bubbles: true }));
     deleteSelectedPasswords();
@@ -114,6 +116,7 @@ describe('password-manager', () => {
     togglePasswordSelectMode();
     expect(document.getElementById('passwordManagerModal').classList.contains('pwd-selecting')).toBe(false);
     expect(document.getElementById('pwdSelectToggleBtn').textContent).toBe('多选');
+    expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(true);
   });
 
   it('网页没有原生桥时不打开', () => {

@@ -68,10 +68,11 @@ describe('matchCredentials', () => {
 
 describe('upsertCapturedLogin', () => {
   it('同网站同账号更新密码', () => {
-    const first = upsertCapturedLogin([], { url: 'https://a.com/login', username: 'u', password: 'old' });
+    const first = upsertCapturedLogin([], { url: 'https://a.com/login', username: 'u', password: 'old', title: '登录' });
     const second = upsertCapturedLogin(first, { url: 'https://a.com/', username: 'u', password: 'new' });
     expect(second).toHaveLength(1);
     expect(second[0].password).toBe('new');
+    expect(second[0].title).toBe('登录');
   });
 
   it('同网站不同账号各存一条', () => {
@@ -118,9 +119,9 @@ describe('applyCredentialEdit', () => {
 
 describe('draft cancel', () => {
   it('取消时用快照恢复，不沿用输入框里的值', () => {
-    const original = snapshotCredential({ id: '1', website: 'a.com', username: 'u', password: 'p' });
-    const draft = { id: '1', website: 'b.com', username: 'x', password: 'y' };
+    const original = snapshotCredential({ id: '1', website: 'a.com', title: '站点', username: 'u', password: 'p' });
+    const draft = { id: '1', website: 'b.com', title: '站点', username: 'x', password: 'y' };
     expect(credentialsEqual(original, draft)).toBe(false);
-    expect(snapshotCredential(original)).toEqual({ id: '1', website: 'a.com', username: 'u', password: 'p' });
+    expect(snapshotCredential(original)).toEqual({ id: '1', website: 'a.com', title: '站点', username: 'u', password: 'p' });
   });
 });

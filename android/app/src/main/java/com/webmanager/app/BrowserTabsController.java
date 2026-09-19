@@ -2,6 +2,7 @@ package com.webmanager.app;
 
 import android.app.Dialog;
 import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -18,6 +19,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -52,10 +54,15 @@ final class BrowserTabsController {
     private final FrameLayout host;
     private final LinearLayout groupStrip;
     private final LinearLayout tabStrip;
+    private final LinearLayout tabOverflowStrip;
     private final HorizontalScrollView groupScroll;
+    private final HorizontalScrollView tabOverflowScroll;
     private final ImageButton categoryBtn;
     private final ImageButton homeBtn;
     private final ImageButton refreshBtn;
+    private final ImageButton desktopBtn;
+    private final ImageButton pagesBtn;
+    private final View tabsBtn;
     private final TextView tabsCount;
     private final View restoreBtn;
     private final View browserBar;
@@ -71,6 +78,8 @@ final class BrowserTabsController {
     private Dialog groupDialog;
     private boolean groupsVisible;
     private boolean chromeVisible;
+    private boolean pagesVisible;
+    private boolean extrasVisible = true;
     private boolean restoring;
     private String sheetQuery = "";
     private boolean selectMode;
@@ -98,28 +107,48 @@ final class BrowserTabsController {
     private static final String PREFS = "browser_tabs";
     private static final String PREF_STATE = "state";
     private static final String PREF_CHROME = "chromeVisible";
+    private static final String PREF_PAGES = "pagesVisible";
+    private static final String PREF_EXTRAS = "extrasVisible";
     private static final String STATE_DIR = "browser_tab_state";
+    private static final String DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
         this.host = activity.findViewById(R.id.pageWebHost);
         this.groupStrip = activity.findViewById(R.id.groupStrip);
         this.tabStrip = activity.findViewById(R.id.tabStrip);
+        this.tabOverflowStrip = activity.findViewById(R.id.tabOverflowStrip);
         this.groupScroll = activity.findViewById(R.id.groupScroll);
+        this.tabOverflowScroll = activity.findViewById(R.id.tabOverflowScroll);
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.homeBtn = activity.findViewById(R.id.homeBtn);
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
+        this.desktopBtn = activity.findViewById(R.id.desktopBtn);
+        this.pagesBtn = activity.findViewById(R.id.pagesBtn);
+        this.tabsBtn = activity.findViewById(R.id.tabsBtn);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.browserBar = activity.findViewById(R.id.browserBar);
         this.inflater = LayoutInflater.from(activity);
         if (homeBtn != null) homeBtn.setOnClickListener(v -> hideOverlay());
         if (refreshBtn != null) refreshBtn.setOnClickListener(v -> refreshActive());
-        activity.findViewById(R.id.tabsBtn).setOnClickListener(v -> showSheet());
+        if (tabsBtn != null) {
+            tabsBtn.setOnClickListener(v -> showSheet());
+            tabsBtn.setOnLongClickListener(v -> {
+                toggleExtrasVisible();
+                return true;
+            });
+        }
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
+        if (desktopBtn != null) desktopBtn.setOnClickListener(v -> toggleDesktopActive());
+        if (pagesBtn != null) pagesBtn.setOnClickListener(v -> togglePagesVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
-        chromeVisible = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_CHROME, false);
+        SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        chromeVisible = prefs.getBoolean(PREF_CHROME, false);
+        pagesVisible = prefs.getBoolean(PREF_PAGES, false);
+        extrasVisible = prefs.getBoolean(PREF_EXTRAS, true);
         applyChromeVisible();
+        applyExtrasVisible();
     }
 
     boolean hasTabs() {
@@ -255,6 +284,7 @@ final class BrowserTabsController {
                     closed.put("title", page.title == null ? "" : page.title);
                     closed.put("url", page.url == null ? "" : page.url);
                     closed.put("pinned", page.pinned);
+                    closed.put("desktop", page.desktop);
                     closedArr.put(closed);
                 }
                 obj.put("closedPages", closedArr);
@@ -279,6 +309,7 @@ final class BrowserTabsController {
                 obj.put("scrollX", tab.scrollX);
                 obj.put("scrollY", tab.scrollY);
                 obj.put("pinned", tab.pinned);
+                obj.put("desktop", tab.desktop);
                 obj.put("viewState", tab.viewStateJson == null ? "" : tab.viewStateJson);
                 tabArr.put(obj);
                 keepIds.add(tab.id);
@@ -325,7 +356,8 @@ final class BrowserTabsController {
                             group.closedPages.add(new ClosedPage(
                                     closed.optString("title", ""),
                                     closedUrl,
-                                    closed.optBoolean("pinned", false)
+                                    closed.optBoolean("pinned", false),
+                                    closed.optBoolean("desktop", false)
                             ));
                         }
                     }
@@ -347,9 +379,11 @@ final class BrowserTabsController {
                     tab.scrollX = obj.optInt("scrollX", 0);
                     tab.scrollY = obj.optInt("scrollY", 0);
                     tab.pinned = obj.optBoolean("pinned", false);
+                    tab.desktop = obj.optBoolean("desktop", false);
                     tab.viewStateJson = obj.optString("viewState", "");
                     tab.pendingViewRestore = true;
                     tab.webView = activity.createPageWebView();
+                    applyDesktopMode(tab);
                     attachWebView(tab);
                     if (!restoreWebViewState(tab)) tab.webView.loadUrl(url);
                     tabs.add(tab);
@@ -555,6 +589,7 @@ final class BrowserTabsController {
         tab.url = "";
         tab.groupId = activeGroupId == null ? UNGROUPED : activeGroupId;
         tab.webView = webView;
+        applyDesktopMode(tab);
         attachWebView(tab);
         insertTab(tab);
         showTab(tab.id);
@@ -631,6 +666,7 @@ final class BrowserTabsController {
         tab.url = url;
         tab.groupId = groupId == null ? UNGROUPED : groupId;
         tab.webView = activity.createPageWebView();
+        applyDesktopMode(tab);
         attachWebView(tab);
         tab.webView.loadUrl(url);
         insertTab(tab);
@@ -760,7 +796,7 @@ final class BrowserTabsController {
         for (ClosedPage page : group.closedPages) {
             if (url.equals(page.url)) return;
         }
-        group.closedPages.add(new ClosedPage(displayTitle(tab), url, tab.pinned));
+        group.closedPages.add(new ClosedPage(displayTitle(tab), url, tab.pinned, tab.desktop));
     }
 
     private void forgetClosedPage(String groupId, String url) {
@@ -838,22 +874,35 @@ final class BrowserTabsController {
     private void renderStrips() {
         groupStrip.removeAllViews();
         tabStrip.removeAllViews();
+        if (tabOverflowStrip != null) tabOverflowStrip.removeAllViews();
+        applyExtrasVisible();
         if (categoryBtn != null) {
-            categoryBtn.setVisibility(View.VISIBLE);
             categoryBtn.setContentDescription(groupsVisible ? "隐藏分类" : "显示分类");
-            if (groupsVisible) categoryBtn.setBackground(chipBackground(true));
-            else categoryBtn.setBackgroundResource(android.R.color.transparent);
+            if (groupsVisible && extrasVisible) categoryBtn.setBackground(chipBackground(true));
+            else if (categoryBtn != null) categoryBtn.setBackgroundResource(android.R.color.transparent);
         }
-        groupScroll.setVisibility(groupsVisible ? View.VISIBLE : View.GONE);
-        if (groupsVisible) {
+        if (pagesBtn != null) {
+            pagesBtn.setContentDescription(pagesVisible ? "隐藏网页" : "显示网页");
+            if (pagesVisible) pagesBtn.setBackground(chipBackground(true));
+            else pagesBtn.setBackgroundResource(android.R.color.transparent);
+        }
+        groupScroll.setVisibility(groupsVisible && extrasVisible ? View.VISIBLE : View.GONE);
+        if (groupsVisible && extrasVisible) {
             addGroupChip("未分组", UNGROUPED, countInGroup(UNGROUPED));
             for (Group group : groups) {
                 addGroupChip(group.name, group.id, countInGroup(group.id));
             }
         }
-        for (Tab tab : tabs) {
-            if (!activeGroupId.equals(tab.groupId)) continue;
-            addTabChip(tab);
+        List<Tab> groupTabs = tabsInGroup(activeGroupId);
+        boolean showPages = extrasVisible && pagesVisible;
+        if (showPages) {
+            LinearLayout overflowHost = tabOverflowStrip != null ? tabOverflowStrip : tabStrip;
+            for (Tab tab : groupTabs) {
+                addTabChip(tab, overflowHost);
+            }
+        }
+        if (tabOverflowScroll != null) {
+            tabOverflowScroll.setVisibility(showPages && !groupTabs.isEmpty() ? View.VISIBLE : View.GONE);
         }
         int count = tabs.size();
         tabsCount.setText(count > 9 ? "9+" : String.valueOf(count));
@@ -882,8 +931,9 @@ final class BrowserTabsController {
         groupStrip.addView(chip);
     }
 
-    private void addTabChip(Tab tab) {
-        View chip = inflater.inflate(R.layout.item_browser_tab, tabStrip, false);
+    private void addTabChip(Tab tab, LinearLayout host) {
+        if (host == null) return;
+        View chip = inflater.inflate(R.layout.item_browser_tab, host, false);
         TextView title = chip.findViewById(R.id.tabTitle);
         title.setText(displayTitle(tab));
         boolean active = tab.id.equals(activeTabId);
@@ -902,7 +952,7 @@ final class BrowserTabsController {
             return true;
         });
         chip.findViewById(R.id.tabClose).setOnClickListener(v -> closeTab(tab.id));
-        tabStrip.addView(chip);
+        host.addView(chip);
     }
 
     private void showTabActions(Tab tab) {
@@ -1103,6 +1153,11 @@ final class BrowserTabsController {
                 pin.setContentDescription(tab.pinned ? "取消置顶" : "置顶网页");
                 tint(pin, tab.pinned ? sheetAccent() : sheetMuted());
             }
+            ImageButton copy = row.findViewById(R.id.sheetCopy);
+            if (copy != null) {
+                copy.setOnClickListener(v -> copyTabUrl(tab));
+                tint(copy, sheetMuted());
+            }
             row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
             row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
             View deleteTabBtn = row.findViewById(R.id.sheetDelete);
@@ -1213,6 +1268,87 @@ final class BrowserTabsController {
     private void toggleGroupsVisible() {
         groupsVisible = !groupsVisible;
         renderStrips();
+        persistState();
+    }
+
+    private void togglePagesVisible() {
+        pagesVisible = !pagesVisible;
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_PAGES, pagesVisible)
+                .apply();
+        renderStrips();
+        persistState();
+        toast(pagesVisible ? "已显示网页" : "已隐藏网页");
+    }
+
+    private void toggleExtrasVisible() {
+        extrasVisible = !extrasVisible;
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_EXTRAS, extrasVisible)
+                .apply();
+        renderStrips();
+        persistState();
+        toast(extrasVisible ? "已显示功能按钮" : "已隐藏功能按钮");
+    }
+
+    private void applyExtrasVisible() {
+        int extras = extrasVisible ? View.VISIBLE : View.GONE;
+        if (categoryBtn != null) categoryBtn.setVisibility(extras);
+        if (homeBtn != null) homeBtn.setVisibility(extras);
+        if (refreshBtn != null) refreshBtn.setVisibility(extras);
+        if (desktopBtn != null) desktopBtn.setVisibility(extras);
+        if (pagesBtn != null) pagesBtn.setVisibility(extras);
+        if (groupScroll != null && (!extrasVisible || !groupsVisible)) {
+            groupScroll.setVisibility(View.GONE);
+        }
+    }
+
+    private void toggleDesktopActive() {
+        Tab tab = activeTab();
+        if (tab == null) {
+            toast("没有打开的网页");
+            return;
+        }
+        tab.desktop = !tab.desktop;
+        applyDesktopMode(tab);
+        if (tab.webView != null && tab.url != null && !tab.url.trim().isEmpty()) {
+            tab.webView.loadUrl(tab.url);
+        }
+        persistState();
+        renderStrips();
+        toast(tab.desktop ? "已切换为桌面版" : "已切换为手机版");
+    }
+
+    private void applyDesktopMode(Tab tab) {
+        if (tab == null || tab.webView == null) return;
+        WebSettings settings = tab.webView.getSettings();
+        if (tab.desktop) {
+            settings.setUserAgentString(DESKTOP_UA);
+        } else {
+            settings.setUserAgentString(null);
+        }
+    }
+
+    private void copyTabUrl(Tab tab) {
+        if (tab == null) return;
+        String url = tab.url == null ? "" : tab.url.trim();
+        if (url.isEmpty() && tab.webView != null) {
+            String current = tab.webView.getUrl();
+            url = current == null ? "" : current.trim();
+        }
+        if (url.isEmpty() || "about:blank".equalsIgnoreCase(url)) {
+            toast("没有可复制的网址");
+            return;
+        }
+        ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) {
+            toast("复制失败");
+            return;
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("web-manager", url));
+        toast("已复制网址");
     }
 
     private void showGroupManager() {
@@ -1595,6 +1731,11 @@ final class BrowserTabsController {
             }
             last = addTab(page.title, page.url, groupId);
             last.pinned = page.pinned;
+            last.desktop = page.desktop;
+            applyDesktopMode(last);
+            if (last.desktop && last.webView != null && last.url != null && !last.url.trim().isEmpty()) {
+                last.webView.loadUrl(last.url);
+            }
             insertTab(last);
             opened++;
         }
@@ -1748,6 +1889,7 @@ final class BrowserTabsController {
         tintBarButtons();
         restyleChipGroup(groupStrip, true);
         restyleChipGroup(tabStrip, false);
+        restyleChipGroup(tabOverflowStrip, false);
     }
 
     private void restyleChipGroup(ViewGroup parent, boolean group) {
@@ -1795,8 +1937,22 @@ final class BrowserTabsController {
         tint(categoryBtn, chromeText);
         tint(homeBtn, chromeText);
         tint(refreshBtn, chromeText);
+        tint(desktopBtn, chromeText);
+        tint(pagesBtn, chromeText);
+        Tab active = activeTab();
+        if (desktopBtn != null) {
+            desktopBtn.setContentDescription(active != null && active.desktop ? "切换为手机版" : "桌面版网站");
+            if (active != null && active.desktop) desktopBtn.setBackground(chipBackground(true));
+            else desktopBtn.setBackgroundResource(android.R.color.transparent);
+            tint(desktopBtn, active != null && active.desktop ? chromeAccent : chromeText);
+        }
+        if (pagesBtn != null) {
+            if (pagesVisible) pagesBtn.setBackground(chipBackground(true));
+            else pagesBtn.setBackgroundResource(android.R.color.transparent);
+            tint(pagesBtn, pagesVisible ? chromeAccent : chromeText);
+        }
         if (categoryBtn != null) {
-            if (groupsVisible) categoryBtn.setBackground(chipBackground(true));
+            if (groupsVisible && extrasVisible) categoryBtn.setBackground(chipBackground(true));
             else categoryBtn.setBackgroundResource(android.R.color.transparent);
         }
     }
@@ -1942,6 +2098,7 @@ final class BrowserTabsController {
         int scrollX;
         int scrollY;
         boolean pinned;
+        boolean desktop;
         String viewStateJson = "";
         boolean pendingViewRestore;
     }
@@ -1956,11 +2113,13 @@ final class BrowserTabsController {
         final String title;
         final String url;
         final boolean pinned;
+        final boolean desktop;
 
-        ClosedPage(String title, String url, boolean pinned) {
+        ClosedPage(String title, String url, boolean pinned, boolean desktop) {
             this.title = title;
             this.url = url;
             this.pinned = pinned;
+            this.desktop = desktop;
         }
     }
 

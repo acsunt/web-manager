@@ -32,6 +32,7 @@ export function parseCredentials(raw) {
     parsed.forEach((item, index) => {
         if (!item || typeof item !== 'object') return;
         const website = String(item.website ?? '').trim();
+        const title = String(item.title ?? '').trim();
         const username = String(item.username ?? item.account ?? '').trim();
         const password = String(item.password ?? '');
         if (!website && !username && !password) return;
@@ -41,6 +42,7 @@ export function parseCredentials(raw) {
         list.push({
             id,
             website,
+            title,
             username,
             password,
             updatedAt: Number(item.updatedAt) || 0,
@@ -57,6 +59,7 @@ export function snapshotCredential(entry) {
     return {
         id: String(entry?.id ?? ''),
         website: String(entry?.website ?? ''),
+        title: String(entry?.title ?? ''),
         username: String(entry?.username ?? ''),
         password: String(entry?.password ?? ''),
     };
@@ -64,6 +67,7 @@ export function snapshotCredential(entry) {
 
 export function credentialsEqual(a, b) {
     return snapshotCredential(a).website === snapshotCredential(b).website
+        && snapshotCredential(a).title === snapshotCredential(b).title
         && snapshotCredential(a).username === snapshotCredential(b).username
         && snapshotCredential(a).password === snapshotCredential(b).password;
 }
@@ -79,21 +83,30 @@ export function matchCredentials(list, pageUrl, typed = '') {
         .slice(0, 8);
 }
 
-export function upsertCapturedLogin(list, { url, username, password } = {}) {
+export function upsertCapturedLogin(list, { url, title, username, password } = {}) {
     const next = parseCredentials(list);
     const user = String(username ?? '').trim();
     const pass = String(password ?? '');
     const website = normalizeWebsite(url);
+    const pageTitle = String(title ?? '').trim();
     if (!website || !user || !pass) return next;
     const index = next.findIndex((item) => originsMatch(item.website, website) && item.username === user);
     const now = Date.now();
     if (index >= 0) {
-        next[index] = { ...next[index], website, username: user, password: pass, updatedAt: now };
+        next[index] = {
+            ...next[index],
+            website,
+            title: pageTitle || next[index].title || '',
+            username: user,
+            password: pass,
+            updatedAt: now,
+        };
         return next;
     }
     next.push({
         id: `p_${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`,
         website,
+        title: pageTitle,
         username: user,
         password: pass,
         updatedAt: now,
@@ -112,6 +125,7 @@ export function applyCredentialEdit(list, id, draft) {
         return {
             ...item,
             website,
+            title: String(draft?.title ?? item.title ?? '').trim(),
             username,
             password,
             updatedAt: Date.now(),
