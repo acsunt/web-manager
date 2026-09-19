@@ -149,6 +149,7 @@ describe('applySelectiveClear', () => {
       'https://a.example/doc',
       'https://a.example/note',
     ]);
+    expect(collectSelectiveClearPages(appData, [{ type: 'page', wsId: 'ws_a', id: 'p2' }]).map((page) => page.id)).toEqual(['p2']);
   });
 });
 

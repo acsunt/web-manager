@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, installNativeDialogs, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, installNativeDialogs, onSelectiveClearCheckChange, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -208,6 +208,96 @@ describe('installNativeDialogs', () => {
     expect(window.Android.confirm).toHaveBeenCalledWith('确定删除吗？');
     expect(window.prompt('新名字', '旧名字')).toBe('改名');
     expect(window.Android.prompt).toHaveBeenCalledWith('新名字', '旧名字');
+  });
+});
+
+describe('onSelectiveClearCheckChange', () => {
+  function buildTree() {
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <div class="selective-clear-row selective-clear-group">
+        <label><input type="checkbox" class="selective-clear-check" data-type="group" data-id="办公"></label>
+        <div class="selective-clear-children">
+          <div class="selective-clear-row selective-clear-workspace">
+            <label><input type="checkbox" class="selective-clear-check" data-type="workspace" data-ws-id="ws_a" data-id="ws_a"></label>
+            <div class="selective-clear-children">
+              <div class="selective-clear-row selective-clear-category">
+                <label><input type="checkbox" class="selective-clear-check" data-type="category" data-ws-id="ws_a" data-id="cat-1"></label>
+                <div class="selective-clear-children">
+                  <div class="selective-clear-row selective-clear-page">
+                    <label><input type="checkbox" class="selective-clear-check" data-type="page" data-ws-id="ws_a" data-id="p1"></label>
+                  </div>
+                </div>
+              </div>
+              <div class="selective-clear-row selective-clear-page">
+                <label><input type="checkbox" class="selective-clear-check" data-type="page" data-ws-id="ws_a" data-id="p2"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(root);
+    return {
+      root,
+      group: root.querySelector('[data-type="group"]'),
+      workspace: root.querySelector('[data-type="workspace"]'),
+      category: root.querySelector('[data-type="category"]'),
+      page1: root.querySelector('[data-id="p1"]'),
+      page2: root.querySelector('[data-id="p2"]'),
+    };
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('只勾单个网页时，不连带勾上分类或主页', () => {
+    const { group, workspace, category, page1, page2 } = buildTree();
+    page1.checked = true;
+    onSelectiveClearCheckChange(page1);
+    expect(page1.checked).toBe(true);
+    expect(page2.checked).toBe(false);
+    expect(category.checked).toBe(false);
+    expect(workspace.checked).toBe(false);
+    expect(group.checked).toBe(false);
+    expect(category.indeterminate).toBe(true);
+    expect(workspace.indeterminate).toBe(true);
+    expect(group.indeterminate).toBe(true);
+  });
+
+  it('勾选分类时才连带其下全部网页', () => {
+    const { group, workspace, category, page1, page2 } = buildTree();
+    category.checked = true;
+    onSelectiveClearCheckChange(category);
+    expect(category.checked).toBe(true);
+    expect(page1.checked).toBe(true);
+    expect(page2.checked).toBe(false);
+    expect(workspace.checked).toBe(false);
+    expect(group.checked).toBe(false);
+    expect(workspace.indeterminate).toBe(true);
+  });
+
+  it('勾选主页时才连带整个主页', () => {
+    const { group, workspace, category, page1, page2 } = buildTree();
+    workspace.checked = true;
+    onSelectiveClearCheckChange(workspace);
+    expect(workspace.checked).toBe(true);
+    expect(category.checked).toBe(true);
+    expect(page1.checked).toBe(true);
+    expect(page2.checked).toBe(true);
+    expect(group.checked).toBe(false);
+    expect(group.indeterminate).toBe(true);
+  });
+
+  it('分类或主页下只有一个网页时，勾选该网页也不自动勾上父级', () => {
+    const { group, workspace, category, page1 } = buildTree();
+    page1.checked = true;
+    onSelectiveClearCheckChange(page1);
+    expect(category.checked).toBe(false);
+    expect(workspace.checked).toBe(false);
+    expect(group.checked).toBe(false);
+    expect(category.indeterminate).toBe(true);
   });
 });
 

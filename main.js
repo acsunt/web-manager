@@ -14,7 +14,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, registerInlineHandlers, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
 import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, normalizeUrls, parseBookmarkHtml, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -1920,7 +1920,7 @@ function renderSelectiveClearList() {
             row.className = `selective-clear-row selective-clear-${node.type}`;
             if (node.type === 'group' && !node.id) row.classList.add('is-uncat');
             const icon = node.type === 'group' || node.type === 'category' ? 'fa-folder' : (node.type === 'workspace' ? 'fa-house' : 'fa-file');
-            row.innerHTML = `<label><input type="checkbox" class="selective-clear-check" data-type="${escapeHtml(node.type)}" data-ws-id="${escapeHtml(String(node.wsId))}" data-id="${escapeHtml(String(node.id))}" onchange="onSelectiveClearCheckChange(this)"> <i class="fas ${icon}"></i> ${escapeHtml(node.name)}</label>`;
+            row.innerHTML = `<label><input type="checkbox" class="selective-clear-check" data-type="${escapeHtml(node.type)}" data-ws-id="${escapeHtml(String(node.wsId))}" data-id="${escapeHtml(String(node.id))}" onchange="handleSelectiveClearCheckChange(this)"> <i class="fas ${icon}"></i> ${escapeHtml(node.name)}</label>`;
             parent.appendChild(row);
             if (node.children && node.children.length) {
                 const nest = document.createElement('div');
@@ -1967,39 +1967,8 @@ function updateSelectiveClearSubmitLabel() {
         : '<i class="fas fa-broom"></i> 清理选中';
 }
 
-function setSelectiveClearChecked(checkbox, checked) {
-    if (!checkbox) return;
-    checkbox.checked = checked;
-    checkbox.indeterminate = false;
-}
-
-function childSelectiveClearChecks(checkbox) {
-    const row = checkbox.closest('.selective-clear-row');
-    const nest = row?.querySelector(':scope > .selective-clear-children');
-    return nest ? Array.from(nest.querySelectorAll('.selective-clear-check')) : [];
-}
-
-function parentSelectiveClearCheck(checkbox) {
-    const row = checkbox.closest('.selective-clear-row');
-    const parentRow = row?.parentElement?.closest('.selective-clear-row');
-    return parentRow?.querySelector(':scope > label .selective-clear-check') || null;
-}
-
-function syncSelectiveClearAncestors(checkbox) {
-    let parent = parentSelectiveClearCheck(checkbox);
-    while (parent) {
-        const children = childSelectiveClearChecks(parent);
-        const checkedCount = children.filter((cb) => cb.checked).length;
-        parent.checked = children.length > 0 && checkedCount === children.length;
-        parent.indeterminate = checkedCount > 0 && checkedCount < children.length;
-        parent = parentSelectiveClearCheck(parent);
-    }
-}
-
-function onSelectiveClearCheckChange(checkbox) {
-    childSelectiveClearChecks(checkbox).forEach((child) => setSelectiveClearChecked(child, checkbox.checked));
-    checkbox.indeterminate = false;
-    syncSelectiveClearAncestors(checkbox);
+function handleSelectiveClearCheckChange(checkbox) {
+    onSelectiveClearCheckChange(checkbox);
     updateSelectiveClearSelectAllState();
 }
 
@@ -3459,7 +3428,7 @@ const inlineHandlers = {
     confirmClearSiteData,
     openSelectiveClearModal,
     filterSelectiveClearList,
-    onSelectiveClearCheckChange,
+    handleSelectiveClearCheckChange,
     toggleSelectAllSelectiveClear,
     updateSelectiveClearSelectAllState,
     performSelectiveClearPages,
@@ -3517,7 +3486,7 @@ const expectedInlineHandlerNames = collectInlineHandlerNames();
     'jumpToNode',
     'updateClearSelectAllState',
     'updateSelectiveClearSelectAllState',
-    'onSelectiveClearCheckChange',
+    'handleSelectiveClearCheckChange',
 ].forEach((name) => expectedInlineHandlerNames.add(name));
 registerInlineHandlers(inlineHandlers, expectedInlineHandlerNames);
 

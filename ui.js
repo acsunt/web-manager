@@ -144,6 +144,42 @@ export function registerInlineHandlers(handlers, expectedNames = new Set()) {
     warnMissingInlineHandlers(handlers, expectedNames);
 }
 
+export function setSelectiveClearChecked(checkbox, checked) {
+    if (!checkbox) return;
+    checkbox.checked = checked;
+    checkbox.indeterminate = false;
+}
+
+export function childSelectiveClearChecks(checkbox) {
+    const row = checkbox?.closest('.selective-clear-row');
+    const nest = row?.querySelector(':scope > .selective-clear-children');
+    return nest ? Array.from(nest.querySelectorAll('.selective-clear-check')) : [];
+}
+
+export function parentSelectiveClearCheck(checkbox) {
+    const row = checkbox?.closest('.selective-clear-row');
+    const parentRow = row?.parentElement?.closest('.selective-clear-row');
+    return parentRow?.querySelector(':scope > label .selective-clear-check') || null;
+}
+
+export function syncSelectiveClearAncestors(checkbox) {
+    let parent = parentSelectiveClearCheck(checkbox);
+    while (parent) {
+        const children = childSelectiveClearChecks(parent);
+        const checkedCount = children.filter((cb) => cb.checked).length;
+        if (parent.checked && checkedCount < children.length) parent.checked = false;
+        parent.indeterminate = !parent.checked && checkedCount > 0;
+        parent = parentSelectiveClearCheck(parent);
+    }
+}
+
+export function onSelectiveClearCheckChange(checkbox) {
+    if (!checkbox) return;
+    childSelectiveClearChecks(checkbox).forEach((child) => setSelectiveClearChecked(child, checkbox.checked));
+    checkbox.indeterminate = false;
+    syncSelectiveClearAncestors(checkbox);
+}
+
 export function collectInlineHandlerNames(root = document) {
     const eventAttributes = ['onclick', 'onchange', 'oninput', 'onblur', 'onfocus', 'onmousedown', 'onkeydown'];
     const names = new Set();

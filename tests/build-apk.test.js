@@ -177,7 +177,7 @@ describe('APK 版本号', () => {
     expect(main).toContain('confirmClearSiteData');
     expect(main).toContain('openSelectiveClearModal');
     expect(main).toContain('filterSelectiveClearList');
-    expect(main).toContain('onSelectiveClearCheckChange');
+    expect(main).toContain('handleSelectiveClearCheckChange');
     expect(main).toContain('updateSelectiveClearSubmitLabel');
     expect(main).toContain('clearPageSiteData');
     expect(main).toContain('已清理 ${cleared} 个网页的本地数据');
