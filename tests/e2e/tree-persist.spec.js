@@ -75,6 +75,9 @@ test('隐藏图标默认开启，取消后相关功能才出现，本地图标�
 
   await page.locator('#toolbarEditBtn').click();
   await expect(page.locator('#toolbarEditModal.active')).toBeVisible();
+  await expect(page.locator('#toolbarCheckedCount')).toBeVisible();
+  await expect(page.locator('#toolbarCheckedCount')).toHaveText(/\(\d+个\)/);
+  await expect(page.locator('#toolbarApkSection')).toBeHidden();
   await expect(page.locator('#toolbarConfigList')).toContainText('图标设置');
   await page.locator('#hideIconsToggle').uncheck();
   await expect(page.locator('#hideIconsToggle')).not.toBeChecked();
@@ -88,6 +91,7 @@ test('隐藏图标默认开启，取消后相关功能才出现，本地图标�
   await expect(page.locator('#toolsModal.active')).toBeVisible();
   await expect(page.locator('#checkAllIconsBtn')).toBeHidden();
   await expect(page.locator('#passwordManagerBtn')).toBeHidden();
+  await expect(page.locator('#toolsApkSection')).toBeHidden();
   await page.locator('#toolsModal.active .close-modal-btn').click();
 
   await page.locator('#ioBtn').click();

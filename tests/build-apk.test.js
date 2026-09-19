@@ -319,10 +319,14 @@ describe('APK 版本号', () => {
     const apkScript = readFileSync(join(rootDir, 'scripts', 'build-apk.js'), 'utf8');
     const css = readFileSync(join(rootDir, 'style.css'), 'utf8');
     expect(html).toContain('id="passwordManagerBtn"');
-    expect(html).toContain('native-only-btn');
+    expect(html).toContain('id="toolbarApkSection"');
+    expect(html).toContain('id="toolsApkSection"');
+    expect(html).toContain('id="toolbarCheckedCount"');
+    expect(html).toContain('APK专用');
     expect(html).toContain('id="passwordManagerModal"');
     expect(html).toContain('id="passwordManagerList"');
-    expect(css).toContain('body:not(.native-app) .native-only-btn');
+    expect(css).toContain('body:not(.native-app) .apk-only-section');
+    expect(css).toContain('body.native-app .html-only-item');
     expect(main).toContain('openPasswordManager');
     expect(store).toContain('web_manager_passwords');
     expect(store).toContain('SharedPreferences');

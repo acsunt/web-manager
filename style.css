@@ -156,15 +156,36 @@ body.theme-neumorphism .category-block > .category-header { border: none !import
 .category-block:not([data-level="0"]) > .category-header { background: var(--sub-cat-header-bg); border: 1px solid var(--border-color); }
 
 body:not(.native-app) .native-open-btn,
-body:not(.native-app) .native-only-btn { display: none !important; }
+body:not(.native-app) .native-only-btn,
+body:not(.native-app) .apk-only-section { display: none !important; }
+body.native-app .html-only-item { display: none !important; }
 
-.pwd-manager-hint { color: var(--text-secondary); margin: 0 0 12px; font-size: calc(13px * var(--text-scale, 1)); }
+#passwordManagerModal .modal-header { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+#passwordManagerModal .modal-header::before { bottom: 0; }
+.pwd-manager-hint { color: var(--text-secondary); margin: 0; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.45; }
+.pwd-manager-toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .pwd-manager-empty { color: var(--text-secondary); font-size: calc(13px * var(--text-scale, 1)); padding: 12px 4px 4px; }
 .pwd-list { display: flex; flex-direction: column; gap: 12px; max-height: 52vh; overflow-y: auto; }
 .pwd-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); }
+.pwd-card-head { display: flex; align-items: flex-start; gap: 8px; }
+.pwd-select-wrap { display: none; align-items: center; padding-top: 2px; }
+.pwd-selecting .pwd-select-wrap { display: flex; }
+.pwd-selecting .pwd-edit-btn,
+.pwd-selecting .pwd-delete-btn { display: none; }
+.pwd-summary { flex: 1; min-width: 0; }
+.pwd-title { font-weight: 600; font-size: calc(14px * var(--text-scale, 1)); color: var(--text-color); word-break: break-all; }
+.pwd-sub { font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary); margin-top: 2px; word-break: break-all; }
+.pwd-card.editing .pwd-sub,
+.pwd-card.editing .pwd-edit-btn { display: none; }
+.pwd-card:not(.editing) .pwd-fields { display: none; }
+.pwd-card.pwd-checked { border-color: var(--primary-color); }
 .pwd-card label { font-size: calc(12px * var(--text-scale, 1)); font-weight: 600; color: var(--text-secondary); }
 .pwd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .pwd-actions[hidden] { display: none !important; }
+.apk-only-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.apk-only-title { font-weight: 600; margin-bottom: 8px; font-size: calc(14px * var(--text-scale, 1)); }
+.toolbar-header-right { display: flex; align-items: center; gap: 10px; }
+.toolbar-checked-count { font-size: calc(13px * var(--text-scale, 1)); font-weight: 500; color: var(--text-secondary); }
 
 .cat-btn { width: calc(28px * var(--ui-scale, 1)); height: calc(28px * var(--ui-scale, 1)); display: flex; align-items: center; justify-content: center; border-radius: calc(6px * var(--ui-scale, 1)); background: var(--card-bg); color: var(--text-secondary); border: 1px solid var(--border-color); transition: all 0.2s; cursor: pointer; z-index: 2; }
 body:not(.theme-neumorphism) .cat-btn { box-shadow: 0 2px 5px rgba(0,0,0,0.05); }

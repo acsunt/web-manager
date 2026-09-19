@@ -15,7 +15,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { cancelPasswordDraft, openPasswordManager, savePasswordDraft } from './password-manager.js';
+import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
 import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree } from './utils.js';
 import {
@@ -445,39 +445,117 @@ function renderToolbar() {
     syncBrowserChrome();
 }
 
-function toggleToolbarColMode() { toolbarColMode = (toolbarColMode % 3) + 1; localStorage.setItem('toolbarColMode', toolbarColMode); updateToolbarColBtn(); const list = document.getElementById('toolbarConfigList'); list.className = 'toolbar-config-list cols-' + toolbarColMode; if (isToolbarSorting) { list.classList.add('toolbar-sort-active'); } }
+function applyToolbarListCols(list) {
+    if (!list) return;
+    const sorting = list.id === 'toolbarConfigList' && isToolbarSorting;
+    list.className = 'toolbar-config-list cols-' + toolbarColMode + (sorting ? ' toolbar-sort-active' : '');
+}
+
+function toggleToolbarColMode() {
+    toolbarColMode = (toolbarColMode % 3) + 1;
+    localStorage.setItem('toolbarColMode', toolbarColMode);
+    updateToolbarColBtn();
+    applyToolbarListCols(document.getElementById('toolbarConfigList'));
+    applyToolbarListCols(document.getElementById('toolbarApkList'));
+}
 function updateToolbarColBtn() { document.getElementById('toolbarColBtn').innerHTML = toolbarColMode + '列'; }
+
+function createToolbarConfigItem(item) {
+    const div = document.createElement('div');
+    div.className = 'toolbar-config-item';
+    div.dataset.id = item.id;
+    div.onclick = function(e) {
+        if (isToolbarSorting) return;
+        if (e.target.type !== 'checkbox') {
+            const cb = div.querySelector('.toolbar-config-checkbox');
+            cb.checked = !cb.checked;
+            saveToolbarCheckboxState();
+        }
+    };
+    div.innerHTML = `<input type="checkbox" class="toolbar-config-checkbox" ${item.show ? 'checked' : ''} onchange="saveToolbarCheckboxState()"> <span class="toolbar-config-name">${item.name}</span>`;
+    return div;
+}
+
+function updateToolbarCheckedCount() {
+    const modal = document.getElementById('toolbarEditModal');
+    const el = document.getElementById('toolbarCheckedCount');
+    if (!modal || !el) return;
+    const native = document.body.classList.contains('native-app');
+    const count = [...modal.querySelectorAll('input[type="checkbox"]')].filter((cb) => {
+        let node = cb;
+        while (node && node !== modal) {
+            if (node.classList.contains('apk-only-section') && !native) return false;
+            if (node.classList.contains('html-only-item') && native) return false;
+            node = node.parentElement;
+        }
+        return true;
+    }).length;
+    el.textContent = `(${count}个)`;
+}
+
+function renderToolbarApkSection() {
+    const list = document.getElementById('toolbarApkList');
+    if (!list) return;
+    list.innerHTML = '';
+    applyToolbarListCols(list);
+    if (!isNativeApp()) {
+        updateToolbarCheckedCount();
+        return;
+    }
+    const widget = toolbarConfig.find(isBrowserWidgetItem);
+    if (widget) list.appendChild(createToolbarConfigItem(widget));
+    const hideItem = document.createElement('label');
+    hideItem.className = 'toolbar-hide-icons-item';
+    hideItem.innerHTML = `<input type="checkbox" class="toolbar-hide-icons-apk" ${hideIcons ? 'checked' : ''} onchange="toggleHideIcons(this.checked)"> <span>隐藏图标</span>`;
+    list.appendChild(hideItem);
+    updateToolbarCheckedCount();
+}
 
 function openToolbarEditModal() {
     const list = document.getElementById('toolbarConfigList');
-    list.innerHTML = ''; list.className = 'toolbar-config-list cols-' + toolbarColMode; updateToolbarColBtn();
+    list.innerHTML = '';
+    applyToolbarListCols(list);
+    updateToolbarColBtn();
     toolbarConfig.forEach(item => {
-        if (isBrowserWidgetItem(item) && !isNativeApp()) return;
+        if (isBrowserWidgetItem(item)) return;
         if (hideIcons && isIconFeatureItem(item)) return;
-        const div = document.createElement('div');
-        div.className = 'toolbar-config-item'; div.dataset.id = item.id;
-        div.onclick = function(e) { if(isToolbarSorting) return; if (e.target.type !== 'checkbox') { const cb = div.querySelector('.toolbar-config-checkbox'); cb.checked = !cb.checked; saveToolbarCheckboxState(); } };
-        div.innerHTML = `<input type="checkbox" class="toolbar-config-checkbox" ${item.show ? 'checked' : ''} onchange="saveToolbarCheckboxState()"> <span class="toolbar-config-name">${item.name}</span>`;
-        list.appendChild(div);
+        list.appendChild(createToolbarConfigItem(item));
     });
-    const hideIconsToggle = document.getElementById('hideIconsToggle');
-    if (hideIconsToggle) hideIconsToggle.checked = hideIcons;
+    document.querySelectorAll('#hideIconsToggle, .toolbar-hide-icons-apk').forEach((el) => { el.checked = hideIcons; });
     isToolbarSorting = false; document.getElementById('toolbarSortStartBtn').style.display = 'flex'; document.getElementById('toolbarSortActions').style.display = 'none'; list.classList.remove('toolbar-sort-active');
     if (toolbarSortable) { toolbarSortable.destroy(); toolbarSortable = null; }
+    renderToolbarApkSection();
     document.getElementById('toolbarEditModal').classList.add('active');
+    updateToolbarCheckedCount();
 }
 
-function saveToolbarCheckboxState() { if (isToolbarSorting) return; const list = document.getElementById('toolbarConfigList'); Array.from(list.children).forEach(div => { const id = div.dataset.id; const show = div.querySelector('input').checked; const item = toolbarConfig.find(t => t.id === id); if (item) item.show = show; }); localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig)); renderToolbar(); }
+function collectToolbarItemsFrom(list) {
+    if (!list) return [];
+    return Array.from(list.children).map((div) => {
+        const id = div.dataset.id;
+        if (!id) return null;
+        const checkbox = div.querySelector('input[type="checkbox"]');
+        const original = toolbarConfig.find(t => t.id === id) || DEFAULT_TOOLBAR_CONFIG.find(t => t.id === id);
+        if (!original) return null;
+        return { id, name: original.name, show: !!checkbox?.checked };
+    }).filter(Boolean);
+}
+
+function saveToolbarCheckboxState() {
+    if (isToolbarSorting) return;
+    [...collectToolbarItemsFrom(document.getElementById('toolbarConfigList')),
+     ...collectToolbarItemsFrom(document.getElementById('toolbarApkList'))].forEach((row) => {
+        const item = toolbarConfig.find(t => t.id === row.id);
+        if (item) item.show = row.show;
+    });
+    localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig));
+    renderToolbar();
+    updateToolbarCheckedCount();
+}
 function startToolbarSort() { isToolbarSorting = true; const list = document.getElementById('toolbarConfigList'); list.classList.add('toolbar-sort-active'); document.getElementById('toolbarSortStartBtn').style.display = 'none'; document.getElementById('toolbarSortActions').style.display = 'flex'; toolbarSortable = new Sortable(list, { animation: 150 }); }
 function confirmToolbarSort() {
     const list = document.getElementById('toolbarConfigList');
-    const newConfig = [];
-    Array.from(list.children).forEach(div => {
-        const id = div.dataset.id;
-        const show = div.querySelector('input').checked;
-        const original = toolbarConfig.find(t => t.id === id) || DEFAULT_TOOLBAR_CONFIG.find(t => t.id === id);
-        if (original) { newConfig.push({ id: id, name: original.name, show: show }); }
-    });
+    const newConfig = collectToolbarItemsFrom(list);
     const widget = toolbarConfig.find(isBrowserWidgetItem);
     if (widget && !newConfig.find(isBrowserWidgetItem)) {
         const ioIndex = newConfig.findIndex(item => item.id === 'ioBtn');
@@ -2984,8 +3062,7 @@ function applyIconMode() {
 function applyHideIconsMode() {
     if (hideIcons) document.body.classList.add('hide-icons');
     else document.body.classList.remove('hide-icons');
-    const hideIconsToggle = document.getElementById('hideIconsToggle');
-    if (hideIconsToggle) hideIconsToggle.checked = hideIcons;
+    document.querySelectorAll('#hideIconsToggle, .toolbar-hide-icons-apk').forEach((el) => { el.checked = hideIcons; });
     const exportHint = document.getElementById('exportFileHint');
     if (exportHint) {
         exportHint.textContent = hideIcons
@@ -3448,6 +3525,8 @@ const inlineHandlers = {
     openPasswordManager,
     savePasswordDraft,
     cancelPasswordDraft,
+    togglePasswordSelectMode,
+    deleteSelectedPasswords,
     clearAllData,
     openThemeModal,
     toggleCountDisplay,

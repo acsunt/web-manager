@@ -6,6 +6,7 @@ import {
   normalizeWebsite,
   originsMatch,
   parseCredentials,
+  removeCredentials,
   snapshotCredential,
   upsertCapturedLogin,
 } from '../password-store.js';
@@ -82,6 +83,19 @@ describe('upsertCapturedLogin', () => {
   it('缺账号或密码不保存', () => {
     expect(upsertCapturedLogin([], { url: 'https://a.com', username: '', password: 'p' })).toEqual([]);
     expect(upsertCapturedLogin([], { url: 'https://a.com', username: 'u', password: '' })).toEqual([]);
+  });
+});
+
+describe('removeCredentials', () => {
+  it('按 id 删除一条或多条', () => {
+    const list = [
+      { id: '1', website: 'a.com', username: 'u1', password: 'p1' },
+      { id: '2', website: 'b.com', username: 'u2', password: 'p2' },
+      { id: '3', website: 'c.com', username: 'u3', password: 'p3' },
+    ];
+    expect(removeCredentials(list, '2').map((item) => item.id)).toEqual(['1', '3']);
+    expect(removeCredentials(list, ['1', '3']).map((item) => item.id)).toEqual(['2']);
+    expect(removeCredentials(list, [])).toHaveLength(3);
   });
 });
 

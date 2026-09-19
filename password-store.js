@@ -118,3 +118,9 @@ export function applyCredentialEdit(list, id, draft) {
         };
     });
 }
+
+export function removeCredentials(list, ids) {
+    const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map((id) => String(id ?? '')).filter(Boolean));
+    if (!idSet.size) return parseCredentials(list);
+    return parseCredentials(list).filter((item) => !idSet.has(item.id));
+}

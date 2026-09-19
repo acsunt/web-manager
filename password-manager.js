@@ -1,8 +1,9 @@
-import { applyCredentialEdit, credentialsEqual, parseCredentials, snapshotCredential } from './password-store.js';
+import { applyCredentialEdit, credentialsEqual, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
 import { isNativeApp, showToast } from './ui.js';
 import { escapeHtml } from './utils.js';
 
 const drafts = new Map();
+let selecting = false;
 
 function nativePasswords() {
     if (!isNativeApp() || typeof window.Android?.getSavedPasswords !== 'function') return [];
@@ -37,6 +38,52 @@ function setActionsVisible(card, visible) {
     if (actions) actions.hidden = !visible;
 }
 
+function selectedIds() {
+    return [...document.querySelectorAll('.pwd-select:checked')].map((el) => el.closest('.pwd-card')?.dataset.id).filter(Boolean);
+}
+
+function syncSelectUi() {
+    const modal = document.getElementById('passwordManagerModal');
+    if (modal) modal.classList.toggle('pwd-selecting', selecting);
+    const toggleBtn = document.getElementById('pwdSelectToggleBtn');
+    if (toggleBtn) toggleBtn.textContent = selecting ? '取消' : '多选';
+    const count = selectedIds().length;
+    const deleteBtn = document.getElementById('pwdDeleteSelectedBtn');
+    if (deleteBtn) {
+        deleteBtn.hidden = !selecting;
+        deleteBtn.disabled = count === 0;
+        deleteBtn.textContent = count ? `删除选中(${count})` : '删除选中';
+    }
+    document.querySelectorAll('.pwd-card').forEach((card) => {
+        card.classList.toggle('pwd-checked', !!card.querySelector('.pwd-select:checked'));
+    });
+}
+
+function setSelecting(on) {
+    selecting = !!on;
+    if (!selecting) {
+        document.querySelectorAll('.pwd-select').forEach((el) => { el.checked = false; });
+        document.querySelectorAll('.pwd-card.editing').forEach((card) => exitEdit(card, true));
+    }
+    syncSelectUi();
+}
+
+function enterEdit(card) {
+    if (!card || selecting) return;
+    document.querySelectorAll('.pwd-card.editing').forEach((other) => {
+        if (other !== card) exitEdit(other, true);
+    });
+    card.classList.add('editing');
+    setActionsVisible(card, false);
+}
+
+function exitEdit(card, restore = false) {
+    if (!card) return;
+    if (restore) cancelPasswordDraft(card.dataset.id);
+    card.classList.remove('editing');
+    setActionsVisible(card, false);
+}
+
 function bindPasswordManagerList(listEl) {
     if (!listEl || listEl.dataset.bound === '1') return;
     listEl.dataset.bound = '1';
@@ -46,14 +93,29 @@ function bindPasswordManagerList(listEl) {
         const id = card.dataset.id;
         const original = drafts.get(id);
         if (!original) return;
-        setActionsVisible(card, !credentialsEqual(original, rowDraft(card)));
+        setActionsVisible(card, card.classList.contains('editing') && !credentialsEqual(original, rowDraft(card)));
+    });
+    listEl.addEventListener('change', (event) => {
+        if (event.target.classList.contains('pwd-select')) syncSelectUi();
     });
     listEl.addEventListener('click', (event) => {
         const btn = event.target.closest('[data-pwd-act]');
         const card = event.target.closest('.pwd-card');
-        if (!btn || !card) return;
-        if (btn.dataset.pwdAct === 'save') savePasswordDraft(card.dataset.id);
-        if (btn.dataset.pwdAct === 'cancel') cancelPasswordDraft(card.dataset.id);
+        if (!card) return;
+        if (btn) {
+            if (btn.dataset.pwdAct === 'edit') enterEdit(card);
+            if (btn.dataset.pwdAct === 'save') savePasswordDraft(card.dataset.id);
+            if (btn.dataset.pwdAct === 'cancel') exitEdit(card, true);
+            if (btn.dataset.pwdAct === 'delete') deletePassword(card.dataset.id);
+            return;
+        }
+        if (selecting && event.target.type !== 'checkbox') {
+            const cb = card.querySelector('.pwd-select');
+            if (cb) {
+                cb.checked = !cb.checked;
+                syncSelectUi();
+            }
+        }
     });
 }
 
@@ -63,23 +125,38 @@ export function renderPasswordManager() {
     if (!listEl) return;
     bindPasswordManagerList(listEl);
     drafts.clear();
+    setSelecting(false);
     const list = nativePasswords();
     if (emptyEl) emptyEl.style.display = list.length ? 'none' : 'block';
+    const toolbar = document.getElementById('pwdManagerToolbar');
+    if (toolbar) toolbar.hidden = list.length === 0;
     listEl.innerHTML = list.map((item) => {
         drafts.set(item.id, snapshotCredential(item));
         return `<div class="pwd-card" data-id="${escapeHtml(item.id)}">
-            <label>网站</label>
-            <input class="form-control pwd-website" value="${escapeHtml(item.website)}" autocomplete="off">
-            <label>账号</label>
-            <input class="form-control pwd-username" value="${escapeHtml(item.username)}" autocomplete="off">
-            <label>密码</label>
-            <input class="form-control pwd-password" value="${escapeHtml(item.password)}" autocomplete="off">
-            <div class="pwd-actions" hidden>
-                <button type="button" class="btn" data-pwd-act="cancel">取消</button>
-                <button type="button" class="btn primary" data-pwd-act="save">保存</button>
+            <div class="pwd-card-head">
+                <label class="pwd-select-wrap"><input type="checkbox" class="pwd-select"></label>
+                <div class="pwd-summary">
+                    <div class="pwd-title">${escapeHtml(item.website || '未填写网站')}</div>
+                    <div class="pwd-sub">${escapeHtml(item.website)}</div>
+                </div>
+                <button type="button" class="btn small pwd-edit-btn" data-pwd-act="edit">编辑</button>
+                <button type="button" class="btn small danger pwd-delete-btn" data-pwd-act="delete">删除</button>
+            </div>
+            <div class="pwd-fields">
+                <label>网站</label>
+                <input class="form-control pwd-website" value="${escapeHtml(item.website)}" autocomplete="off">
+                <label>账号</label>
+                <input class="form-control pwd-username" value="${escapeHtml(item.username)}" autocomplete="off">
+                <label>密码</label>
+                <input class="form-control pwd-password" value="${escapeHtml(item.password)}" autocomplete="off">
+                <div class="pwd-actions" hidden>
+                    <button type="button" class="btn" data-pwd-act="cancel">取消</button>
+                    <button type="button" class="btn primary" data-pwd-act="save">保存</button>
+                </div>
             </div>
         </div>`;
     }).join('');
+    syncSelectUi();
 }
 
 export function openPasswordManager() {
@@ -87,6 +164,10 @@ export function openPasswordManager() {
     document.getElementById('toolsModal')?.classList.remove('active');
     renderPasswordManager();
     document.getElementById('passwordManagerModal')?.classList.add('active');
+}
+
+export function togglePasswordSelectMode() {
+    setSelecting(!selecting);
 }
 
 function cardById(id) {
@@ -111,6 +192,11 @@ export function savePasswordDraft(id) {
         return;
     }
     drafts.set(id, snapshotCredential(draft));
+    const title = card.querySelector('.pwd-title');
+    const sub = card.querySelector('.pwd-sub');
+    if (title) title.textContent = draft.website || '未填写网站';
+    if (sub) sub.textContent = draft.website;
+    card.classList.remove('editing');
     setActionsVisible(card, false);
     showToast('已保存');
 }
@@ -126,4 +212,27 @@ export function cancelPasswordDraft(id) {
     if (username) username.value = original.username;
     if (password) password.value = original.password;
     setActionsVisible(card, false);
+}
+
+export function deletePassword(id) {
+    if (!id) return;
+    if (!confirm('确定删除这条密码吗？')) return;
+    deletePasswords([id]);
+}
+
+export function deleteSelectedPasswords() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (!confirm(`确定删除选中的 ${ids.length} 条密码吗？`)) return;
+    deletePasswords(ids);
+}
+
+function deletePasswords(ids) {
+    const next = removeCredentials(nativePasswords(), ids);
+    if (!persistPasswords(next)) {
+        showToast('删除失败');
+        return;
+    }
+    showToast(ids.length > 1 ? `已删除 ${ids.length} 条` : '已删除');
+    renderPasswordManager();
 }
