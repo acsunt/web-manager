@@ -592,6 +592,19 @@ final class BrowserTabsController {
         activity.setPageWindow(false);
     }
 
+    WebView findWebViewForOrigin(String origin) {
+        if (origin == null || origin.isEmpty()) return null;
+        for (Tab tab : tabs) {
+            if (tab.webView == null) continue;
+            String current = tab.url == null ? "" : tab.url.trim();
+            String loaded = tab.webView.getUrl() == null ? "" : tab.webView.getUrl().trim();
+            if (origin.equals(activity.originOf(current)) || origin.equals(activity.originOf(loaded))) {
+                return tab.webView;
+            }
+        }
+        return null;
+    }
+
     void reloadMatchingUrls(List<String> urls) {
         if (urls == null || urls.isEmpty()) return;
         Set<String> targets = new HashSet<>();

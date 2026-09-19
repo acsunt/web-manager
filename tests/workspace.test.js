@@ -11,7 +11,14 @@ import {
   applySelectiveClear,
   collectSelectiveClearPages,
   collectSelectiveClearUrls,
+  defaultSiteDataClearTypes,
   groupPagesByWorkspace,
+  hasSiteDataClearType,
+  parseSiteDataClearTypes,
+  readSiteDataClearTypes,
+  SITE_DATA_CLEAR_TYPES_KEY,
+  siteDataClearTypeSummary,
+  writeSiteDataClearTypes,
   removeWorkspaceGroup,
   removeWorkspacesByIds,
 } from '../workspace.js';
@@ -150,6 +157,34 @@ describe('applySelectiveClear', () => {
       'https://a.example/note',
     ]);
     expect(collectSelectiveClearPages(appData, [{ type: 'page', wsId: 'ws_a', id: 'p2' }]).map((page) => page.id)).toEqual(['p2']);
+  });
+});
+
+describe('site data clear types', () => {
+  it('默认只勾 localStorage，勾选状态可读写本地', () => {
+    expect(defaultSiteDataClearTypes()).toEqual({ localStorage: true, indexedDB: false, cookie: false });
+    expect(parseSiteDataClearTypes(null)).toEqual(defaultSiteDataClearTypes());
+    expect(parseSiteDataClearTypes('{')).toEqual(defaultSiteDataClearTypes());
+    expect(parseSiteDataClearTypes({ localStorage: false, indexedDB: true, cookie: true, extra: 1 })).toEqual({
+      localStorage: false,
+      indexedDB: true,
+      cookie: true,
+    });
+    expect(hasSiteDataClearType({ localStorage: false, indexedDB: false, cookie: false })).toBe(false);
+    expect(siteDataClearTypeSummary({ localStorage: true, indexedDB: true, cookie: false })).toBe('localStorage、IndexedDB');
+    const storage = new Map();
+    const fake = {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, String(value)),
+    };
+    expect(readSiteDataClearTypes(fake)).toEqual(defaultSiteDataClearTypes());
+    writeSiteDataClearTypes({ localStorage: false, indexedDB: true, cookie: true }, fake);
+    expect(JSON.parse(storage.get(SITE_DATA_CLEAR_TYPES_KEY))).toEqual({
+      localStorage: false,
+      indexedDB: true,
+      cookie: true,
+    });
+    expect(readSiteDataClearTypes(fake)).toEqual({ localStorage: false, indexedDB: true, cookie: true });
   });
 });
 

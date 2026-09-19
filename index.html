@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.36</title>
+    <title>网页管理系统 v13.0.37</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -464,9 +464,14 @@
             <div class="form-group" style="margin-bottom:0;">
                 <div style="font-weight:600; margin-bottom:8px; font-size:calc(14px * var(--text-scale, 1));">数据管理</div>
                 <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="clearRuntimeCache()"><i class="fas fa-broom"></i> 清除缓存</button>
-                <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">只清图片、预加载和网页加载缓存，不改网站数据与核心配置。</div>
+                <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">只清图片、预加载和网页加载缓存，书签网页和核心配置都保留。</div>
                 <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmClearSiteData()"><i class="fas fa-eraser"></i> 清空数据</button>
-                <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">还原网站数据和主页按钮，操作前会二次确认。</div>
+                <div class="text-muted" style="margin:-4px 0 8px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">书签网页保留，只清打开网页本身带的站点数据。操作前会二次确认。</div>
+                <div class="site-data-clear-types" data-site-clear-group="tools">
+                    <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="localStorage" checked onchange="onSiteDataClearTypeChange(this)"> localStorage</label>
+                    <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="indexedDB" onchange="onSiteDataClearTypeChange(this)"> IndexedDB</label>
+                    <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="cookie" onchange="onSiteDataClearTypeChange(this)"> cookie</label>
+                </div>
                 <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openSelectiveClearModal()"><i class="fas fa-filter"></i> 分级删除</button>
                 <div class="text-muted" style="margin:0; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">勾选主页、分类或单个网页后，只清对应范围的本地站点数据，书签本身保留。</div>
             </div>
@@ -478,7 +483,12 @@
                 <span>分级删除</span>
                 <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('selectiveClearModal')"></i>
             </div>
-            <p class="selective-clear-hint">勾选主页或分类会清理其下全部网页；只勾单个网页则只清该网页。清理的是本地站点数据（登录态、方案、缓存等），不会从列表里删掉网页。</p>
+            <p class="selective-clear-hint">勾选主页或分类会清理其下全部网页；只勾单个网页则只清该网页。书签会保留，清的是打开网页本身带的数据。</p>
+            <div class="site-data-clear-types" data-site-clear-group="selective">
+                <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="localStorage" checked onchange="onSiteDataClearTypeChange(this)"> localStorage</label>
+                <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="indexedDB" onchange="onSiteDataClearTypeChange(this)"> IndexedDB</label>
+                <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="cookie" onchange="onSiteDataClearTypeChange(this)"> cookie</label>
+            </div>
             <div class="form-group">
                 <input type="search" id="selectiveClearSearch" placeholder="搜索主页、分类或网页" oninput="filterSelectiveClearList()" style="width:100%; margin-bottom:8px; padding:8px 10px; border:1px solid var(--border-color); border-radius:8px; background:var(--input-bg); color:var(--text-color); font-size:calc(13px * var(--text-scale, 1));">
                 <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; font-size: calc(13px * var(--text-scale, 1));">

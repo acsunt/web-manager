@@ -133,6 +133,66 @@ export function applySelectiveClear(appData, selected) {
     return collectSelectiveClearPages(appData, selected);
 }
 
+export const SITE_DATA_CLEAR_TYPES_KEY = 'webManagerSiteDataClearTypes';
+
+export function defaultSiteDataClearTypes() {
+    return { localStorage: true, indexedDB: false, cookie: false };
+}
+
+export function normalizeSiteDataClearTypes(raw) {
+    const defaults = defaultSiteDataClearTypes();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaults;
+    return {
+        localStorage: raw.localStorage === true,
+        indexedDB: raw.indexedDB === true,
+        cookie: raw.cookie === true,
+    };
+}
+
+export function parseSiteDataClearTypes(raw) {
+    if (raw == null || raw === '') return defaultSiteDataClearTypes();
+    try {
+        return normalizeSiteDataClearTypes(typeof raw === 'string' ? JSON.parse(raw) : raw);
+    } catch {
+        return defaultSiteDataClearTypes();
+    }
+}
+
+export function readSiteDataClearTypes(storage) {
+    const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (!store || typeof store.getItem !== 'function') return defaultSiteDataClearTypes();
+    try {
+        const raw = store.getItem(SITE_DATA_CLEAR_TYPES_KEY);
+        if (raw == null || raw === '') return defaultSiteDataClearTypes();
+        return parseSiteDataClearTypes(raw);
+    } catch {
+        return defaultSiteDataClearTypes();
+    }
+}
+
+export function writeSiteDataClearTypes(types, storage) {
+    const next = normalizeSiteDataClearTypes(types);
+    const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (store && typeof store.setItem === 'function') {
+        try { store.setItem(SITE_DATA_CLEAR_TYPES_KEY, JSON.stringify(next)); } catch { /* 配额满时仍返回当前勾选 */ }
+    }
+    return next;
+}
+
+export function hasSiteDataClearType(types) {
+    const next = normalizeSiteDataClearTypes(types);
+    return next.localStorage || next.indexedDB || next.cookie;
+}
+
+export function siteDataClearTypeSummary(types) {
+    const next = normalizeSiteDataClearTypes(types);
+    const names = [];
+    if (next.localStorage) names.push('localStorage');
+    if (next.indexedDB) names.push('IndexedDB');
+    if (next.cookie) names.push('cookie');
+    return names.join('、');
+}
+
 export function migratePersistedAppData(raw, now = Date.now()) {
     if (raw == null || raw === '') {
         return { appData: createDefaultAppData(now), didMigrateLegacyArray: false };

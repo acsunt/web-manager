@@ -6,6 +6,7 @@ import {
     deleteNode as deleteNodeInTree,
     findNode as findNodeInTree,
     findParent as findParentInTree,
+    collectPagesFromWorkspaces,
     collectSelectiveClearTree,
     filterSelectiveClearTree,
     getAllPages,
@@ -21,10 +22,16 @@ import {
     ensureWorkspaceGroups,
     getCurrentWorkspaceTree,
     collectSelectiveClearPages,
+    defaultSiteDataClearTypes,
+    hasSiteDataClearType,
     migratePersistedAppData,
+    normalizeSiteDataClearTypes,
+    readSiteDataClearTypes,
     removeWorkspaceGroup,
     removeWorkspacesByIds,
     resetAppData,
+    siteDataClearTypeSummary,
+    writeSiteDataClearTypes,
 } from './workspace.js';
 
 let appData = { workspaces: [], workspaceGroups: [], currentId: '' };
@@ -360,6 +367,7 @@ function init() {
         applyColumnMode();
 
         loadThemeConfig(); applyThemeSettings(); initToolbar();
+        applySiteDataClearTypeChecks();
         if (isNativeApp()) document.body.classList.add('native-app');
         renderTree(); document.body.classList.add('hide-urls');
         consumeNativeImport();
@@ -1664,7 +1672,7 @@ function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'text
 function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (!savedTheme) { themeConfig = createDefaultThemeConfig(); return; } try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...createDefaultThemeConfig(), darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...createDefaultThemeConfig(), ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); themeConfig = createDefaultThemeConfig(); } }
 function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
-function openToolsModal() { document.getElementById('toolsModal').classList.add('active'); }
+function openToolsModal() { applySiteDataClearTypeChecks(); document.getElementById('toolsModal').classList.add('active'); }
 function toggleThemeLock(type) { if (type === 'img') { themeConfig.lockedImg = !themeConfig.lockedImg; } else if (type === 'content') { themeConfig.lockedContent = !themeConfig.lockedContent; } updateLockUI(); saveThemeConfig(); }
 
 function updateLockUI() { const lockImgBtn = document.getElementById('lockImgBtn'); const lockContentBtn = document.getElementById('lockContentBtn'); const imgInputs = [ document.getElementById('bgBlurRange'), document.getElementById('bgOpacityRange'), document.getElementById('bgOverlayRange') ]; const contentInputs = [ document.getElementById('themeAlphaRange'), document.getElementById('textMaskRange') ]; if (themeConfig.lockedImg) { lockImgBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockImgBtn.classList.add('locked'); lockImgBtn.title = "点击解锁"; imgInputs.forEach(r => r.disabled = true); } else { lockImgBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockImgBtn.classList.remove('locked'); lockImgBtn.title = "点击锁定"; imgInputs.forEach(r => r.disabled = false); } if (themeConfig.lockedContent) { lockContentBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockContentBtn.classList.add('locked'); lockContentBtn.title = "点击解锁"; contentInputs.forEach(r => r.disabled = true); } else { lockContentBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockContentBtn.classList.remove('locked'); lockContentBtn.title = "点击锁定"; contentInputs.forEach(r => r.disabled = false); } }
@@ -1864,7 +1872,7 @@ function performClearData(type) { if (type === 'all') { if (confirm("确定要�
 function clearRuntimeCache() {
     closeModal('toolsModal');
     try { if (typeof window.Android?.clearAppCache === 'function') window.Android.clearAppCache(); } catch (e) {}
-    showToast('已清除临时缓存，网站数据和配置未改动', 1800);
+    showToast('已清除临时缓存，书签网页未改动', 1800);
 }
 
 function resetSiteData(keepTheme = false) {
@@ -1885,13 +1893,43 @@ function resetSiteData(keepTheme = false) {
     renderWorkspaceList();
 }
 
+function currentSiteDataClearTypesFromDom(source) {
+    const root = source?.closest?.('.site-data-clear-types');
+    if (!root) return readSiteDataClearTypes();
+    const types = defaultSiteDataClearTypes();
+    types.localStorage = false;
+    types.indexedDB = false;
+    types.cookie = false;
+    root.querySelectorAll('.site-clear-type').forEach((cb) => {
+        const key = cb.dataset.type;
+        if (key) types[key] = !!cb.checked;
+    });
+    return normalizeSiteDataClearTypes(types);
+}
+
+function applySiteDataClearTypeChecks(types = readSiteDataClearTypes()) {
+    const next = normalizeSiteDataClearTypes(types);
+    document.querySelectorAll('.site-data-clear-types .site-clear-type').forEach((cb) => {
+        const key = cb.dataset.type;
+        if (key && Object.prototype.hasOwnProperty.call(next, key)) cb.checked = !!next[key];
+    });
+}
+
+function onSiteDataClearTypeChange(checkbox) {
+    applySiteDataClearTypeChecks(writeSiteDataClearTypes(currentSiteDataClearTypesFromDom(checkbox)));
+}
+
 function confirmClearSiteData() {
-    if (!confirm('确定清空全部网站数据吗？\n主页按钮和本地网站数据将还原为初始状态，主题配置会保留。')) return;
+    const types = readSiteDataClearTypes();
+    if (!hasSiteDataClearType(types)) return alert('请先勾选要清理的数据类型');
+    const pages = collectPagesFromWorkspaces(appData.workspaces);
+    if (!uniquePageUrls(pages).length) return alert('当前没有可清理的网页站点数据');
+    const summary = siteDataClearTypeSummary(types);
+    if (!confirm(`确定清空全部书签网页的 ${summary} 吗？\n书签会保留，只清打开网页本身带的数据。`)) return;
     if (!confirm('再次确认：此操作不可撤销。')) return;
-    resetSiteData(true);
+    const cleared = clearSelectedPageSiteData(pages, types);
     closeModal('toolsModal');
-    closeModal('clearDataOptionsModal');
-    showToast('网站数据已清空', 1500);
+    showToast(`已清理 ${cleared} 个网页的 ${summary}`, 1800);
 }
 
 function visibleSelectiveClearChecks() {
@@ -1938,6 +1976,7 @@ function openSelectiveClearModal() {
     closeModal('toolsModal');
     const search = document.getElementById('selectiveClearSearch');
     if (search) search.value = '';
+    applySiteDataClearTypeChecks();
     renderSelectiveClearList();
     document.getElementById('selectiveClearModal').classList.add('active');
 }
@@ -1996,7 +2035,7 @@ function uniquePageUrls(pages) {
             : (page?.url ? [page.url] : []);
         list.forEach((raw) => {
             const url = String(raw || '').trim();
-            if (!url || seen.has(url)) return;
+            if (!url || seen.has(url) || !/^https?:\/\//i.test(url)) return;
             seen.add(url);
             urls.push(url);
         });
@@ -2004,23 +2043,28 @@ function uniquePageUrls(pages) {
     return urls;
 }
 
-function clearSelectedPageSiteData(pages) {
+function clearSelectedPageSiteData(pages, types = readSiteDataClearTypes()) {
     const urls = uniquePageUrls(pages);
-    if (!urls.length) return pages.length;
+    const next = normalizeSiteDataClearTypes(types);
+    if (!urls.length || !hasSiteDataClearType(next)) return 0;
     if (typeof window.Android?.clearPageSiteData !== 'function') return pages.length;
     try {
-        window.Android.clearPageSiteData(JSON.stringify(urls));
+        window.Android.clearPageSiteData(JSON.stringify({ urls, types: next }));
     } catch (e) { /* 无原生桥时仍按勾选网页数提示 */ }
     return pages.length;
 }
 
 function performSelectiveClearPages() {
+    const types = readSiteDataClearTypes();
+    if (!hasSiteDataClearType(types)) return alert('请先勾选要清理的数据类型');
     const pages = selectedSelectiveClearPages();
     if (pages.length === 0) return alert('请先勾选需要清理本地数据的主页、分类或网页');
-    if (!confirm(`确定清理选中的 ${pages.length} 个网页的本地站点数据吗？\n书签会保留，打开后相当于重新导入或换浏览器访问。`)) return;
-    const cleared = clearSelectedPageSiteData(pages);
+    if (!uniquePageUrls(pages).length) return alert('选中项没有可清理的网页站点数据');
+    const summary = siteDataClearTypeSummary(types);
+    if (!confirm(`确定清理选中的 ${pages.length} 个网页的 ${summary} 吗？\n书签会保留，清的是打开网页本身带的数据。`)) return;
+    const cleared = clearSelectedPageSiteData(pages, types);
     closeModal('selectiveClearModal');
-    showToast(`已清理 ${cleared} 个网页的本地数据`, 1800);
+    showToast(`已清理 ${cleared} 个网页的 ${summary}`, 1800);
 }
 
 // ================= 树形视图渲染 =================
@@ -3426,6 +3470,7 @@ const inlineHandlers = {
     performClearData,
     clearRuntimeCache,
     confirmClearSiteData,
+    onSiteDataClearTypeChange,
     openSelectiveClearModal,
     filterSelectiveClearList,
     handleSelectiveClearCheckChange,

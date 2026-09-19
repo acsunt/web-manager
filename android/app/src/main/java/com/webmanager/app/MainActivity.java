@@ -51,10 +51,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
@@ -274,45 +277,219 @@ public class MainActivity extends AppCompatActivity {
     }
 
     int clearPageSiteData(String json) {
-        List<String> urls = parseClearUrls(json);
-        if (urls.isEmpty()) return 0;
-        CountDownLatch done = new CountDownLatch(1);
-        AtomicInteger cleared = new AtomicInteger(0);
+        ClearRequest request = parseClearRequest(json);
+        if (request.urls.isEmpty() || !request.types.any()) return 0;
+        CountDownLatch started = new CountDownLatch(1);
         runOnUiThread(() -> {
             try {
-                CookieManager cookies = CookieManager.getInstance();
-                for (String url : urls) {
-                    clearCookiesForUrl(cookies, url);
-                    WebStorage.getInstance().deleteOrigin(originOf(url));
+                List<String> urls = request.urls;
+                if (request.types.cookie) {
+                    CookieManager cookies = CookieManager.getInstance();
+                    for (String url : urls) clearCookiesForUrl(cookies, url);
+                    cookies.flush();
                 }
-                cookies.flush();
-                if (tabs != null) tabs.reloadMatchingUrls(urls);
-                cleared.set(urls.size());
+                if (request.types.localStorage || request.types.indexedDB) {
+                    clearOriginStorage(urls, request.types, () -> {
+                        if (tabs != null) tabs.reloadMatchingUrls(urls);
+                    });
+                } else if (tabs != null) {
+                    tabs.reloadMatchingUrls(urls);
+                }
             } catch (Exception ignored) {
             } finally {
-                done.countDown();
+                started.countDown();
             }
         });
         try {
-            done.await(4, TimeUnit.SECONDS);
+            started.await(4, TimeUnit.SECONDS);
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         }
-        return Math.max(cleared.get(), urls.size());
+        return request.urls.size();
     }
 
-    private List<String> parseClearUrls(String json) {
-        LinkedHashSet<String> urls = new LinkedHashSet<>();
-        if (json == null || json.trim().isEmpty()) return new ArrayList<>();
+    private static final class ClearTypes {
+        boolean localStorage;
+        boolean indexedDB;
+        boolean cookie;
+
+        boolean any() {
+            return localStorage || indexedDB || cookie;
+        }
+    }
+
+    private static final class ClearRequest {
+        final List<String> urls = new ArrayList<>();
+        final ClearTypes types = new ClearTypes();
+    }
+
+    private ClearRequest parseClearRequest(String json) {
+        ClearRequest request = new ClearRequest();
+        if (json == null || json.trim().isEmpty()) return request;
+        String raw = json.trim();
         try {
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                String url = normalizeClearUrl(arr.optString(i, ""));
-                if (url != null) urls.add(url);
+            if (raw.startsWith("[")) {
+                collectClearUrls(new JSONArray(raw), request.urls);
+                request.types.localStorage = true;
+                return request;
+            }
+            JSONObject obj = new JSONObject(raw);
+            collectClearUrls(obj.optJSONArray("urls"), request.urls);
+            JSONObject types = obj.optJSONObject("types");
+            if (types != null) {
+                request.types.localStorage = types.optBoolean("localStorage", false);
+                request.types.indexedDB = types.optBoolean("indexedDB", false);
+                request.types.cookie = types.optBoolean("cookie", false);
+            } else {
+                request.types.localStorage = true;
             }
         } catch (Exception ignored) {
         }
-        return new ArrayList<>(urls);
+        return request;
+    }
+
+    private void collectClearUrls(JSONArray arr, List<String> urls) {
+        if (arr == null) return;
+        LinkedHashSet<String> unique = new LinkedHashSet<>(urls);
+        for (int i = 0; i < arr.length(); i++) {
+            String url = normalizeClearUrl(arr.optString(i, ""));
+            if (url != null && !shouldSkipSiteDataUrl(url)) unique.add(url);
+        }
+        urls.clear();
+        urls.addAll(unique);
+    }
+
+    private boolean shouldSkipSiteDataUrl(String url) {
+        if (url == null) return true;
+        String target = url.trim().toLowerCase();
+        return target.startsWith("file://") || target.startsWith("about:") || target.startsWith("data:");
+    }
+
+    private void clearOriginStorage(List<String> urls, ClearTypes types, Runnable done) {
+        Map<String, String> originUrls = new LinkedHashMap<>();
+        for (String url : urls) {
+            if (shouldSkipSiteDataUrl(url)) continue;
+            String origin = originOf(url);
+            if (origin == null || origin.isEmpty()) continue;
+            originUrls.putIfAbsent(origin, url);
+        }
+        if (originUrls.isEmpty()) {
+            done.run();
+            return;
+        }
+        List<Map.Entry<String, String>> pending = new ArrayList<>(originUrls.entrySet());
+        AtomicInteger remaining = new AtomicInteger(pending.size());
+        Runnable oneDone = () -> {
+            if (remaining.decrementAndGet() <= 0) done.run();
+        };
+        if (types.localStorage && types.indexedDB) {
+            for (Map.Entry<String, String> entry : pending) {
+                try {
+                    WebStorage.getInstance().deleteOrigin(entry.getKey());
+                } catch (Exception ignored) {
+                }
+                oneDone.run();
+            }
+            return;
+        }
+        pumpStorageClear(pending, 0, types, oneDone);
+    }
+
+    private void pumpStorageClear(List<Map.Entry<String, String>> pending, int index, ClearTypes types, Runnable oneDone) {
+        if (index >= pending.size()) return;
+        Map.Entry<String, String> entry = pending.get(index);
+        Runnable next = () -> {
+            oneDone.run();
+            pumpStorageClear(pending, index + 1, types, oneDone);
+        };
+        WebView open = tabs != null ? tabs.findWebViewForOrigin(entry.getKey()) : null;
+        if (open != null) {
+            runStorageClearScript(open, types, next);
+        } else {
+            startHiddenStorageClear(entry.getValue(), types, next);
+        }
+    }
+
+    private void runStorageClearScript(WebView view, ClearTypes types, Runnable done) {
+        if (view == null) {
+            done.run();
+            return;
+        }
+        view.evaluateJavascript(storageClearScript(types), value -> {
+            if (!types.indexedDB) {
+                done.run();
+                return;
+            }
+            pollIndexedDbClear(view, 0, done);
+        });
+    }
+
+    private void pollIndexedDbClear(WebView view, int attempt, Runnable done) {
+        if (view == null || attempt >= 20) {
+            done.run();
+            return;
+        }
+        view.evaluateJavascript("window.__wmClearDone===true", value -> {
+            if (value != null && value.contains("true")) {
+                done.run();
+            } else {
+                mainHandler.postDelayed(() -> pollIndexedDbClear(view, attempt + 1, done), 150);
+            }
+        });
+    }
+
+    private void startHiddenStorageClear(String url, ClearTypes types, Runnable done) {
+        WebView view = new WebView(this);
+        applyCommonWebSettings(view.getSettings());
+        view.setAlpha(0f);
+        attachHiddenWebView(view);
+        AtomicBoolean finished = new AtomicBoolean(false);
+        Runnable finish = () -> {
+            if (!finished.compareAndSet(false, true)) return;
+            try {
+                view.stopLoading();
+                view.setWebViewClient(new WebViewClient());
+                detachHiddenWebView(view);
+                view.destroy();
+            } catch (Exception ignored) {
+            }
+            done.run();
+        };
+        Runnable timeout = finish;
+        view.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView v, String loadedUrl) {
+                if (finished.get()) return;
+                mainHandler.removeCallbacks(timeout);
+                runStorageClearScript(v, types, finish);
+            }
+
+            @Override
+            public void onReceivedError(WebView v, WebResourceRequest request, android.webkit.WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    mainHandler.removeCallbacks(timeout);
+                    finish.run();
+                }
+            }
+        });
+        mainHandler.postDelayed(timeout, 8000);
+        view.loadUrl(url);
+    }
+
+    private String storageClearScript(ClearTypes types) {
+        String ls = types.localStorage ? "true" : "false";
+        String idb = types.indexedDB ? "true" : "false";
+        return "(function(){window.__wmClearDone=false;var ls=" + ls + ",idb=" + idb + ";"
+                + "try{if(ls){localStorage.clear();sessionStorage.clear();}}catch(e){}"
+                + "if(!idb||!window.indexedDB||!indexedDB.databases){window.__wmClearDone=true;return true;}"
+                + "indexedDB.databases().then(function(dbs){"
+                + "return Promise.all((dbs||[]).map(function(db){"
+                + "return new Promise(function(resolve){"
+                + "try{if(!db||!db.name){resolve();return;}var req=indexedDB.deleteDatabase(db.name);"
+                + "req.onsuccess=req.onerror=req.onblocked=function(){resolve();};}"
+                + "catch(e){resolve();}"
+                + "});}));}).then(function(){window.__wmClearDone=true;}).catch(function(){window.__wmClearDone=true;});"
+                + "return true;})();";
     }
 
     private String normalizeClearUrl(String raw) {
@@ -335,7 +512,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String originOf(String url) {
+    String originOf(String url) {
         try {
             Uri uri = Uri.parse(url);
             String scheme = uri.getScheme();
