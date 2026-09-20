@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelPasswordDraft, deletePassword, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectMode } from '../password-manager.js';
+import { cancelPasswordDraft, deletePassword, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from '../password-manager.js';
 
 function mountManager() {
   document.body.innerHTML = `
@@ -8,6 +8,7 @@ function mountManager() {
       <div id="pwdManagerToolbar">
         <button type="button" id="pwdSelectToggleBtn">多选</button>
         <button type="button" id="pwdDeleteSelectedBtn" hidden>删除选中</button>
+        <button type="button" id="pwdSelectAllBtn" hidden>全选</button>
       </div>
       <div id="passwordManagerEmpty"></div>
       <div id="passwordManagerList"></div>
@@ -23,6 +24,7 @@ function mockStore(list) {
       saved = JSON.parse(json);
       return true;
     }),
+    copyText: vi.fn(() => true),
   };
 }
 
@@ -107,12 +109,28 @@ describe('password-manager', () => {
     const card = document.querySelector('.pwd-card');
     card.querySelector('[data-pwd-act="edit"]').click();
     const username = card.querySelector('.pwd-username');
-    const clearBtn = username.closest('.pwd-input-wrap').querySelector('.pwd-clear-btn');
+    const wrap = username.closest('.pwd-input-wrap');
+    const clearBtn = wrap.querySelector('.pwd-clear-btn');
+    expect(wrap.querySelector('.pwd-copy-btn')).not.toBeNull();
     expect(clearBtn.hidden).toBe(false);
     clearBtn.click();
     expect(username.value).toBe('');
     expect(clearBtn.hidden).toBe(true);
     expect(card.querySelector('.pwd-actions').hidden).toBe(false);
+  });
+
+  it('编辑时输入框右侧复制按钮写入剪贴板', async () => {
+    openPasswordManager();
+    const card = document.querySelector('.pwd-card');
+    card.querySelector('[data-pwd-act="edit"]').click();
+    const fields = ['.pwd-title-input', '.pwd-website', '.pwd-username', '.pwd-password'];
+    fields.forEach((selector) => {
+      expect(card.querySelector(selector).closest('.pwd-input-wrap').querySelector('.pwd-copy-btn')).not.toBeNull();
+    });
+    const username = card.querySelector('.pwd-username');
+    username.closest('.pwd-input-wrap').querySelector('.pwd-copy-btn').click();
+    await Promise.resolve();
+    expect(window.Android.copyText).toHaveBeenCalledWith('alice');
   });
 
   it('可以单条删除', () => {
@@ -129,6 +147,8 @@ describe('password-manager', () => {
     togglePasswordSelectMode();
     expect(document.getElementById('passwordManagerModal').classList.contains('pwd-selecting')).toBe(true);
     expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(false);
+    expect(document.getElementById('pwdSelectAllBtn').hidden).toBe(false);
+    expect(document.getElementById('pwdSelectAllBtn').textContent).toBe('全选');
     document.querySelectorAll('.pwd-select').forEach((el) => { el.checked = true; });
     document.querySelector('.pwd-select').dispatchEvent(new Event('change', { bubbles: true }));
     deleteSelectedPasswords();
@@ -141,6 +161,19 @@ describe('password-manager', () => {
     expect(document.getElementById('passwordManagerModal').classList.contains('pwd-selecting')).toBe(false);
     expect(document.getElementById('pwdSelectToggleBtn').textContent).toBe('多选');
     expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(true);
+    expect(document.getElementById('pwdSelectAllBtn').hidden).toBe(true);
+  });
+
+  it('多选后全选会勾上全部，再点取消全选', () => {
+    openPasswordManager();
+    togglePasswordSelectMode();
+    togglePasswordSelectAll();
+    expect([...document.querySelectorAll('.pwd-select')].every((el) => el.checked)).toBe(true);
+    expect(document.getElementById('pwdSelectAllBtn').textContent).toBe('取消全选');
+    expect(document.getElementById('pwdDeleteSelectedBtn').textContent).toBe('删除选中(2)');
+    togglePasswordSelectAll();
+    expect([...document.querySelectorAll('.pwd-select')].every((el) => !el.checked)).toBe(true);
+    expect(document.getElementById('pwdSelectAllBtn').textContent).toBe('全选');
   });
 
   it('网页没有原生桥时不打开', () => {

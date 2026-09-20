@@ -223,16 +223,16 @@
 
     <ImageButton
         android:id="@+id/restoreTabsBtn"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
-        android:background="@drawable/bg_browser_fab"
+        android:alpha="0.72"
+        android:background="@drawable/bg_browser_tabs_float"
         android:contentDescription="回到打开的网页"
-        android:elevation="10dp"
-        android:padding="12dp"
+        android:elevation="0dp"
+        android:padding="8dp"
         android:src="@drawable/ic_browser_tabs"
-        android:tint="#FFFFFFFF"
         android:visibility="gone" />
 </FrameLayout>

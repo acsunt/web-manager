@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.44</title>
+    <title>网页管理系统 v13.0.45</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -507,6 +507,7 @@
             <div id="pwdManagerToolbar" class="pwd-manager-toolbar" hidden>
                 <button type="button" class="btn small" id="pwdSelectToggleBtn" onclick="togglePasswordSelectMode()">多选</button>
                 <button type="button" class="btn small danger" id="pwdDeleteSelectedBtn" onclick="deleteSelectedPasswords()" hidden>删除选中</button>
+                <button type="button" class="btn small" id="pwdSelectAllBtn" onclick="togglePasswordSelectAll()" hidden>全选</button>
             </div>
             <div id="passwordManagerEmpty" class="pwd-manager-empty">还没有保存过账号密码。在网站登录页输入并提交后会自动保存。</div>
             <div id="passwordManagerList" class="pwd-list"></div>

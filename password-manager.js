@@ -1,5 +1,5 @@
 import { applyCredentialEdit, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
-import { isNativeApp, showToast } from './ui.js';
+import { copyTextToClipboard, isNativeApp, showToast } from './ui.js';
 import { escapeHtml } from './utils.js';
 
 const drafts = new Map();
@@ -39,8 +39,27 @@ function fieldHtml(label, className, value) {
     return `<label>${label}</label>
         <div class="pwd-input-wrap">
             <input class="form-control ${className}" value="${escapeHtml(filled)}" autocomplete="off">
-            <button type="button" class="pwd-clear-btn" data-pwd-act="clear" aria-label="清空"${filled ? '' : ' hidden'}>&times;</button>
+            <div class="pwd-input-tools">
+                <button type="button" class="pwd-copy-btn" data-pwd-act="copy" aria-label="复制"><i class="fas fa-copy"></i></button>
+                <button type="button" class="pwd-clear-btn" data-pwd-act="clear" aria-label="清空"${filled ? '' : ' hidden'}>&times;</button>
+            </div>
         </div>`;
+}
+
+async function copyPasswordField(input, btn) {
+    const value = String(input?.value ?? '');
+    if (!value) return;
+    const ok = await copyTextToClipboard(value);
+    if (ok) {
+        const icon = btn?.querySelector('i');
+        if (icon) {
+            const originalClass = icon.className;
+            icon.className = 'fas fa-check';
+            setTimeout(() => { icon.className = originalClass; }, 1000);
+        }
+        return;
+    }
+    showToast('复制失败');
 }
 
 function syncClearButtons(card) {
@@ -71,6 +90,13 @@ function syncSelectUi() {
         deleteBtn.hidden = !selecting;
         deleteBtn.disabled = count === 0;
         deleteBtn.textContent = count ? `删除选中(${count})` : '删除选中';
+    }
+    const selectAllBtn = document.getElementById('pwdSelectAllBtn');
+    if (selectAllBtn) {
+        const boxes = document.querySelectorAll('.pwd-select');
+        const allSelected = boxes.length > 0 && [...boxes].every((el) => el.checked);
+        selectAllBtn.hidden = !selecting;
+        selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
     }
     document.querySelectorAll('.pwd-card').forEach((card) => {
         card.classList.toggle('pwd-checked', !!card.querySelector('.pwd-select:checked'));
@@ -117,6 +143,11 @@ function bindPasswordManagerList(listEl) {
         const card = event.target.closest('.pwd-card');
         if (!card) return;
         if (btn) {
+            if (btn.dataset.pwdAct === 'copy') {
+                const input = btn.closest('.pwd-input-wrap')?.querySelector('input');
+                copyPasswordField(input, btn);
+                return;
+            }
             if (btn.dataset.pwdAct === 'clear') {
                 const input = btn.closest('.pwd-input-wrap')?.querySelector('input');
                 if (input) {
@@ -192,6 +223,14 @@ export function openPasswordManager() {
 
 export function togglePasswordSelectMode() {
     setSelecting(!selecting);
+}
+
+export function togglePasswordSelectAll() {
+    if (!selecting) return;
+    const boxes = [...document.querySelectorAll('.pwd-select')];
+    const allSelected = boxes.length > 0 && boxes.every((el) => el.checked);
+    boxes.forEach((el) => { el.checked = !allSelected; });
+    syncSelectUi();
 }
 
 function cardById(id) {

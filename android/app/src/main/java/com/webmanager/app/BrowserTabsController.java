@@ -18,6 +18,7 @@ import android.view.DragEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
@@ -90,6 +91,13 @@ final class BrowserTabsController {
     private String sheetQuery = "";
     private boolean selectMode;
     private boolean sortMode;
+    private List<String> sortRestoreTabIds;
+    private final List<String> sortRestoreTabGroups = new ArrayList<>();
+    private final List<Boolean> sortRestoreTabPinned = new ArrayList<>();
+    private List<String> sortRestoreGroupIds;
+    private float sortDragDownX;
+    private float sortDragDownY;
+    private boolean sortDragArmed;
     private boolean appDarkMode;
     private int chromeColor = 0;
     private int chromeText = Color.parseColor("#2C3E50");
@@ -1019,6 +1027,8 @@ final class BrowserTabsController {
         if (selectModeBtn != null) selectModeBtn.setOnClickListener(v -> toggleSelectMode());
         View sortModeBtn = dialog.findViewById(R.id.sheetSortMode);
         if (sortModeBtn != null) sortModeBtn.setOnClickListener(v -> toggleSortMode());
+        View sortCancelBtn = dialog.findViewById(R.id.sheetSortCancel);
+        if (sortCancelBtn != null) sortCancelBtn.setOnClickListener(v -> cancelSortMode());
         View collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
         if (collapseAll != null) collapseAll.setOnClickListener(v -> toggleAllGroupsCollapsed());
         dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectAllVisible());
@@ -1105,6 +1115,7 @@ final class BrowserTabsController {
         if (selectModeBtn != null) selectModeBtn.setText(selectMode ? "完成多选" : "多选");
         TextView sortModeBtn = dialog.findViewById(R.id.sheetSortMode);
         if (sortModeBtn != null) sortModeBtn.setText(sortMode ? "完成排序" : "排序");
+        setVisible(dialog, R.id.sheetSortCancel, sortMode ? View.VISIBLE : View.GONE);
         int batchVisibility = selectMode ? View.VISIBLE : View.GONE;
         setVisible(dialog, R.id.sheetSelectCount, batchVisibility);
         setVisible(dialog, R.id.sheetSelectAll, batchVisibility);
@@ -1171,14 +1182,16 @@ final class BrowserTabsController {
                     if (countView != null) countView.setText("已选 " + selectedIds.size());
                 }
             });
-            row.setOnClickListener(v -> {
-                showTab(tab.id);
-                dismissSheet();
-            });
-            row.setOnLongClickListener(v -> {
-                showTabActions(tab);
-                return true;
-            });
+            if (!sortMode) {
+                row.setOnClickListener(v -> {
+                    showTab(tab.id);
+                    dismissSheet();
+                });
+                row.setOnLongClickListener(v -> {
+                    showTabActions(tab);
+                    return true;
+                });
+            }
             ImageButton pin = row.findViewById(R.id.sheetPin);
             if (pin != null) {
                 pin.setOnClickListener(v -> togglePinTab(tab.id));
@@ -1196,7 +1209,13 @@ final class BrowserTabsController {
             if (deleteTabBtn != null) deleteTabBtn.setOnClickListener(v -> deleteTab(tab.id));
             View handleView = row.findViewById(R.id.sheetTabHandle);
             handleView.setVisibility(sortMode ? View.VISIBLE : View.GONE);
-            if (sortMode) enableTabDrag(handleView, row, tab.id);
+            int actionVisibility = sortMode ? View.GONE : View.VISIBLE;
+            if (copy != null) copy.setVisibility(actionVisibility);
+            if (pin != null) pin.setVisibility(actionVisibility);
+            row.findViewById(R.id.sheetMove).setVisibility(actionVisibility);
+            row.findViewById(R.id.sheetClose).setVisibility(actionVisibility);
+            if (deleteTabBtn != null) deleteTabBtn.setVisibility(actionVisibility);
+            if (sortMode) enableTabDrag(row, tab.id);
             tint(handleView, sheetMuted());
             tint(row.findViewById(R.id.sheetMove), sheetMuted());
             tint(row.findViewById(R.id.sheetClose), sheetMuted());
@@ -1538,20 +1557,54 @@ final class BrowserTabsController {
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     @SuppressWarnings("deprecation")
-    private void enableTabDrag(View handle, View row, String tabId) {
-        handle.setOnTouchListener((v, event) -> {
-            if (event.getAction() != MotionEvent.ACTION_DOWN) return false;
-            ClipData data = ClipData.newPlainText(DRAG_TAB, tabId);
-            View.DragShadowBuilder shadow = new View.DragShadowBuilder(row);
-            DragPayload payload = new DragPayload(DRAG_TAB, tabId);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                row.startDragAndDrop(data, shadow, payload, 0);
-            } else {
-                row.startDrag(data, shadow, payload, 0);
+    private void enableTabDrag(View row, String tabId) {
+        row.setClickable(true);
+        row.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    sortDragArmed = true;
+                    sortDragDownX = event.getX();
+                    sortDragDownY = event.getY();
+                    requestDisallowScroll(v, true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!sortDragArmed) return true;
+                    int slop = ViewConfiguration.get(activity).getScaledTouchSlop();
+                    if (Math.abs(event.getX() - sortDragDownX) > slop || Math.abs(event.getY() - sortDragDownY) > slop) {
+                        sortDragArmed = false;
+                        startTabDrag(row, tabId);
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    sortDragArmed = false;
+                    requestDisallowScroll(v, false);
+                    return true;
+                default:
+                    return false;
             }
-            return true;
         });
-        row.setOnDragListener((v, event) -> handleTabDrop(event, tabId));
+        row.setOnDragListener((v, event) -> handleTabDrop(event, tabId, row));
+    }
+
+    private void requestDisallowScroll(View view, boolean disallow) {
+        android.view.ViewParent parent = view == null ? null : view.getParent();
+        while (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(disallow);
+            parent = parent.getParent();
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void startTabDrag(View row, String tabId) {
+        ClipData data = ClipData.newPlainText(DRAG_TAB, tabId);
+        View.DragShadowBuilder shadow = new View.DragShadowBuilder(row);
+        DragPayload payload = new DragPayload(DRAG_TAB, tabId);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            row.startDragAndDrop(data, shadow, payload, 0);
+        } else {
+            row.startDrag(data, shadow, payload, 0);
+        }
     }
 
     private boolean handleGroupDrop(DragEvent event, String targetId) {
@@ -1569,30 +1622,89 @@ final class BrowserTabsController {
         return true;
     }
 
-    private boolean handleTabDrop(DragEvent event, String targetId) {
+    private boolean handleTabDrop(DragEvent event, String targetId, View row) {
         if (!(event.getLocalState() instanceof DragPayload)) return false;
         DragPayload payload = (DragPayload) event.getLocalState();
         if (!DRAG_TAB.equals(payload.type)) return false;
-        if (event.getAction() == DragEvent.ACTION_DROP) {
-            reorderTabs(payload.id, targetId);
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED:
+                return true;
+            case DragEvent.ACTION_DRAG_ENTERED:
+            case DragEvent.ACTION_DRAG_LOCATION:
+                if (payload.id.equals(targetId)) clearTabDropIndicators(row);
+                else showTabDropIndicator(row, isDropAfter(event, row));
+                return true;
+            case DragEvent.ACTION_DRAG_EXITED:
+                clearTabDropIndicators(row);
+                return true;
+            case DragEvent.ACTION_DROP:
+                clearAllTabDropIndicators();
+                if (!payload.id.equals(targetId)) {
+                    reorderTabs(payload.id, targetId, isDropAfter(event, row));
+                }
+                return true;
+            case DragEvent.ACTION_DRAG_ENDED:
+                clearAllTabDropIndicators();
+                return true;
+            default:
+                return true;
         }
-        return true;
     }
 
-    private void reorderTabs(String fromId, String toId) {
-        if (fromId == null || fromId.equals(toId)) return;
+    private boolean isDropAfter(DragEvent event, View row) {
+        return row != null && event.getY() > row.getHeight() / 2f;
+    }
+
+    private void showTabDropIndicator(View row, boolean after) {
+        if (row == null) return;
+        View top = row.findViewById(R.id.sheetTabDropTop);
+        View bottom = row.findViewById(R.id.sheetTabDropBottom);
+        if (top != null) {
+            top.setBackgroundColor(sheetAccent());
+            top.setVisibility(after ? View.GONE : View.VISIBLE);
+        }
+        if (bottom != null) {
+            bottom.setBackgroundColor(sheetAccent());
+            bottom.setVisibility(after ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void clearTabDropIndicators(View row) {
+        if (row == null) return;
+        View top = row.findViewById(R.id.sheetTabDropTop);
+        View bottom = row.findViewById(R.id.sheetTabDropBottom);
+        if (top != null) top.setVisibility(View.GONE);
+        if (bottom != null) bottom.setVisibility(View.GONE);
+    }
+
+    private void clearAllTabDropIndicators() {
+        if (sheetDialog == null) return;
+        LinearLayout list = sheetDialog.findViewById(R.id.sheetList);
+        if (list == null) return;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            clearTabDropIndicators(list.getChildAt(i));
+        }
+    }
+
+    private void reorderTabs(String fromId, String toId, boolean after) {
+        if (fromId == null || toId == null || fromId.equals(toId)) return;
         int from = indexOfTab(fromId);
-        int to = indexOfTab(toId);
-        if (from < 0 || to < 0) return;
+        if (from < 0) return;
         Tab target = findTabById(toId);
         Tab moved = tabs.remove(from);
-        if (to > from) to--;
+        int to = indexOfTab(toId);
+        if (to < 0) {
+            tabs.add(Math.min(from, tabs.size()), moved);
+            return;
+        }
         if (target != null) {
             moved.groupId = target.groupId;
             moved.pinned = target.pinned;
         }
+        if (after) to++;
         tabs.add(to, moved);
         pruneEmptyGroups();
+        persistState();
         renderStrips();
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
     }
@@ -1729,14 +1841,91 @@ final class BrowserTabsController {
     }
 
     private void toggleSelectMode() {
-        selectMode = !selectMode;
-        if (!selectMode) selectedIds.clear();
+        if (selectMode) {
+            selectMode = false;
+            selectedIds.clear();
+        } else {
+            if (sortMode) {
+                sortMode = false;
+                clearSortSnapshot();
+            }
+            selectMode = true;
+        }
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
     }
 
     private void toggleSortMode() {
-        sortMode = !sortMode;
+        if (sortMode) {
+            sortMode = false;
+            clearSortSnapshot();
+        } else {
+            if (selectMode) {
+                selectMode = false;
+                selectedIds.clear();
+            }
+            sortMode = true;
+            captureSortSnapshot();
+        }
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void cancelSortMode() {
+        if (!sortMode) return;
+        restoreSortSnapshot();
+        sortMode = false;
+        persistState();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void captureSortSnapshot() {
+        sortRestoreTabIds = new ArrayList<>();
+        sortRestoreTabGroups.clear();
+        sortRestoreTabPinned.clear();
+        for (Tab tab : tabs) {
+            sortRestoreTabIds.add(tab.id);
+            sortRestoreTabGroups.add(tab.groupId);
+            sortRestoreTabPinned.add(tab.pinned);
+        }
+        sortRestoreGroupIds = new ArrayList<>();
+        for (Group group : groups) sortRestoreGroupIds.add(group.id);
+    }
+
+    private void restoreSortSnapshot() {
+        if (sortRestoreTabIds == null) return;
+        List<Tab> orderedTabs = new ArrayList<>();
+        for (int i = 0; i < sortRestoreTabIds.size(); i++) {
+            Tab tab = findTabById(sortRestoreTabIds.get(i));
+            if (tab == null) continue;
+            tab.groupId = sortRestoreTabGroups.get(i);
+            tab.pinned = sortRestoreTabPinned.get(i);
+            orderedTabs.add(tab);
+        }
+        for (Tab tab : tabs) {
+            if (!orderedTabs.contains(tab)) orderedTabs.add(tab);
+        }
+        tabs.clear();
+        tabs.addAll(orderedTabs);
+        if (sortRestoreGroupIds != null) {
+            List<Group> orderedGroups = new ArrayList<>();
+            for (String id : sortRestoreGroupIds) {
+                Group group = findGroup(id);
+                if (group != null) orderedGroups.add(group);
+            }
+            for (Group group : groups) {
+                if (!orderedGroups.contains(group)) orderedGroups.add(group);
+            }
+            groups.clear();
+            groups.addAll(orderedGroups);
+        }
+        clearSortSnapshot();
+    }
+
+    private void clearSortSnapshot() {
+        sortRestoreTabIds = null;
+        sortRestoreTabGroups.clear();
+        sortRestoreTabPinned.clear();
+        sortRestoreGroupIds = null;
     }
 
     private void toggleSelectAllVisible() {
@@ -2010,6 +2199,7 @@ final class BrowserTabsController {
         tint(pagesBtn, chromeText);
         tint(tabsBtn, chromeMuted);
         tint(tabsFab, chromeMuted);
+        tint(restoreBtn, chromeMuted);
         tint(refreshSpinner, chromeMuted);
         Tab active = activeTab();
         if (desktopBtn != null) {
@@ -2083,6 +2273,7 @@ final class BrowserTabsController {
         setText(dialog, R.id.sheetSelectCount, sheetMuted());
         setText(dialog, R.id.sheetSelectMode, sheetAccent());
         setText(dialog, R.id.sheetSortMode, sheetAccent());
+        setText(dialog, R.id.sheetSortCancel, sheetAccent());
         setText(dialog, R.id.sheetCollapseAll, sheetAccent());
         setText(dialog, R.id.sheetSelectAll, sheetAccent());
         setText(dialog, R.id.sheetPinSelected, sheetAccent());

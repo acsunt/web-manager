@@ -112,6 +112,16 @@
             android:textSize="14sp" />
 
         <TextView
+            android:id="@+id/sheetSortCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="取消"
+            android:textColor="@color/browser_accent"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/sheetCollapseAll"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
