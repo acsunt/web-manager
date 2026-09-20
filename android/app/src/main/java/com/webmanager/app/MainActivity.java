@@ -231,6 +231,14 @@ public class MainActivity extends AppCompatActivity {
         return pageContainer != null && pageContainer.getVisibility() == View.VISIBLE;
     }
 
+    int pageSafeRight() {
+        return Math.max(safeRight, 0);
+    }
+
+    int pageSafeBottom() {
+        return Math.max(safeBottom, systemBarSize("navigation_bar_height"));
+    }
+
     void setPageWindow(boolean visible) {
         if (pageContainer != null) {
             pageContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
@@ -646,6 +654,7 @@ public class MainActivity extends AppCompatActivity {
                 restoreTabsBtn.setLayoutParams(params);
             }
         }
+        if (tabs != null) tabs.applyChromeVisible();
     }
 
     private int systemBarSize(String dimenName) {
@@ -1305,6 +1314,7 @@ public class MainActivity extends AppCompatActivity {
             if (tabs != null) {
                 tabs.updateUrl(view, url);
                 tabs.restoreViewState(view);
+                tabs.hideRefreshSpinner();
             }
             injectPasswordAutofill(view);
             if (!isActivePage(view)) return;
@@ -1336,7 +1346,10 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onProgressChanged(WebView view, int newProgress) {
-            if (newProgress >= 100 && isActivePage(view)) refreshPageChrome(view, true);
+            if (newProgress >= 100) {
+                if (tabs != null) tabs.hideRefreshSpinner();
+                if (isActivePage(view)) refreshPageChrome(view, true);
+            }
         }
 
         @Override

@@ -32,10 +32,6 @@ function writeReleaseNotes(version) {
         encoding: 'utf8',
         env: {
             ...process.env,
-            ONLINE: `wan-v${version}-yes.html`,
-            OFFLINE: `wan-v${version}-no.html`,
-            APK32: `web-manager-v${version}-32.apk`,
-            APK64: `web-manager-v${version}-64.apk`,
             NOTES_FILE: notesPath,
         },
     });

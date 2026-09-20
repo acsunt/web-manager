@@ -54,6 +54,8 @@ describe('password-manager', () => {
     expect(card.querySelector('.pwd-username').value).toBe('alice');
     expect(card.querySelector('.pwd-password').value).toBe('old');
     expect(card.querySelector('.pwd-actions').hidden).toBe(true);
+    expect(card.querySelector('.pwd-delete-btn')).not.toBeNull();
+    expect(card.querySelector('.pwd-actions .pwd-delete-btn')).not.toBeNull();
     expect(document.getElementById('pwdDeleteSelectedBtn').hidden).toBe(true);
   });
 
@@ -72,6 +74,9 @@ describe('password-manager', () => {
     password.value = 'secret';
     website.dispatchEvent(new Event('input', { bubbles: true }));
     expect(card.querySelector('.pwd-actions').hidden).toBe(false);
+    const actions = card.querySelector('.pwd-actions');
+    expect(actions.firstElementChild.classList.contains('pwd-delete-btn')).toBe(true);
+    expect(actions.querySelector('[data-pwd-act="cancel"]')).not.toBeNull();
 
     cancelPasswordDraft('p1');
     expect(title.value).toBe('Example Site');

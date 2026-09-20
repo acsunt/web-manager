@@ -15,12 +15,12 @@ import android.os.Parcel;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.DragEvent;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.animation.AnimationUtils;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.CheckBox;
@@ -60,16 +60,18 @@ final class BrowserTabsController {
     private final HorizontalScrollView groupScroll;
     private final HorizontalScrollView tabScroll;
     private final HorizontalScrollView tabOverflowScroll;
-    private final LinearLayout browserActionsRow;
     private final ImageButton categoryBtn;
     private final ImageButton homeBtn;
     private final ImageButton refreshBtn;
     private final ImageButton desktopBtn;
     private final ImageButton pagesBtn;
     private final View tabsBtn;
+    private final View tabsFab;
+    private final ImageView refreshSpinner;
     private final TextView tabsCount;
     private final View restoreBtn;
     private final View browserBar;
+    private final View pageBottomInset;
     private final LayoutInflater inflater;
 
     private final List<Group> groups = new ArrayList<>();
@@ -125,26 +127,23 @@ final class BrowserTabsController {
         this.groupScroll = activity.findViewById(R.id.groupScroll);
         this.tabScroll = activity.findViewById(R.id.tabScroll);
         this.tabOverflowScroll = activity.findViewById(R.id.tabOverflowScroll);
-        this.browserActionsRow = activity.findViewById(R.id.browserActionsRow);
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.homeBtn = activity.findViewById(R.id.homeBtn);
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
         this.desktopBtn = activity.findViewById(R.id.desktopBtn);
         this.pagesBtn = activity.findViewById(R.id.pagesBtn);
         this.tabsBtn = activity.findViewById(R.id.tabsBtn);
+        this.tabsFab = activity.findViewById(R.id.tabsFab);
+        this.refreshSpinner = activity.findViewById(R.id.refreshSpinner);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.browserBar = activity.findViewById(R.id.browserBar);
+        this.pageBottomInset = activity.findViewById(R.id.pageBottomInset);
         this.inflater = LayoutInflater.from(activity);
         if (homeBtn != null) homeBtn.setOnClickListener(v -> hideOverlay());
         if (refreshBtn != null) refreshBtn.setOnClickListener(v -> refreshActive());
-        if (tabsBtn != null) {
-            tabsBtn.setOnClickListener(v -> showSheet());
-            tabsBtn.setOnLongClickListener(v -> {
-                toggleExtrasVisible();
-                return true;
-            });
-        }
+        bindTabsOpener(tabsBtn);
+        bindTabsOpener(tabsFab);
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
         if (desktopBtn != null) desktopBtn.setOnClickListener(v -> toggleDesktopActive());
         if (pagesBtn != null) pagesBtn.setOnClickListener(v -> togglePagesVisible());
@@ -237,6 +236,7 @@ final class BrowserTabsController {
     }
 
     void hideOverlay() {
+        hideRefreshSpinner();
         pauseAll();
         activity.setPageWindow(false);
         persistState();
@@ -263,7 +263,7 @@ final class BrowserTabsController {
     }
 
     void applyChromeVisible() {
-        if (browserBar != null) browserBar.setVisibility(chromeVisible ? View.VISIBLE : View.GONE);
+        applyChromeLayout();
         syncRestoreButton(activity.isPageOpen());
     }
 
@@ -483,7 +483,32 @@ final class BrowserTabsController {
 
     void refreshActive() {
         Tab tab = activeTab();
-        if (tab != null && tab.webView != null) tab.webView.reload();
+        if (tab != null && tab.webView != null) {
+            showRefreshSpinner();
+            tab.webView.reload();
+        }
+    }
+
+    void hideRefreshSpinner() {
+        if (refreshSpinner == null) return;
+        refreshSpinner.clearAnimation();
+        refreshSpinner.setVisibility(View.GONE);
+    }
+
+    private void showRefreshSpinner() {
+        if (refreshSpinner == null) return;
+        tint(refreshSpinner, chromeMuted);
+        refreshSpinner.setVisibility(View.VISIBLE);
+        refreshSpinner.startAnimation(AnimationUtils.loadAnimation(activity, R.anim.refresh_spin));
+    }
+
+    private void bindTabsOpener(View view) {
+        if (view == null) return;
+        view.setOnClickListener(v -> showSheet());
+        view.setOnLongClickListener(v -> {
+            toggleExtrasVisible();
+            return true;
+        });
     }
 
     void setAppDarkMode(boolean dark) {
@@ -703,6 +728,7 @@ final class BrowserTabsController {
             if (show) item.webView.onResume();
             else item.webView.onPause();
         }
+        hideRefreshSpinner();
         activity.setPageWindow(true);
         activity.refreshPageChrome(tab.webView);
         restoreViewState(tab.webView);
@@ -1307,13 +1333,29 @@ final class BrowserTabsController {
         if (desktopBtn != null) desktopBtn.setVisibility(extras);
         if (pagesBtn != null) pagesBtn.setVisibility(extras);
         if (tabScroll != null) tabScroll.setVisibility(extras);
-        if (browserActionsRow != null) {
-            browserActionsRow.setGravity(extrasVisible
-                    ? Gravity.START | Gravity.CENTER_VERTICAL
-                    : Gravity.END | Gravity.CENTER_VERTICAL);
-        }
         if (groupScroll != null && (!extrasVisible || !groupsVisible)) {
             groupScroll.setVisibility(View.GONE);
+        }
+        applyChromeLayout();
+    }
+
+    private void applyChromeLayout() {
+        boolean showBar = chromeVisible && extrasVisible;
+        if (browserBar != null) browserBar.setVisibility(showBar ? View.VISIBLE : View.GONE);
+        if (pageBottomInset != null) pageBottomInset.setVisibility(extrasVisible ? View.VISIBLE : View.GONE);
+        if (tabsFab != null) {
+            boolean showFab = chromeVisible && !extrasVisible && activity.isPageOpen();
+            tabsFab.setVisibility(showFab ? View.VISIBLE : View.GONE);
+            if (showFab) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) tabsFab.getLayoutParams();
+                if (params != null) {
+                    float density = activity.getResources().getDisplayMetrics().density;
+                    int margin = Math.round(10 * density);
+                    params.rightMargin = activity.pageSafeRight() + margin;
+                    params.bottomMargin = activity.pageSafeBottom() + margin;
+                    tabsFab.setLayoutParams(params);
+                }
+            }
         }
     }
 
@@ -1966,6 +2008,9 @@ final class BrowserTabsController {
         tint(refreshBtn, chromeText);
         tint(desktopBtn, chromeText);
         tint(pagesBtn, chromeText);
+        tint(tabsBtn, chromeMuted);
+        tint(tabsFab, chromeMuted);
+        tint(refreshSpinner, chromeMuted);
         Tab active = activeTab();
         if (desktopBtn != null) {
             desktopBtn.setContentDescription(active != null && active.desktop ? "切换为手机版" : "桌面版网站");

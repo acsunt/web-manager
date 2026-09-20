@@ -43,20 +43,8 @@ function formatReleaseNotes(buckets) {
     return parts.join('\n').trim();
 }
 
-function formatDownloadNotes({ online, offline, apk, apk32, apk64 }) {
-    const lines = ['## 下载', ''];
-    if (online) lines.push(`- ${online}：需联网加载 Font Awesome / Cropper / Sortable / JSZip`);
-    if (offline) lines.push(`- ${offline}：依赖已内联，可离线双击打开`);
-    if (apk32) lines.push(`- ${apk32}：Android 32 位安装包（armeabi-v7a），内置离线网页`);
-    if (apk64) lines.push(`- ${apk64}：Android 64 位安装包（arm64-v8a），内置离线网页`);
-    if (apk) lines.push(`- ${apk}：Android 安装包，内置离线网页`);
-    return lines.join('\n');
-}
-
-function formatGithubReleaseBody(text, files = {}) {
-    const changelog = formatReleaseNotes(validateReleaseNotes(text));
-    const downloads = formatDownloadNotes(files);
-    return downloads ? `${changelog}\n\n${downloads}` : changelog;
+function formatGithubReleaseBody(text) {
+    return formatReleaseNotes(validateReleaseNotes(text));
 }
 
 function validateReleaseNotes(text) {
@@ -143,13 +131,7 @@ function main() {
         return;
     }
 
-    const body = formatGithubReleaseBody(text, {
-        online: process.env.ONLINE,
-        offline: process.env.OFFLINE,
-        apk: process.env.APK,
-        apk32: process.env.APK32,
-        apk64: process.env.APK64,
-    });
+    const body = formatGithubReleaseBody(text);
     const outFile = process.env.NOTES_FILE;
     if (outFile) {
         writeFileSync(outFile, `${body}\n`, 'utf8');

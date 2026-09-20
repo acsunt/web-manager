@@ -55,17 +55,21 @@ describe('Release 说明', () => {
     expect(src).not.toContain('git describe --tags --abbrev=0 HEAD^');
   });
 
-  it('GitHub 正文带上 HTML 和 APK 下载说明', () => {
-    const body = formatGithubReleaseBody('新增 Android 壳\n修复 白屏', {
-      online: 'wan-v13.0.14-yes.html',
-      offline: 'wan-v13.0.14-no.html',
-      apk32: 'web-manager-v13.0.14-32.apk',
-      apk64: 'web-manager-v13.0.14-64.apk',
-    });
+  it('GitHub Release 正文只有提交说明，下载说明放在项目首页', () => {
+    const body = formatGithubReleaseBody('新增 Android 壳\n修复 白屏');
+    const readme = readFileSync(join(rootDir, 'README.md'), 'utf8');
+    const src = readFileSync(join(rootDir, 'scripts/release-notes.mjs'), 'utf8');
     expect(body).toContain('## 新增');
     expect(body).toContain('## 修复');
-    expect(body).toContain('web-manager-v13.0.14-32.apk');
-    expect(body).toContain('web-manager-v13.0.14-64.apk');
+    expect(body).not.toContain('## 下载');
+    expect(body).not.toContain('web-manager-v');
+    expect(src).not.toContain('formatDownloadNotes');
+    expect(readme).toContain('## 下载');
+    expect(readme).toContain('wan-vX.Y.Z-yes.html');
+    expect(readme).toContain('wan-vX.Y.Z-no.html');
+    expect(readme).toContain('web-manager-vX.Y.Z-32.apk');
+    expect(readme).toContain('web-manager-vX.Y.Z-64.apk');
+    expect(readme).toContain('https://github.com/acsunt/web-manager/releases/latest');
   });
 });
 

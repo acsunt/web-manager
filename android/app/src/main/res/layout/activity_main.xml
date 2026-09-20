@@ -31,12 +31,47 @@
             android:elevation="2dp" />
 
         <FrameLayout
-            android:id="@+id/pageWebHost"
+            android:id="@+id/pageWebFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:clipChildren="true"
-            android:clipToPadding="true" />
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <FrameLayout
+                android:id="@+id/pageWebHost"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="true"
+                android:clipToPadding="true" />
+
+            <ImageView
+                android:id="@+id/refreshSpinner"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:alpha="0.42"
+                android:clickable="false"
+                android:contentDescription="正在刷新"
+                android:focusable="false"
+                android:src="@drawable/ic_browser_refresh"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/tabsFab"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="10dp"
+                android:layout_marginBottom="10dp"
+                android:alpha="0.72"
+                android:background="@drawable/bg_browser_tabs_float"
+                android:contentDescription="打开的网页列表"
+                android:elevation="0dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_browser_tabs"
+                android:visibility="gone" />
+        </FrameLayout>
 
         <LinearLayout
             android:id="@+id/browserBar"
@@ -159,11 +194,10 @@
                         android:id="@+id/tabsBtn"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/bg_browser_fab"
+                        android:background="@android:color/transparent"
                         android:contentDescription="打开的网页列表"
-                        android:padding="10dp"
-                        android:src="@drawable/ic_browser_tabs"
-                        android:tint="#FFFFFFFF" />
+                        android:padding="8dp"
+                        android:src="@drawable/ic_browser_tabs" />
 
                     <TextView
                         android:id="@+id/tabsCount"

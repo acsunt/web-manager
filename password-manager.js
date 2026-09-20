@@ -1,4 +1,4 @@
-import { applyCredentialEdit, credentialsEqual, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
+import { applyCredentialEdit, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
 import { isNativeApp, showToast } from './ui.js';
 import { escapeHtml } from './utils.js';
 
@@ -92,7 +92,7 @@ function enterEdit(card) {
         if (other !== card) exitEdit(other, true);
     });
     card.classList.add('editing');
-    setActionsVisible(card, false);
+    setActionsVisible(card, true);
 }
 
 function exitEdit(card, restore = false) {
@@ -107,12 +107,7 @@ function bindPasswordManagerList(listEl) {
     listEl.dataset.bound = '1';
     listEl.addEventListener('input', (event) => {
         const card = event.target.closest('.pwd-card');
-        if (!card) return;
-        const id = card.dataset.id;
-        const original = drafts.get(id);
-        if (!original) return;
-        syncClearButtons(card);
-        setActionsVisible(card, card.classList.contains('editing') && !credentialsEqual(original, rowDraft(card)));
+        if (card) syncClearButtons(card);
     });
     listEl.addEventListener('change', (event) => {
         if (event.target.classList.contains('pwd-select')) syncSelectUi();
@@ -169,7 +164,6 @@ export function renderPasswordManager() {
                     <div class="pwd-sub">${escapeHtml(item.website)}</div>
                 </div>
                 <button type="button" class="btn small pwd-edit-btn" data-pwd-act="edit">编辑</button>
-                <button type="button" class="btn small danger pwd-delete-btn" data-pwd-act="delete">删除</button>
             </div>
             <div class="pwd-fields">
                 ${fieldHtml('标题', 'pwd-title-input', item.title || '')}
@@ -177,8 +171,11 @@ export function renderPasswordManager() {
                 ${fieldHtml('账号', 'pwd-username', item.username)}
                 ${fieldHtml('密码', 'pwd-password', item.password)}
                 <div class="pwd-actions" hidden>
-                    <button type="button" class="btn" data-pwd-act="cancel">取消</button>
-                    <button type="button" class="btn primary" data-pwd-act="save">保存</button>
+                    <button type="button" class="btn danger pwd-delete-btn" data-pwd-act="delete">删除</button>
+                    <div class="pwd-actions-end">
+                        <button type="button" class="btn" data-pwd-act="cancel">取消</button>
+                        <button type="button" class="btn primary" data-pwd-act="save">保存</button>
+                    </div>
                 </div>
             </div>
         </div>`;

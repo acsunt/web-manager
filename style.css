@@ -186,7 +186,8 @@ body.native-app .html-only-item { display: none !important; }
 .pwd-input-wrap .form-control { padding-right: 34px; }
 .pwd-clear-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border: none; background: transparent; color: var(--text-secondary); font-size: 18px; line-height: 1; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
 .pwd-clear-btn[hidden] { display: none !important; }
-.pwd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.pwd-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pwd-actions-end { display: flex; gap: 8px; margin-left: auto; }
 .pwd-actions[hidden] { display: none !important; }
 .apk-only-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .apk-only-title { font-weight: 600; margin-bottom: 8px; font-size: calc(14px * var(--text-scale, 1)); }
