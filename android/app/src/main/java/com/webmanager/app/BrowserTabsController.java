@@ -35,6 +35,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
+import androidx.webkit.UserAgentMetadata;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -43,6 +47,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -125,6 +131,7 @@ final class BrowserTabsController {
     private static final String PREF_EXTRAS = "extrasVisible";
     private static final String STATE_DIR = "browser_tab_state";
     private static final String DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    private static final int DESKTOP_CSS_WIDTH = 1280;
 
     BrowserTabsController(MainActivity activity) {
         this.activity = activity;
@@ -808,6 +815,7 @@ final class BrowserTabsController {
 
     private void destroyTab(Tab tab) {
         if (tab.webView == null) return;
+        removeViewportScript(tab);
         tab.webView.stopLoading();
         tab.webView.setWebChromeClient(null);
         tab.webView.setWebViewClient(null);
@@ -1397,11 +1405,110 @@ final class BrowserTabsController {
     private void applyDesktopMode(Tab tab) {
         if (tab == null || tab.webView == null) return;
         WebSettings settings = tab.webView.getSettings();
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(tab.desktop);
+        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
+        settings.setTextZoom(100);
         if (tab.desktop) {
             settings.setUserAgentString(DESKTOP_UA);
         } else {
             settings.setUserAgentString(null);
         }
+        applyDesktopClientHints(settings, tab.desktop);
+        registerViewportScript(tab);
+        injectPageViewport(tab.webView);
+    }
+
+    private void applyDesktopClientHints(WebSettings settings, boolean desktop) {
+        if (settings == null) return;
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return;
+        try {
+            UserAgentMetadata.Builder builder = new UserAgentMetadata.Builder();
+            if (desktop) {
+                builder.setMobile(false)
+                        .setPlatform("Windows")
+                        .setPlatformVersion("15.0.0")
+                        .setArchitecture("x86")
+                        .setBitness(64)
+                        .setModel("")
+                        .setWow64(false)
+                        .setFullVersion("120.0.0.0")
+                        .setBrandVersionList(Arrays.asList(
+                                new UserAgentMetadata.BrandVersion.Builder()
+                                        .setBrand("Google Chrome").setMajorVersion("120").setFullVersion("120.0.0.0").build(),
+                                new UserAgentMetadata.BrandVersion.Builder()
+                                        .setBrand("Chromium").setMajorVersion("120").setFullVersion("120.0.0.0").build(),
+                                new UserAgentMetadata.BrandVersion.Builder()
+                                        .setBrand("Not_A Brand").setMajorVersion("8").setFullVersion("8.0.0.0").build()
+                        ));
+            } else {
+                builder.setMobile(true)
+                        .setPlatform("Android")
+                        .setPlatformVersion(Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE)
+                        .setArchitecture("arm")
+                        .setBitness(64)
+                        .setModel(Build.MODEL == null ? "" : Build.MODEL)
+                        .setWow64(false);
+            }
+            WebSettingsCompat.setUserAgentMetadata(settings, builder.build());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    void injectPageViewport(WebView view) {
+        Tab tab = findTab(view);
+        if (tab == null || view == null) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        view.evaluateJavascript(viewportScript(tab.desktop), null);
+    }
+
+    private void registerViewportScript(Tab tab) {
+        if (tab == null || tab.webView == null) return;
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        try {
+            removeViewportScript(tab);
+            tab.desktopScriptHandle = WebViewCompat.addDocumentStartJavaScript(
+                    tab.webView,
+                    viewportScript(tab.desktop),
+                    Collections.singleton("*")
+            );
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void removeViewportScript(Tab tab) {
+        if (tab == null || tab.desktopScriptHandle == null) return;
+        try {
+            tab.desktopScriptHandle.getClass().getMethod("remove").invoke(tab.desktopScriptHandle);
+        } catch (Throwable ignored) {
+        }
+        tab.desktopScriptHandle = null;
+    }
+
+    private String viewportScript(boolean desktop) {
+        if (desktop) {
+            return "(function(){var root=document.documentElement;if(!root)return;"
+                    + "var meta=document.querySelector('meta[name=viewport]');"
+                    + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');(document.head||root).appendChild(meta);}"
+                    + "meta.setAttribute('content','width=" + DESKTOP_CSS_WIDTH + ", initial-scale=1, maximum-scale=5, user-scalable=yes');"
+                    + "try{Object.defineProperty(navigator,'platform',{configurable:true,get:function(){return 'Win32';}});"
+                    + "Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,get:function(){return 0;}});"
+                    + "var ua={brands:[{brand:'Chromium',version:'120'},{brand:'Google Chrome',version:'120'},{brand:'Not_A Brand',version:'8'}],"
+                    + "mobile:false,platform:'Windows',"
+                    + "getHighEntropyValues:function(){return Promise.resolve({architecture:'x86',bitness:'64',model:'',platform:'Windows',"
+                    + "platformVersion:'15.0.0',uaFullVersion:'120.0.0.0',fullVersionList:["
+                    + "{brand:'Chromium',version:'120.0.0.0'},{brand:'Google Chrome',version:'120.0.0.0'},{brand:'Not_A Brand',version:'8.0.0.0'}]});},"
+                    + "toJSON:function(){return {brands:this.brands,mobile:false,platform:'Windows'};}};"
+                    + "Object.defineProperty(navigator,'userAgentData',{configurable:true,get:function(){return ua;}});}catch(e){}"
+                    + "})();";
+        }
+        return "(function(){var root=document.documentElement;if(!root)return;"
+                + "if(document.querySelector('meta[name=viewport]'))return;"
+                + "var meta=document.createElement('meta');meta.setAttribute('name','viewport');"
+                + "meta.setAttribute('content','width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes');"
+                + "(document.head||root).appendChild(meta);"
+                + "})();";
     }
 
     private void copyTabUrl(Tab tab) {
@@ -2386,6 +2493,7 @@ final class BrowserTabsController {
         boolean desktop;
         String viewStateJson = "";
         boolean pendingViewRestore;
+        Object desktopScriptHandle;
     }
 
     static final class Group {

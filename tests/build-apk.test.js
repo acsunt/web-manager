@@ -268,6 +268,17 @@ describe('APK 版本号', () => {
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'drawable', 'bg_browser_tabs_float.xml'), 'utf8')).toContain('#00000000');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'anim', 'refresh_spin.xml'), 'utf8')).toContain('repeatCount="infinite"');
     expect(tabs).toContain('DESKTOP_UA');
+    expect(tabs).toContain('DESKTOP_CSS_WIDTH');
+    expect(tabs).toContain('injectPageViewport(');
+    expect(tabs).toContain('setLoadWithOverviewMode(tab.desktop)');
+    expect(tabs).toContain('LayoutAlgorithm.NORMAL');
+    expect(tabs).toContain('registerViewportScript(');
+    expect(tabs).toContain('addDocumentStartJavaScript(');
+    expect(tabs).toContain('setUserAgentMetadata(');
+    expect(tabs).toContain('width=device-width');
+    expect(activity).toContain('setLoadWithOverviewMode(false)');
+    expect(activity).toContain('tabs.injectPageViewport(view)');
+    expect(gradle).toContain("androidx.webkit:webkit");
     expect(tabs).toContain('PREF_PAGES');
     expect(tabs).toContain('PREF_EXTRAS');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_group.xml'), 'utf8')).toContain('id="@+id/sheetGroupClose"');

@@ -177,6 +177,7 @@ public class MainActivity extends AppCompatActivity {
     WebView createPageWebView() {
         WebView webView = new WebView(this);
         applyCommonWebSettings(webView.getSettings());
+        webView.getSettings().setLoadWithOverviewMode(false);
         webView.getSettings().setSupportMultipleWindows(true);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
         webView.getSettings().setAllowFileAccessFromFileURLs(true);
@@ -1305,7 +1306,10 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
-            if (tabs != null) tabs.updateUrl(view, url);
+            if (tabs != null) {
+                tabs.updateUrl(view, url);
+                tabs.injectPageViewport(view);
+            }
             if (isActivePage(view)) refreshPageChrome(view, true);
         }
 
@@ -1313,6 +1317,7 @@ public class MainActivity extends AppCompatActivity {
         public void onPageFinished(WebView view, String url) {
             if (tabs != null) {
                 tabs.updateUrl(view, url);
+                tabs.injectPageViewport(view);
                 tabs.restoreViewState(view);
                 tabs.hideRefreshSpinner();
             }
