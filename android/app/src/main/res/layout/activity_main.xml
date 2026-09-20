@@ -27,8 +27,8 @@
             android:id="@+id/pageTopInset"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="@color/browser_toolbar_bg"
-            android:elevation="2dp" />
+            android:background="@android:color/transparent"
+            android:elevation="0dp" />
 
         <FrameLayout
             android:id="@+id/pageWebFrame"
@@ -217,8 +217,8 @@
             android:id="@+id/pageBottomInset"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="@color/browser_toolbar_bg"
-            android:elevation="2dp" />
+            android:background="@android:color/transparent"
+            android:elevation="0dp" />
     </LinearLayout>
 
     <ImageButton

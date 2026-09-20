@@ -1461,6 +1461,50 @@ final class BrowserTabsController {
         String url = view.getUrl();
         if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
         view.evaluateJavascript(viewportScript(tab.desktop), null);
+        injectPageSafeArea(view);
+    }
+
+    void injectPageSafeArea() {
+        Tab tab = activeTab();
+        if (tab != null) injectPageSafeArea(tab.webView);
+    }
+
+    void injectPageSafeArea(WebView view) {
+        if (view == null) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        boolean barShowing = chromeVisible && extrasVisible && activity.isPageOpen();
+        float top = cssPx(activity.pageSafeTop());
+        float right = cssPx(activity.pageSafeRight());
+        float left = cssPx(activity.pageSafeLeft());
+        float bottom = barShowing ? 0f : cssPx(activity.pageSafeBottom());
+        String script = "(function(){var r=document.documentElement;if(!r||!r.style)return;"
+                + "r.style.setProperty('--safe-top','" + top + "px');"
+                + "r.style.setProperty('--safe-right','" + right + "px');"
+                + "r.style.setProperty('--safe-left','" + left + "px');"
+                + "r.style.setProperty('--safe-bottom','" + bottom + "px');"
+                + "function applyPad(el){if(!el||!el.style)return;"
+                + "if(!el.dataset.wmSafePad)el.dataset.wmSafePad=getComputedStyle(el).paddingTop||'0px';"
+                + "if(!el.dataset.wmSafePadBottom)el.dataset.wmSafePadBottom=getComputedStyle(el).paddingBottom||'0px';"
+                + "el.dataset.wmSafe='1';"
+                + "el.style.paddingTop='calc(' + el.dataset.wmSafePad + ' + var(--safe-top))';"
+                + "el.style.paddingBottom='calc(' + el.dataset.wmSafePadBottom + ' + var(--safe-bottom))';}"
+                + "var body=document.body;var padded=false;"
+                + "var nodes=document.querySelectorAll('header,.navbar,.toolbar,.app-header,.header,.top-bar,.status-bar,[data-wm-safe]');"
+                + "for(var i=0;i<nodes.length;i++){var el=nodes[i];if(!el)continue;"
+                + "var cs=getComputedStyle(el);if(cs.position!=='fixed'&&cs.position!=='sticky'&&!el.hasAttribute('data-wm-safe'))continue;"
+                + "applyPad(el);padded=true;}"
+                + "if(!padded&&body)applyPad(body);"
+                + "else if(body){if(!body.dataset.wmSafePadBottom)body.dataset.wmSafePadBottom=getComputedStyle(body).paddingBottom||'0px';"
+                + "body.style.paddingBottom='calc(' + body.dataset.wmSafePadBottom + ' + var(--safe-bottom))';}"
+                + "})();";
+        view.evaluateJavascript(script, null);
+    }
+
+    private float cssPx(int px) {
+        float density = activity.getResources().getDisplayMetrics().density;
+        if (density <= 0f) return px;
+        return px / density;
     }
 
     private void registerViewportScript(Tab tab) {
@@ -1491,7 +1535,7 @@ final class BrowserTabsController {
             return "(function(){var root=document.documentElement;if(!root)return;"
                     + "var meta=document.querySelector('meta[name=viewport]');"
                     + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');(document.head||root).appendChild(meta);}"
-                    + "meta.setAttribute('content','width=" + DESKTOP_CSS_WIDTH + ", initial-scale=1, maximum-scale=5, user-scalable=yes');"
+                    + "meta.setAttribute('content','width=" + DESKTOP_CSS_WIDTH + ", initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover');"
                     + "try{Object.defineProperty(navigator,'platform',{configurable:true,get:function(){return 'Win32';}});"
                     + "Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,get:function(){return 0;}});"
                     + "var ua={brands:[{brand:'Chromium',version:'120'},{brand:'Google Chrome',version:'120'},{brand:'Not_A Brand',version:'8'}],"
@@ -1504,10 +1548,11 @@ final class BrowserTabsController {
                     + "})();";
         }
         return "(function(){var root=document.documentElement;if(!root)return;"
-                + "if(document.querySelector('meta[name=viewport]'))return;"
-                + "var meta=document.createElement('meta');meta.setAttribute('name','viewport');"
-                + "meta.setAttribute('content','width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes');"
-                + "(document.head||root).appendChild(meta);"
+                + "var meta=document.querySelector('meta[name=viewport]');"
+                + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');(document.head||root).appendChild(meta);}"
+                + "var content=meta.getAttribute('content')||'width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes';"
+                + "if(content.indexOf('viewport-fit')<0)content+=(content?', ':'')+'viewport-fit=cover';"
+                + "meta.setAttribute('content',content);"
                 + "})();";
     }
 

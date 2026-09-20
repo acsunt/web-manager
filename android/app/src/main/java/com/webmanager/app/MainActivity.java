@@ -2,7 +2,9 @@ package com.webmanager.app;
 
 import android.annotation.SuppressLint;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -17,6 +19,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.OpenableColumns;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
@@ -114,6 +117,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void attachBaseContext(Context newBase) {
+        super.attachBaseContext(browserDisplayContext(newBase));
+    }
+
+    private static Context browserDisplayContext(Context base) {
+        if (base == null) return null;
+        Configuration config = new Configuration(base.getResources().getConfiguration());
+        config.fontScale = 1f;
+        int densityDpi = stableDensityDpi();
+        if (densityDpi > 0) config.densityDpi = densityDpi;
+        Context display = base.createConfigurationContext(config);
+        return display == null ? base : display;
+    }
+
+    private static int stableDensityDpi() {
+        int stable = DisplayMetrics.DENSITY_DEVICE_STABLE;
+        return stable > 0 ? stable : 0;
+    }
+
+    @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -204,6 +227,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setSupportZoom(true);
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
+        settings.setTextZoom(100);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
     }
 
@@ -618,6 +642,7 @@ public class MainActivity extends AppCompatActivity {
             safeLeft = Math.max(bars.left, cutout.left);
             injectSafeArea();
             applyPageInsets();
+            if (tabs != null) tabs.injectPageSafeArea();
             if (isPageOpen() && chromeWebView != null) schedulePageChromeSample(chromeWebView);
             return insets;
         });
@@ -625,10 +650,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyPageInsets() {
-        int top = Math.max(safeTop, systemBarSize("status_bar_height"));
         int bottom = Math.max(safeBottom, systemBarSize("navigation_bar_height"));
-        setInsetSize(pageTopInset, ViewGroup.LayoutParams.MATCH_PARENT, top);
-        setInsetSize(pageBottomInset, ViewGroup.LayoutParams.MATCH_PARENT, bottom);
+        setInsetSize(pageTopInset, ViewGroup.LayoutParams.MATCH_PARENT, 0);
+        setInsetSize(pageBottomInset, ViewGroup.LayoutParams.MATCH_PARENT, 0);
         if (pageWebHost != null) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) pageWebHost.getLayoutParams();
             if (params != null) {
@@ -642,7 +666,7 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(safeLeft, 0),
                     browserBar.getPaddingTop(),
                     Math.max(safeRight, 0),
-                    browserBar.getPaddingBottom()
+                    bottom
             );
         }
         if (restoreTabsBtn != null) {
@@ -783,14 +807,15 @@ public class MainActivity extends AppCompatActivity {
     private void applyPageChromeColors(int topColor, int bottomColor) {
         pageTopColor = opaque(topColor);
         pageBottomColor = opaque(bottomColor);
-        getWindow().setStatusBarColor(pageTopColor);
-        getWindow().setNavigationBarColor(pageBottomColor);
-        if (pageTopInset != null) pageTopInset.setBackgroundColor(pageTopColor);
-        if (pageBottomInset != null) pageBottomInset.setBackgroundColor(pageBottomColor);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        if (pageTopInset != null) pageTopInset.setBackgroundColor(Color.TRANSPARENT);
+        if (pageBottomInset != null) pageBottomInset.setBackgroundColor(Color.TRANSPARENT);
         if (pageContainer != null) pageContainer.setBackgroundColor(pageTopColor);
         if (browserBar != null) browserBar.setBackgroundColor(pageBottomColor);
         applySystemBarIcons(lightSystemBars);
         if (tabs != null) tabs.applyChromeColors(pageBottomColor);
+        if (tabs != null) tabs.injectPageSafeArea();
     }
 
     private int opaque(int color) {
@@ -886,6 +911,14 @@ public class MainActivity extends AppCompatActivity {
         float density = getResources().getDisplayMetrics().density;
         if (density <= 0f) return px;
         return px / density;
+    }
+
+    int pageSafeTop() {
+        return Math.max(safeTop, 0);
+    }
+
+    int pageSafeLeft() {
+        return Math.max(safeLeft, 0);
     }
 
     private void injectSafeArea() {
@@ -1324,6 +1357,7 @@ public class MainActivity extends AppCompatActivity {
             injectPasswordAutofill(view);
             if (!isActivePage(view)) return;
             bindPageChrome(view);
+            if (tabs != null) tabs.injectPageSafeArea(view);
             refreshPageChrome(view, true);
             view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
                 @Override
