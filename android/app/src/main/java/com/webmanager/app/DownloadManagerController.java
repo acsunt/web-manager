@@ -165,6 +165,21 @@ final class DownloadManagerController {
         return false;
     }
 
+    boolean mediaStoreHasName(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        if (Build.VERSION.SDK_INT < 29) return false;
+        try (Cursor cursor = activity.getContentResolver().query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Downloads._ID},
+                MediaStore.Downloads.DISPLAY_NAME + "=?",
+                new String[]{name.trim()},
+                null)) {
+            return cursor != null && cursor.moveToFirst();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     void destroy() {
         handler.removeCallbacks(pollRunnable);
         polling = false;
@@ -266,6 +281,21 @@ final class DownloadManagerController {
         postUi(true);
     }
 
+    void failUnsavedLocals(String message) {
+        boolean changed = false;
+        synchronized (lock) {
+            for (Item item : items) {
+                if (!item.local || !isActive(item.status) || hasStoredLocation(item)) continue;
+                item.status = STATUS_FAILED;
+                item.error = message == null ? "" : message;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        persist();
+        postUi(true);
+    }
+
     void addCompleted(String name, String mime, String uri, String path, long bytes) {
         synchronized (lock) {
             addCompletedUnlocked(name, mime, uri, path, bytes);
@@ -344,9 +374,12 @@ final class DownloadManagerController {
                 int titleIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE);
                 int reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON);
                 int filenameIdx = -1;
-                try {
-                    filenameIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_FILENAME);
-                } catch (Exception ignored) {
+                // Android 10 读 COLUMN_LOCAL_FILENAME 会抛 SecurityException，甚至让整次 query 失败。
+                if (Build.VERSION.SDK_INT != 29) {
+                    try {
+                        filenameIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_FILENAME);
+                    } catch (Exception ignored) {
+                    }
                 }
                 while (cursor.moveToNext()) {
                     SystemSnapshot snap = new SystemSnapshot();
@@ -461,7 +494,8 @@ final class DownloadManagerController {
         }
         if (snap.filename != null && !snap.filename.trim().isEmpty()) {
             String path = pathFromMaybeUri(snap.filename);
-            if (path != null && !path.equals(item.path)) {
+            File current = item.path == null || item.path.trim().isEmpty() ? null : new File(item.path);
+            if (path != null && !path.equals(item.path) && (current == null || !readableFile(current))) {
                 item.path = path;
                 persistNeeded = true;
             }
@@ -498,13 +532,20 @@ final class DownloadManagerController {
             mutated |= applyResolvedLocationUnlocked(item, item.uri);
             if (fileExistsUnlocked(item)) return true;
         }
-        File guessed = publicDownloadFile(item.name);
-        if (guessed != null && readableFile(guessed)) {
+        File guessed = firstReadableDownloadFile(item.name);
+        if (guessed != null) {
             item.path = guessed.getAbsolutePath();
             if (item.uri == null || item.uri.trim().isEmpty()) item.uri = Uri.fromFile(guessed).toString();
             return true;
         }
         if (lookupMediaStoreUnlocked(item)) return true;
+        if (item.systemId > 0 && STATUS_SUCCESS.equals(item.status)) {
+            Uri downloaded = downloadManagerUri(manager, item.systemId);
+            if (downloaded != null && contentPresence(downloaded) != 0) {
+                mutated |= applyResolvedLocationUnlocked(item, downloaded.toString());
+                return true;
+            }
+        }
         return mutated && fileExistsUnlocked(item);
     }
 
@@ -1151,6 +1192,18 @@ final class DownloadManagerController {
         String value = safeName(title);
         int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
         return slash >= 0 ? value.substring(slash + 1) : value;
+    }
+
+    private File firstReadableDownloadFile(String name) {
+        if (name == null || name.trim().isEmpty()) return null;
+        File publicFile = publicDownloadFile(name);
+        if (readableFile(publicFile)) return publicFile;
+        File appDir = activity.appDownloadDir();
+        if (appDir != null) {
+            File appFile = new File(appDir, name);
+            if (readableFile(appFile)) return appFile;
+        }
+        return null;
     }
 
     private static File publicDownloadFile(String name) {

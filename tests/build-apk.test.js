@@ -450,6 +450,7 @@ describe('APK 版本号', () => {
     expect(activity).toContain('saveBlobDownload(');
     expect(activity).toContain('saveDataUrlDownload(');
     expect(activity).toContain('appDownloadDir()');
+    expect(activity).toContain('publicDownloadDir()');
     expect(activity).toContain('beginDownloadFile');
     expect(activity).toContain('page-download.js');
     expect(activity).toContain('|| "blob".equals(scheme)');
@@ -471,13 +472,17 @@ describe('APK 版本号', () => {
     expect(activity).toContain('ensureDownloadExtension');
     expect(activity).toContain('numberedDownloadName');
     expect(activity).toContain('uniqueDownloadFile');
-    expect(activity).toContain('setDestinationInExternalFilesDir');
+    expect(activity).toContain('setDestinationInExternalPublicDir');
+    expect(activity).toContain('writeDownloadFile(');
+    expect(activity).toContain('downloadFileExists(');
+    expect(activity).toContain('SDK_INT >= 30');
     expect(activity).toContain('stem + "(" + index + ")" + ext');
     expect(activity).toContain('if (lower.contains("zip") || name.endsWith(".zip")) return "application/octet-stream"');
     expect(activity).toContain('trackSystemDownload(');
     expect(activity).toContain('beginLocal(');
     expect(activity).toContain('setLocalProgress(');
     expect(activity).toContain('finishLocal(');
+    expect(activity).toContain('failUnsavedLocals(');
     expect(activity).toContain('showDownloadManager()');
     expect(tabs).toContain('activity.pageDownloadScript()');
     expect(tabs).toContain('activity.injectPageDownloadHook(view)');
@@ -498,6 +503,10 @@ describe('APK 版本号', () => {
     expect(downloads).toContain('pruneMissingFiles()');
     expect(downloads).toContain('hasStoredLocation(');
     expect(downloads).toContain('getUriForDownloadedFile');
+    expect(downloads).toContain('mediaStoreHasName(');
+    expect(downloads).toContain('failUnsavedLocals(');
+    expect(downloads).toContain('firstReadableDownloadFile(');
+    expect(downloads).toContain('if (Build.VERSION.SDK_INT != 29)');
     expect(downloads).toContain('trackSystemDownload(long systemId, String name, String mime, String path)');
     expect(downloads).toContain('private static String safeName(String name)');
     expect(downloads).toContain('if (item.systemId > 0) continue');
@@ -510,6 +519,8 @@ describe('APK 版本号', () => {
     expect(activity).not.toContain('Intent.EXTRA_MIME_TYPES');
     expect(activity).not.toContain('fileChooserParams.createIntent()');
     expect(manifest).toContain('WRITE_EXTERNAL_STORAGE');
+    expect(manifest).toContain('android:maxSdkVersion="29"');
+    expect(manifest).toContain('android:requestLegacyExternalStorage="true"');
     expect(manifest).toContain('android.intent.action.GET_CONTENT');
     expect(manifest).toContain('android.intent.action.OPEN_DOCUMENT');
     expect(manifest).toContain('android.intent.action.VIEW');

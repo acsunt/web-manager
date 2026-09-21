@@ -1392,7 +1392,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void ensureStorageThen(Runnable action) {
         if (action == null) return;
-        if (Build.VERSION.SDK_INT >= 29 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 30 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             action.run();
             return;
         }
@@ -1409,12 +1409,14 @@ public class MainActivity extends AppCompatActivity {
         if (next != null && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             next.run();
         } else {
+            cancelPageDownload();
+            if (downloads != null) downloads.failUnsavedLocals("没有存储权限");
             Toast.makeText(this, "没有存储权限，无法保存下载文件", Toast.LENGTH_SHORT).show();
         }
     }
 
     private void startHttpDownload(String url, String userAgent, String contentDisposition, String mimeType, String referer) {
-        File dest = uniqueDownloadFile(appDownloadDir(),
+        File dest = uniqueDownloadFile(publicDownloadDir(),
                 ensureDownloadExtension(URLUtil.guessFileName(url, contentDisposition, mimeType), mimeType));
         String name = dest.getName();
         try {
@@ -1429,7 +1431,7 @@ public class MainActivity extends AppCompatActivity {
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setAllowedOverMetered(true);
             request.setAllowedOverRoaming(true);
-            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             if (manager == null) throw new IllegalStateException("系统下载服务不可用");
             long id = manager.enqueue(request);
@@ -1518,17 +1520,14 @@ public class MainActivity extends AppCompatActivity {
 
     void saveDownloadBytes(byte[] bytes, String mime, String filename, String recordId) {
         final byte[] payload = bytes == null ? new byte[0] : bytes;
-        runOnUiThread(() -> {
+        runOnUiThread(() -> ensureStorageThen(() -> {
             try {
                 String safeName = ensureDownloadExtension(
                         (filename == null || filename.trim().isEmpty())
                                 ? "download.bin"
                                 : filename.replaceAll("[\\\\/:*?\"<>|]", "_"),
                         mime);
-                File out = uniqueDownloadFile(appDownloadDir(), safeName);
-                try (FileOutputStream fos = new FileOutputStream(out)) {
-                    fos.write(payload);
-                }
+                File out = writeDownloadFile(payload, safeName);
                 String savedName = out.getName();
                 String savedPath = out.getAbsolutePath();
                 Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", out);
@@ -1538,7 +1537,7 @@ public class MainActivity extends AppCompatActivity {
                 if (downloads != null && recordId != null) downloads.failLocal(recordId, e.getMessage());
                 Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
-        });
+        }));
     }
 
     private void recordDownload(String recordId, String name, String mime, String uri, String path, long bytes) {
@@ -1555,6 +1554,12 @@ public class MainActivity extends AppCompatActivity {
         if (dir == null) dir = getFilesDir();
         if (dir != null && !dir.exists()) dir.mkdirs();
         if (dir == null) dir = getCacheDir();
+        return dir;
+    }
+
+    File publicDownloadDir() {
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (dir != null && !dir.exists()) dir.mkdirs();
         return dir;
     }
 
@@ -1607,8 +1612,9 @@ public class MainActivity extends AppCompatActivity {
                         ? "download.bin"
                         : filename.replaceAll("[\\\\/:*?\"<>|]", "_"),
                 null);
+        if (dir == null) dir = publicDownloadDir();
         if (dir == null) dir = appDownloadDir();
-        if (!dir.exists()) dir.mkdirs();
+        if (dir != null && !dir.exists()) dir.mkdirs();
         File out = new File(dir, safe);
         if (!downloadNameTaken(out)) return out;
         for (int i = 1; i < 1000; i++) {
@@ -1620,8 +1626,33 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean downloadNameTaken(File file) {
         if (file == null) return false;
-        if (file.exists()) return true;
-        return downloads != null && downloads.hasFileName(file.getName());
+        String name = file.getName();
+        if (name == null || name.trim().isEmpty()) return false;
+        if (downloadFileExists(file) || downloadFileExists(new File(appDownloadDir(), name))) return true;
+        File publicDir = publicDownloadDir();
+        if (publicDir != null && downloadFileExists(new File(publicDir, name))) return true;
+        if (downloads != null && downloads.hasFileName(name)) return true;
+        return downloads != null && downloads.mediaStoreHasName(name);
+    }
+
+    private static boolean downloadFileExists(File file) {
+        return file != null && file.exists() && file.isFile();
+    }
+
+    private File writeDownloadFile(byte[] payload, String filename) throws Exception {
+        File[] dirs = new File[] { publicDownloadDir(), appDownloadDir() };
+        Exception last = null;
+        for (File dir : dirs) {
+            if (dir == null) continue;
+            File out = uniqueDownloadFile(dir, filename);
+            try (FileOutputStream fos = new FileOutputStream(out)) {
+                fos.write(payload);
+                return out;
+            } catch (Exception e) {
+                last = e;
+            }
+        }
+        throw last == null ? new IllegalStateException("没有可写的下载目录") : last;
     }
 
     void attachHiddenWebView(WebView hidden) {
