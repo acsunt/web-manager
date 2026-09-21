@@ -1539,8 +1539,13 @@ public class MainActivity extends AppCompatActivity {
                     ContentValues done = new ContentValues();
                     done.put(MediaStore.Downloads.IS_PENDING, 0);
                     getContentResolver().update(uri, done, null, null);
-                    String queried = queryDisplayName(uri);
-                    if (queried != null && !queried.trim().isEmpty()) savedName = queried;
+                    try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            String queried = cursor.getString(0);
+                            if (queried != null && !queried.trim().isEmpty()) savedName = queried;
+                        }
+                    } catch (Exception ignored) {
+                    }
                     savedUri = uri.toString();
                     recordDownload(recordId, savedName, mime, savedUri, savedPath, payload.length);
                     Toast.makeText(this, "已保存到下载目录: " + savedName, Toast.LENGTH_SHORT).show();
@@ -1573,18 +1578,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         downloads.addCompleted(name, mime, uri, path, bytes);
-    }
-
-    private String queryDisplayName(Uri uri) {
-        if (uri == null) return null;
-        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (index >= 0) return cursor.getString(index);
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
     }
 
     private Uri insertDownloadUri(String filename, String mime) {
