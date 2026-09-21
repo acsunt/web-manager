@@ -164,7 +164,10 @@ describe('APK 版本号', () => {
     expect(bridge).toContain('public void setThemeScale(boolean followSystem, boolean followPage, float textScale, float uiScale)');
     expect(tabs).toContain('void applyThemeScale()');
     expect(tabs).toContain('injectPageZoom(');
-    expect(tabs).toContain("r.style.zoom='");
+    expect(tabs).toContain('injectPageLayoutOnLoad(');
+    expect(tabs).toContain('if (tab.desktopScriptHandle != null)');
+    expect(tabs).toContain('if(Math.abs((parseFloat(r.style.zoom)||1)-z)<0.001)return');
+    expect(activity).toContain('if (settings.getTextZoom() == zoom) return');
     expect(ui).toContain('window.Android?.setThemeScale');
     expect(main).toContain('syncNativeThemeScale(themeConfig)');
     expect(html).toContain('id="pageFollowDarkModeCheck"');
@@ -378,7 +381,7 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('setUserAgentMetadata(');
     expect(tabs).toContain('width=device-width');
     expect(activity).toContain('setLoadWithOverviewMode(false)');
-    expect(activity).toContain('tabs.injectPageViewport(view)');
+    expect(activity).toContain('tabs.injectPageLayoutOnLoad(view');
     expect(gradle).toContain("androidx.webkit:webkit");
     expect(tabs).toContain('PREF_PAGES');
     expect(tabs).toContain('PREF_EXTRAS');

@@ -1759,6 +1759,16 @@ final class BrowserTabsController {
         }
     }
 
+    void injectPageLayoutOnLoad(WebView view, boolean pageFinished) {
+        Tab tab = findTab(view);
+        if (tab == null || view == null) return;
+        if (tab.desktopScriptHandle != null) {
+            if (pageFinished) injectPageSafeArea(view);
+            return;
+        }
+        injectPageViewport(view);
+    }
+
     void injectPageViewport(WebView view) {
         Tab tab = findTab(view);
         if (tab == null || view == null) return;
@@ -1827,7 +1837,9 @@ final class BrowserTabsController {
     private String pageZoomScript() {
         float uiScale = activity.pageUiScale();
         return "(function(){var r=document.documentElement;if(!r||!r.style)return;"
-                + "r.style.zoom='" + uiScale + "';"
+                + "var z=" + uiScale + ";"
+                + "if(Math.abs((parseFloat(r.style.zoom)||1)-z)<0.001)return;"
+                + "r.style.zoom=String(z);"
                 + "})();";
     }
 
@@ -1965,7 +1977,8 @@ final class BrowserTabsController {
             return "(function(){var root=document.documentElement;if(!root)return;"
                     + "var meta=document.querySelector('meta[name=viewport]');"
                     + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');(document.head||root).appendChild(meta);}"
-                    + "meta.setAttribute('content','width=" + DESKTOP_CSS_WIDTH + ", initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover');"
+                    + "var next='width=" + DESKTOP_CSS_WIDTH + ", initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover';"
+                    + "if(meta.getAttribute('content')!==next)meta.setAttribute('content',next);"
                     + "try{Object.defineProperty(navigator,'platform',{configurable:true,get:function(){return 'Win32';}});"
                     + "Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,get:function(){return 0;}});"
                     + "var ua={brands:[{brand:'Chromium',version:'120'},{brand:'Google Chrome',version:'120'},{brand:'Not_A Brand',version:'8'}],"
@@ -1982,7 +1995,7 @@ final class BrowserTabsController {
                 + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');(document.head||root).appendChild(meta);}"
                 + "var content=meta.getAttribute('content')||'width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes';"
                 + "if(content.indexOf('viewport-fit')<0)content+=(content?', ':'')+'viewport-fit=cover';"
-                + "meta.setAttribute('content',content);"
+                + "if(meta.getAttribute('content')!==content)meta.setAttribute('content',content);"
                 + "})();";
     }
 

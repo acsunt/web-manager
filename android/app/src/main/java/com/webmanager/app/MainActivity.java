@@ -409,7 +409,9 @@ public class MainActivity extends AppCompatActivity {
 
     void applyTextZoom(WebSettings settings) {
         if (settings == null) return;
-        settings.setTextZoom(pageTextZoom());
+        int zoom = pageTextZoom();
+        if (settings.getTextZoom() == zoom) return;
+        settings.setTextZoom(zoom);
     }
 
     private static float clampScale(float value, float min, float max, float fallback) {
@@ -1528,7 +1530,7 @@ public class MainActivity extends AppCompatActivity {
             applyTextZoom(view);
             if (tabs != null) {
                 tabs.updateUrl(view, url);
-                tabs.injectPageViewport(view);
+                tabs.injectPageLayoutOnLoad(view, false);
             }
             if (isActivePage(view)) refreshPageChrome(view, true);
         }
@@ -1538,14 +1540,13 @@ public class MainActivity extends AppCompatActivity {
             applyTextZoom(view);
             if (tabs != null) {
                 tabs.updateUrl(view, url);
-                tabs.injectPageViewport(view);
+                tabs.injectPageLayoutOnLoad(view, true);
                 tabs.restoreViewState(view);
                 tabs.hideRefreshSpinner();
             }
             injectPasswordAutofill(view);
             if (!isActivePage(view)) return;
             bindPageChrome(view);
-            if (tabs != null) tabs.injectPageSafeArea(view);
             refreshPageChrome(view, true);
             view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
                 @Override
