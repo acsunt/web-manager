@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -49,12 +50,16 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -104,6 +109,12 @@ public class MainActivity extends AppCompatActivity {
     private static final int SAMPLE_STRIP_PX = 8;
     private static final long SAMPLE_THROTTLE_MS = 180;
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final String THEME_PREFS = "theme_scale";
+    private static final String PREF_FOLLOW_SYSTEM = "followSystem";
+    private static final String PREF_FOLLOW_PAGE = "followPage";
+    private static final String PREF_TEXT_SCALE = "textScale";
+    private static final String PREF_UI_SCALE = "uiScale";
+    private Object appScaleScriptHandle;
 
     static {
         try {
@@ -146,6 +157,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        restoreThemeScale();
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
         root = findViewById(R.id.rootLayout);
@@ -187,7 +199,13 @@ public class MainActivity extends AppCompatActivity {
         appWebView.addJavascriptInterface(bridge, "Android");
         appWebView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                injectAppScale();
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
+                injectAppScale();
                 applySystemBarIcons(lightSystemBars);
                 injectSafeArea();
                 deliverPendingImport();
@@ -200,6 +218,7 @@ public class MainActivity extends AppCompatActivity {
         });
         appWebView.setWebChromeClient(new AppChromeClient());
         appWebView.setDownloadListener(downloadListener());
+        registerAppScaleScript();
         appWebView.loadUrl("file:///android_asset/index.html");
     }
 
@@ -221,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new PageWebViewClient());
         webView.setWebChromeClient(new PageChromeClient());
         webView.setDownloadListener(downloadListener());
+        applyTextZoom(webView);
         return webView;
     }
 
@@ -254,13 +274,70 @@ public class MainActivity extends AppCompatActivity {
         pageFollowScale = nextPageFollow;
         themeTextScale = nextText;
         themeUiScale = nextUi;
+        persistThemeScale();
         runOnUiThread(() -> {
             if (appWebView != null && appWebView.getSettings() != null) {
                 appWebView.getSettings().setTextZoom(100);
             }
+            registerAppScaleScript();
+            injectAppScale();
             if (tabs != null) tabs.applyThemeScale();
             applyPageInsets();
         });
+    }
+
+    private void restoreThemeScale() {
+        SharedPreferences prefs = getSharedPreferences(THEME_PREFS, MODE_PRIVATE);
+        if (!prefs.contains(PREF_TEXT_SCALE) && !prefs.contains(PREF_UI_SCALE)) return;
+        themeFollowSystem = prefs.getBoolean(PREF_FOLLOW_SYSTEM, false);
+        pageFollowScale = prefs.getBoolean(PREF_FOLLOW_PAGE, true);
+        themeTextScale = clampScale(prefs.getFloat(PREF_TEXT_SCALE, 1f), 0.4f, 3f, 1f);
+        themeUiScale = clampScale(prefs.getFloat(PREF_UI_SCALE, 1f), 0.5f, 2f, 1f);
+    }
+
+    private void persistThemeScale() {
+        getSharedPreferences(THEME_PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_FOLLOW_SYSTEM, themeFollowSystem)
+                .putBoolean(PREF_FOLLOW_PAGE, pageFollowScale)
+                .putFloat(PREF_TEXT_SCALE, themeTextScale)
+                .putFloat(PREF_UI_SCALE, themeUiScale)
+                .apply();
+    }
+
+    private void registerAppScaleScript() {
+        if (appWebView == null) return;
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        try {
+            removeAppScaleScript();
+            appScaleScriptHandle = WebViewCompat.addDocumentStartJavaScript(
+                    appWebView,
+                    appScaleScript(),
+                    new HashSet<>(Arrays.asList("*", "file:///*"))
+            );
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void removeAppScaleScript() {
+        if (appScaleScriptHandle == null) return;
+        try {
+            appScaleScriptHandle.getClass().getMethod("remove").invoke(appScaleScriptHandle);
+        } catch (Throwable ignored) {
+        }
+        appScaleScriptHandle = null;
+    }
+
+    private void injectAppScale() {
+        if (appWebView == null) return;
+        appWebView.evaluateJavascript(appScaleScript(), null);
+    }
+
+    private String appScaleScript() {
+        return "(function(){var r=document.documentElement;if(!r||!r.style)return;"
+                + "r.style.setProperty('--text-scale','" + chromeTextScale() + "');"
+                + "r.style.setProperty('--ui-scale','" + chromeUiScale() + "');"
+                + "})();";
     }
 
     float chromeTextScale() {
@@ -1448,6 +1525,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            applyTextZoom(view);
             if (tabs != null) {
                 tabs.updateUrl(view, url);
                 tabs.injectPageViewport(view);
@@ -1457,6 +1535,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPageFinished(WebView view, String url) {
+            applyTextZoom(view);
             if (tabs != null) {
                 tabs.updateUrl(view, url);
                 tabs.injectPageViewport(view);

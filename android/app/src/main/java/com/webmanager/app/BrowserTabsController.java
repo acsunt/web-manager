@@ -1764,6 +1764,7 @@ final class BrowserTabsController {
         if (tab == null || view == null) return;
         String url = view.getUrl();
         if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        activity.applyTextZoom(view);
         view.evaluateJavascript(viewportScript(tab.desktop), null);
         injectPageZoom(view);
         injectPageColorScheme(view);

@@ -150,6 +150,15 @@ describe('APK 版本号', () => {
     expect(activity).toContain('config.fontScale = 1f');
     expect(activity).toContain('settings.setTextZoom(100)');
     expect(activity).toContain('void applyThemeScale(');
+    expect(activity).toContain('restoreThemeScale(');
+    expect(activity).toContain('persistThemeScale(');
+    expect(activity).toContain('registerAppScaleScript(');
+    expect(activity).toContain('addDocumentStartJavaScript(');
+    expect(activity).toContain("--text-scale");
+    expect(activity).toContain("--ui-scale");
+    expect(activity.indexOf('restoreThemeScale()')).toBeLessThan(activity.indexOf('tabs.restoreState()'));
+    expect(activity.indexOf('registerAppScaleScript()')).toBeLessThan(activity.indexOf('appWebView.loadUrl'));
+    expect(activity).toContain('applyTextZoom(webView)');
     expect(activity).toContain('pageTextZoom()');
     expect(activity).toContain('pageUiScale()');
     expect(bridge).toContain('public void setThemeScale(boolean followSystem, boolean followPage, float textScale, float uiScale)');
