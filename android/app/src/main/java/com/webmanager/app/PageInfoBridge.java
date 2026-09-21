@@ -67,6 +67,26 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public boolean beginDownloadFile(String mime, String filename) {
+        return activity.beginPageDownload(mime, filename);
+    }
+
+    @JavascriptInterface
+    public boolean appendDownloadFile(String base64Chunk) {
+        return activity.appendPageDownload(base64Chunk);
+    }
+
+    @JavascriptInterface
+    public boolean finishDownloadFile() {
+        return activity.finishPageDownload();
+    }
+
+    @JavascriptInterface
+    public void cancelDownloadFile() {
+        activity.cancelPageDownload();
+    }
+
+    @JavascriptInterface
     public boolean beginSaveFile(String mime, String filename) {
         synchronized (exportLock) {
             pendingExport = new ByteArrayOutputStream();

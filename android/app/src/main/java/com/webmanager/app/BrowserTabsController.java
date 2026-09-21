@@ -1763,6 +1763,7 @@ final class BrowserTabsController {
         Tab tab = findTab(view);
         if (tab == null || view == null) return;
         if (tab.desktopScriptHandle != null) {
+            activity.injectPageDownloadHook(view);
             if (pageFinished) injectPageSafeArea(view);
             return;
         }
@@ -1779,6 +1780,7 @@ final class BrowserTabsController {
         injectPageZoom(view);
         injectPageColorScheme(view);
         injectPageSafeArea(view);
+        activity.injectPageDownloadHook(view);
     }
 
     void injectPageZoom(WebView view) {
@@ -1956,8 +1958,8 @@ final class BrowserTabsController {
             removeViewportScript(tab);
             tab.desktopScriptHandle = WebViewCompat.addDocumentStartJavaScript(
                     tab.webView,
-                    viewportScript(tab.desktop) + pageZoomScript() + pageColorSchemeScript(),
-                    new HashSet<>(Arrays.asList("*", "file:///*", "http://*/*", "https://*/*"))
+                    viewportScript(tab.desktop) + pageZoomScript() + pageColorSchemeScript() + activity.pageDownloadScript(),
+                    new HashSet<>(Arrays.asList("*", "file:///*", "http://*/*", "https://*/*", "blob:*", "data:*"))
             );
         } catch (Throwable ignored) {
         }

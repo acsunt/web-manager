@@ -427,6 +427,7 @@ describe('APK 版本号', () => {
     const ui = readFileSync(join(rootDir, 'ui.js'), 'utf8');
     const bridge = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'PageInfoBridge.java'), 'utf8');
     const activity = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'MainActivity.java'), 'utf8');
+    const tabs = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'BrowserTabsController.java'), 'utf8');
     const manifest = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
     expect(bridge).toContain('public boolean beginSaveFile');
     expect(bridge).toContain('public boolean appendSaveFile');
@@ -449,7 +450,20 @@ describe('APK 版本号', () => {
     expect(activity).toContain('saveBlobDownload(');
     expect(activity).toContain('saveDataUrlDownload(');
     expect(activity).toContain('MediaStore.Downloads.EXTERNAL_CONTENT_URI');
+    expect(activity).toContain('beginDownloadFile');
+    expect(activity).toContain('page-download.js');
+    expect(activity).toContain('|| "blob".equals(scheme)');
+    expect(activity).toContain('enqueueDownload(view, uri.toString()');
     expect(bridge).toContain('public void saveBlobDownload(String dataUrl, String mime, String filename)');
+    expect(bridge).toContain('public boolean beginDownloadFile(String mime, String filename)');
+    const pageDownload = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'assets', 'page-download.js'), 'utf8');
+    expect(pageDownload).toContain('api.createObjectURL');
+    expect(pageDownload).toContain('hookUrl(URL)');
+    expect(pageDownload).toContain('HTMLAnchorElement.prototype.click');
+    expect(pageDownload).toContain('__wmDlBlobs');
+    expect(pageDownload).toContain('beginDownloadFile');
+    expect(tabs).toContain('activity.pageDownloadScript()');
+    expect(tabs).toContain('activity.injectPageDownloadHook(view)');
     expect(activity).not.toContain('Intent.EXTRA_MIME_TYPES');
     expect(activity).not.toContain('fileChooserParams.createIntent()');
     expect(manifest).toContain('WRITE_EXTERNAL_STORAGE');
@@ -519,6 +533,8 @@ describe('APK 版本号', () => {
     expect(autofill).toContain('WebManagerChrome.queryPasswords');
     expect(autofill).toContain('WebManagerChrome.saveLogin');
     expect(apkScript).toContain('password-autofill.js');
+    expect(apkScript).toContain('page-download.js');
     expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'assets', 'password-autofill.js'))).toBe(true);
+    expect(existsSync(join(rootDir, 'android', 'app', 'src', 'main', 'assets', 'page-download.js'))).toBe(true);
   });
 });

@@ -90,6 +90,11 @@ public class MainActivity extends AppCompatActivity {
     private SavedPasswordStore passwordStore;
     private BrowserTabsController tabs;
     private String passwordAutofillScript;
+    private String pageDownloadScript;
+    private final Object pageDownloadLock = new Object();
+    private ByteArrayOutputStream pendingPageDownload;
+    private String pendingPageDownloadMime;
+    private String pendingPageDownloadName;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
     private String pendingImportJson;
@@ -514,6 +519,78 @@ public class MainActivity extends AppCompatActivity {
             passwordAutofillScript = "";
         }
         return passwordAutofillScript;
+    }
+
+    void injectPageDownloadHook(WebView view) {
+        String script = pageDownloadScript();
+        if (view == null || script.isEmpty()) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        view.evaluateJavascript(script, null);
+    }
+
+    String pageDownloadScript() {
+        if (pageDownloadScript != null) return pageDownloadScript;
+        try (InputStream in = getAssets().open("page-download.js")) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            pageDownloadScript = out.toString("UTF-8");
+        } catch (Exception e) {
+            pageDownloadScript = "";
+        }
+        return pageDownloadScript;
+    }
+
+    boolean beginPageDownload(String mime, String filename) {
+        synchronized (pageDownloadLock) {
+            pendingPageDownload = new ByteArrayOutputStream();
+            pendingPageDownloadMime = mime;
+            pendingPageDownloadName = filename;
+            return true;
+        }
+    }
+
+    boolean appendPageDownload(String base64Chunk) {
+        synchronized (pageDownloadLock) {
+            if (pendingPageDownload == null) return false;
+            try {
+                byte[] bytes = Base64.decode(base64Chunk == null ? "" : base64Chunk, Base64.DEFAULT);
+                pendingPageDownload.write(bytes);
+                return true;
+            } catch (Exception e) {
+                pendingPageDownload = null;
+                pendingPageDownloadMime = null;
+                pendingPageDownloadName = null;
+                return false;
+            }
+        }
+    }
+
+    boolean finishPageDownload() {
+        final byte[] bytes;
+        final String mime;
+        final String filename;
+        synchronized (pageDownloadLock) {
+            if (pendingPageDownload == null) return false;
+            bytes = pendingPageDownload.toByteArray();
+            mime = pendingPageDownloadMime;
+            filename = pendingPageDownloadName;
+            pendingPageDownload = null;
+            pendingPageDownloadMime = null;
+            pendingPageDownloadName = null;
+        }
+        saveDownloadBytes(bytes, mime, filename);
+        return true;
+    }
+
+    void cancelPageDownload() {
+        synchronized (pageDownloadLock) {
+            pendingPageDownload = null;
+            pendingPageDownloadMime = null;
+            pendingPageDownloadName = null;
+        }
     }
 
     void clearAppCache() {
@@ -1108,6 +1185,26 @@ public class MainActivity extends AppCompatActivity {
         public void saveBlobDownload(String dataUrl, String mime, String filename) {
             saveDataUrlDownload(dataUrl, mime, filename);
         }
+
+        @JavascriptInterface
+        public boolean beginDownloadFile(String mime, String filename) {
+            return beginPageDownload(mime, filename);
+        }
+
+        @JavascriptInterface
+        public boolean appendDownloadFile(String base64Chunk) {
+            return appendPageDownload(base64Chunk);
+        }
+
+        @JavascriptInterface
+        public boolean finishDownloadFile() {
+            return finishPageDownload();
+        }
+
+        @JavascriptInterface
+        public void cancelDownloadFile() {
+            cancelPageDownload();
+        }
     }
 
     private float cssPx(int px) {
@@ -1165,7 +1262,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean handleExternalScheme(Uri uri) {
         if (uri == null) return false;
         String scheme = uri.getScheme();
-        if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme) || "about".equals(scheme)) {
+        if ("http".equals(scheme) || "https".equals(scheme) || "file".equals(scheme) || "about".equals(scheme)
+                || "blob".equals(scheme) || "data".equals(scheme) || "javascript".equals(scheme)) {
             return false;
         }
         try {
@@ -1312,12 +1410,20 @@ public class MainActivity extends AppCompatActivity {
         }
         String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
         String mime = mimeType == null ? "" : mimeType;
-        String bridge = webView == appWebView ? "Android" : "WebManagerChrome";
-        String script = "(function(){try{fetch(" + JSONObject.quote(url) + ").then(function(r){return r.blob();}).then(function(b){"
-                + "var reader=new FileReader();reader.onload=function(){try{" + bridge + ".saveBlobDownload(String(reader.result||''),"
-                + JSONObject.quote(mime) + "," + JSONObject.quote(name) + ");}catch(e){}};"
-                + "reader.readAsDataURL(b);}).catch(function(){try{" + bridge + ".saveBlobDownload('','','');}catch(e){}});}catch(e){"
-                + "try{" + bridge + ".saveBlobDownload('','','');}catch(x){}}})();";
+        String quotedUrl = JSONObject.quote(url);
+        String quotedMime = JSONObject.quote(mime);
+        String quotedName = JSONObject.quote(name);
+        String script = "(function(){function fail(){try{(window.WebManagerChrome||window.Android).saveBlobDownload('','','');}catch(e){}}"
+                + "function save(b){if(!b){fail();return;}if(typeof(window.WebManagerChrome||window.Android).beginDownloadFile==='function'){"
+                + "b.arrayBuffer().then(function(buf){var u8=new Uint8Array(buf);var n=window.WebManagerChrome||window.Android;"
+                + "try{n.beginDownloadFile(" + quotedMime + "," + quotedName + ");"
+                + "var CHUNK=262144;function toB64(part){var s='';for(var i=0;i<part.length;i++)s+=String.fromCharCode(part[i]);return btoa(s);}"
+                + "for(var i=0;i<u8.length;i+=CHUNK){if(n.appendDownloadFile(toB64(u8.subarray(i,Math.min(i+CHUNK,u8.length))))===false)throw 0;}"
+                + "n.finishDownloadFile();}catch(e){try{n.cancelDownloadFile();}catch(x){}fail();}}).catch(fail);return;}"
+                + "var reader=new FileReader();reader.onload=function(){try{(window.WebManagerChrome||window.Android).saveBlobDownload(String(reader.result||''),"
+                + quotedMime + "," + quotedName + ");}catch(e){fail();}};reader.readAsDataURL(b);}"
+                + "try{if(window.__wmDlBlobs&&window.__wmDlBlobs[" + quotedUrl + "]){save(window.__wmDlBlobs[" + quotedUrl + "]);return;}"
+                + "fetch(" + quotedUrl + ").then(function(r){return r.blob();}).then(save).catch(fail);}catch(e){fail();}})();";
         webView.evaluateJavascript(script, null);
     }
 
@@ -1723,7 +1829,17 @@ public class MainActivity extends AppCompatActivity {
     private class PageWebViewClient extends WebViewClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-            return handleExternalScheme(request.getUrl());
+            if (request == null) return false;
+            Uri uri = request.getUrl();
+            if (uri == null) return false;
+            String scheme = uri.getScheme();
+            if ("blob".equals(scheme) || "data".equals(scheme)) {
+                enqueueDownload(view, uri.toString(), null, null, request.getRequestHeaders() == null
+                        ? null
+                        : request.getRequestHeaders().get("Content-Type"));
+                return true;
+            }
+            return handleExternalScheme(uri);
         }
 
         @Override
@@ -1746,6 +1862,7 @@ public class MainActivity extends AppCompatActivity {
                 tabs.hideRefreshSpinner();
             }
             injectPasswordAutofill(view);
+            injectPageDownloadHook(view);
             if (!isActivePage(view)) return;
             bindPageChrome(view);
             refreshPageChrome(view, true);

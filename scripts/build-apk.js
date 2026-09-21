@@ -42,6 +42,10 @@ function copyHtmlIntoAssets(version) {
     if (!existsSync(autofill)) {
         throw new Error('找不到 android/app/src/main/assets/password-autofill.js');
     }
+    const pageDownload = join(assetsDir, 'page-download.js');
+    if (!existsSync(pageDownload)) {
+        throw new Error('找不到 android/app/src/main/assets/page-download.js');
+    }
 }
 
 function gradleCommand() {
