@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sheetRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_js_dialog"
     android:orientation="vertical"
-    android:paddingStart="16dp"
+    android:paddingStart="8dp"
     android:paddingTop="16dp"
-    android:paddingEnd="16dp"
+    android:paddingEnd="8dp"
     android:paddingBottom="8dp">
 
     <LinearLayout

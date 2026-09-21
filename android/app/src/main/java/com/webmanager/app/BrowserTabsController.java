@@ -1531,11 +1531,11 @@ final class BrowserTabsController {
         scaleText(title, 15f);
         scaleText(url, 12f);
         scaleIconButton(row == null ? null : row.findViewById(R.id.sheetTabHandle), 32, 4);
-        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetCopy), 28, 4);
-        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetPin), 28, 4);
-        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetMove), 28, 4);
-        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetClose), 28, 4);
-        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetDelete), 28, 4);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetCopy), 0);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetPin), 4);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetMove), 4);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetClose), 4);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetDelete), 4);
     }
 
     private void scaleSheetGroupHeader(View header, TextView title, TextView close, TextView rename, TextView delete, View handle, View toggle) {
@@ -1573,6 +1573,10 @@ final class BrowserTabsController {
 
     private void applySheetMetrics(Dialog dialog) {
         if (dialog == null) return;
+        View sheetRoot = dialog.findViewById(R.id.sheetRoot);
+        if (sheetRoot != null) {
+            sheetRoot.setPadding(dp(8), dp(16), dp(8), dp(8));
+        }
         scaleText(asText(dialog, R.id.sheetHeading), 18f);
         scaleText(asText(dialog, R.id.sheetManageGroups), 14f);
         scaleText(asText(dialog, R.id.sheetSelectCount), 13f);
@@ -1607,6 +1611,15 @@ final class BrowserTabsController {
     private void scaleIconButton(View view, int sizeDp, int padDp) {
         setPxSize(view, dp(sizeDp), dp(sizeDp));
         setPadding(view, padDp);
+    }
+
+    private void scaleSheetActionButton(View view, int startMarginDp) {
+        scaleIconButton(view, 22, 3);
+        ViewGroup.MarginLayoutParams params = marginParams(view);
+        if (params != null) {
+            params.setMarginStart(dp(startMarginDp));
+            view.setLayoutParams(params);
+        }
     }
 
     private void scaleText(TextView view, float sp) {

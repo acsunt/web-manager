@@ -311,6 +311,11 @@ describe('APK 版本号', () => {
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:contentDescription="排序状态"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetDelete"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetCopy"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_width="22dp"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_marginStart="4dp"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('android:paddingStart="8dp"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetRoot"');
+    expect(tabs).toContain('scaleSheetActionButton(');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_main.xml'), 'utf8')).toContain('id="@+id/desktopBtn"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_main.xml'), 'utf8')).toContain('id="@+id/pagesBtn"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_main.xml'), 'utf8')).toContain('id="@+id/tabOverflowStrip"');
