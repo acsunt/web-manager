@@ -49,7 +49,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -1612,7 +1611,7 @@ final class BrowserTabsController {
 
     private void scaleText(TextView view, float sp) {
         if (view == null) return;
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp * activity.pageTextScale());
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp * activity.chromeTextScale());
     }
 
     private void setPxSize(View view, int width, int height) {
@@ -1645,7 +1644,7 @@ final class BrowserTabsController {
 
     private float dpf(float value) {
         float density = activity.getResources().getDisplayMetrics().density;
-        return value * density * activity.pageUiScale();
+        return value * density * activity.chromeUiScale();
     }
 
     private void toggleDesktopActive() {
@@ -1789,18 +1788,31 @@ final class BrowserTabsController {
                 + "})();";
     }
 
-    private void applyPageDarkSettings(WebView view) {
+    void applyPageDarkSettings(WebView view) {
         if (view == null) return;
         WebSettings settings = view.getSettings();
         boolean follow = activity.pageFollowDarkMode();
         boolean dark = follow && activity.pageDarkMode();
         view.setBackgroundColor(dark ? Color.parseColor("#121212") : Color.WHITE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            view.setForceDarkAllowed(follow);
+        }
         if (settings == null) return;
+        applyPreferredColorScheme(settings, follow, dark);
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, dark);
             }
         } catch (Throwable ignored) {
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                int mode = !follow
+                        ? WebSettings.FORCE_DARK_AUTO
+                        : (dark ? WebSettings.FORCE_DARK_ON : WebSettings.FORCE_DARK_OFF);
+                settings.setForceDark(mode);
+            } catch (Throwable ignored) {
+            }
         }
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
@@ -1811,28 +1823,69 @@ final class BrowserTabsController {
             }
         } catch (Throwable ignored) {
         }
+        try {
+            if (follow && WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+                WebSettingsCompat.setForceDarkStrategy(
+                        settings,
+                        WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
+                );
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void applyPreferredColorScheme(WebSettings settings, boolean follow, boolean dark) {
+        if (settings == null) return;
+        int scheme = !follow ? 2 : (dark ? 0 : 1);
+        try {
+            settings.getClass().getMethod("setPreferredColorScheme", int.class).invoke(settings, scheme);
+        } catch (Throwable ignored) {
+        }
     }
 
     private String pageColorSchemeScript() {
-        if (!activity.pageFollowDarkMode()) return "";
+        if (!activity.pageFollowDarkMode()) {
+            return "(function(){var r=document.documentElement;if(!r)return;"
+                    + "r.removeAttribute('data-wm-color-scheme');"
+                    + "var s=document.getElementById('wm-dark-fallback');if(s)s.remove();"
+                    + "if(window.__wmMatchMediaNative){try{window.matchMedia=window.__wmMatchMediaNative;}catch(e){}}"
+                    + "})();";
+        }
         boolean dark = activity.pageDarkMode();
         String scheme = dark ? "dark" : "light";
         return "(function(){var dark=" + (dark ? "true" : "false") + ";var scheme='" + scheme + "';"
-                + "var r=document.documentElement;if(r&&r.style){r.style.colorScheme=scheme;"
-                + "r.style.setProperty('color-scheme',scheme);r.setAttribute('data-wm-color-scheme',scheme);}"
-                + "function applyMeta(){var h=document.head||document.documentElement;if(!h)return;"
-                + "var meta=document.querySelector('meta[name=color-scheme]');"
-                + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','color-scheme');h.appendChild(meta);}"
-                + "meta.setAttribute('content',scheme);}"
-                + "applyMeta();"
-                + "try{var native=window.matchMedia.bind(window);"
+                + "var r=document.documentElement;if(r){r.setAttribute('data-wm-color-scheme',scheme);}"
+                + "try{var native=window.__wmMatchMediaNative||window.matchMedia.bind(window);"
+                + "window.__wmMatchMediaNative=native;"
                 + "window.matchMedia=function(query){var q=String(query||'');"
                 + "if(q.indexOf('prefers-color-scheme')<0)return native(query);"
                 + "var wantDark=q.indexOf('dark')>=0;var wantLight=q.indexOf('light')>=0;"
                 + "var matches=wantDark?dark:(wantLight?!dark:native(query).matches);"
-                + "return {matches:matches,media:query,onchange:null,addListener:function(){},removeListener:function(){},"
-                + "addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return false;}};};"
-                + "}catch(e){}})();";
+                + "var listeners=[];"
+                + "var mql={get matches(){return matches;},media:query,onchange:null,"
+                + "addListener:function(fn){if(typeof fn==='function')listeners.push(fn);},"
+                + "removeListener:function(fn){listeners=listeners.filter(function(f){return f!==fn;});},"
+                + "addEventListener:function(t,fn){if(t==='change'&&typeof fn==='function')listeners.push(fn);},"
+                + "removeEventListener:function(t,fn){if(t==='change')listeners=listeners.filter(function(f){return f!==fn;});},"
+                + "dispatchEvent:function(ev){listeners.forEach(function(fn){try{fn(ev||mql);}catch(e){}});"
+                + "if(typeof mql.onchange==='function')try{mql.onchange(ev||mql);}catch(e){}return true;}};"
+                + "return mql;};"
+                + "}catch(e){}"
+                + "function removeFallback(){var s=document.getElementById('wm-dark-fallback');if(s)s.remove();}"
+                + "if(!dark){removeFallback();return;}"
+                + "function parseRgb(c){if(!c||c==='transparent')return null;var m=c.match(/rgba?\\((\\d+)[, ]+(\\d+)[, ]+(\\d+)/);if(!m)return null;"
+                + "return {r:+m[1],g:+m[2],b:+m[3]};}"
+                + "function isLight(){var el=document.body||document.documentElement;if(!el)return true;"
+                + "var bg=parseRgb(getComputedStyle(el).backgroundColor);if(!bg){var html=parseRgb(getComputedStyle(document.documentElement).backgroundColor);bg=html;}"
+                + "if(!bg)return true;return (0.299*bg.r+0.587*bg.g+0.114*bg.b)>200;}"
+                + "function applyFallback(){if(!document.documentElement)return;if(!isLight()){removeFallback();return;}"
+                + "if(document.getElementById('wm-dark-fallback'))return;"
+                + "var s=document.createElement('style');s.id='wm-dark-fallback';"
+                + "s.textContent='html{background:#121212!important;filter:invert(1) hue-rotate(180deg);}img,video,picture,canvas,svg{filter:invert(1) hue-rotate(180deg);}';"
+                + "(document.head||document.documentElement).appendChild(s);}"
+                + "if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyFallback);"
+                + "else applyFallback();"
+                + "setTimeout(applyFallback,80);setTimeout(applyFallback,400);})();";
     }
 
     private float cssPx(int px) {
@@ -1849,7 +1902,7 @@ final class BrowserTabsController {
             tab.desktopScriptHandle = WebViewCompat.addDocumentStartJavaScript(
                     tab.webView,
                     viewportScript(tab.desktop) + pageZoomScript() + pageColorSchemeScript(),
-                    Collections.singleton("*")
+                    new HashSet<>(Arrays.asList("*", "file:///*", "http://*/*", "https://*/*"))
             );
         } catch (Throwable ignored) {
         }

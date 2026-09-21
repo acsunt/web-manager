@@ -184,8 +184,8 @@ final class JsDialog {
         float ui = 1f;
         if (activity instanceof MainActivity) {
             MainActivity main = (MainActivity) activity;
-            text = main.pageTextScale();
-            ui = main.pageUiScale();
+            text = main.chromeTextScale();
+            ui = main.chromeUiScale();
         }
         float density = activity.getResources().getDisplayMetrics().density;
         int pad = Math.round(22 * density * ui);

@@ -138,22 +138,27 @@ describe('defaultThemeScale', () => {
   });
 
   it('网页默认跟系统字号、界面大小 100%', () => {
-    expect(defaultThemeScale()).toEqual({ systemTextSize: true, textScale: 1, uiScale: 1 });
+    expect(defaultThemeScale()).toEqual({ systemTextSize: true, pageFollowScale: true, textScale: 1, uiScale: 1 });
   });
 
   it('APK 默认关掉系统字号、界面大小 100%', () => {
     window.Android = {};
-    expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 1 });
+    expect(defaultThemeScale()).toEqual({ systemTextSize: false, pageFollowScale: true, textScale: 1, uiScale: 1 });
   });
 
   it('跟随系统时文字和界面都按 100%', () => {
     expect(currentThemeScale({ systemTextSize: true, textScale: 1.5, uiScale: 1.2 }))
-      .toEqual({ systemTextSize: true, textScale: 1, uiScale: 1 });
+      .toEqual({ systemTextSize: true, pageFollowScale: true, textScale: 1, uiScale: 1 });
+  });
+
+  it('关掉网页跟随后仍保留管理系统自己的缩放', () => {
+    expect(currentThemeScale({ systemTextSize: false, pageFollowScale: false, textScale: 1.5, uiScale: 1.2 }))
+      .toEqual({ systemTextSize: false, pageFollowScale: false, textScale: 1.5, uiScale: 1.2 });
   });
 
   it('自定义缩放会限制在滑块范围内', () => {
     expect(currentThemeScale({ systemTextSize: false, textScale: 4, uiScale: 0.2 }))
-      .toEqual({ systemTextSize: false, textScale: 3, uiScale: 0.5 });
+      .toEqual({ systemTextSize: false, pageFollowScale: true, textScale: 3, uiScale: 0.5 });
   });
 });
 
@@ -345,13 +350,19 @@ describe('syncNativeThemeScale', () => {
   it('APK 把文字大小和界面大小同步给原生', () => {
     window.Android = { setThemeScale: vi.fn() };
     syncNativeThemeScale({ systemTextSize: false, textScale: 1.5, uiScale: 1.2 });
-    expect(window.Android.setThemeScale).toHaveBeenCalledWith(false, 1.5, 1.2);
+    expect(window.Android.setThemeScale).toHaveBeenCalledWith(false, true, 1.5, 1.2);
   });
 
   it('跟随系统时同步 100%', () => {
     window.Android = { setThemeScale: vi.fn() };
     syncNativeThemeScale({ systemTextSize: true, textScale: 1.8, uiScale: 1.4 });
-    expect(window.Android.setThemeScale).toHaveBeenCalledWith(true, 1, 1);
+    expect(window.Android.setThemeScale).toHaveBeenCalledWith(true, true, 1, 1);
+  });
+
+  it('关掉网页跟随后仍把管理系统缩放同步给原生', () => {
+    window.Android = { setThemeScale: vi.fn() };
+    syncNativeThemeScale({ systemTextSize: false, pageFollowScale: false, textScale: 1.5, uiScale: 1.2 });
+    expect(window.Android.setThemeScale).toHaveBeenCalledWith(false, false, 1.5, 1.2);
   });
 });
 

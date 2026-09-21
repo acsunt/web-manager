@@ -82,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
     private String pendingImportJson;
     private boolean lightSystemBars = true;
     private boolean themeFollowSystem = false;
+    private boolean pageFollowScale = true;
     private float themeTextScale = 1f;
     private float themeUiScale = 1f;
     private boolean pageFollowDarkMode = false;
@@ -212,8 +213,9 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setAllowFileAccessFromFileURLs(true);
         webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
         webView.setFitsSystemWindows(false);
-        webView.setBackgroundColor(Color.WHITE);
+        webView.setBackgroundColor(pageFollowDarkMode && pageDarkMode ? Color.parseColor("#121212") : Color.WHITE);
         webView.setSaveEnabled(true);
+        if (tabs != null) tabs.applyPageDarkSettings(webView);
         webView.addJavascriptInterface(new PageChromeBridge(webView), "WebManagerChrome");
         webView.setOnScrollChangeListener((v, l, t, oldl, oldt) -> refreshPageChrome((WebView) v, false));
         webView.setWebViewClient(new PageWebViewClient());
@@ -237,16 +239,19 @@ public class MainActivity extends AppCompatActivity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
     }
 
-    void applyThemeScale(boolean followSystem, float textScale, float uiScale) {
+    void applyThemeScale(boolean followSystem, boolean followPage, float textScale, float uiScale) {
         boolean nextFollow = followSystem;
+        boolean nextPageFollow = followPage;
         float nextText = clampScale(textScale, 0.4f, 3f, 1f);
         float nextUi = clampScale(uiScale, 0.5f, 2f, 1f);
         if (nextFollow == themeFollowSystem
+                && nextPageFollow == pageFollowScale
                 && Math.abs(nextText - themeTextScale) < 0.001f
                 && Math.abs(nextUi - themeUiScale) < 0.001f) {
             return;
         }
         themeFollowSystem = nextFollow;
+        pageFollowScale = nextPageFollow;
         themeTextScale = nextText;
         themeUiScale = nextUi;
         runOnUiThread(() -> {
@@ -258,20 +263,30 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    float pageTextScale() {
+    float chromeTextScale() {
         if (themeFollowSystem) return 1f;
         return themeTextScale;
     }
 
+    float chromeUiScale() {
+        if (themeFollowSystem) return 1f;
+        return themeUiScale;
+    }
+
+    float pageTextScale() {
+        if (!pageFollowScale || themeFollowSystem) return 1f;
+        return themeTextScale;
+    }
+
     int pageTextZoom() {
-        if (themeFollowSystem) return 100;
+        if (!pageFollowScale || themeFollowSystem) return 100;
         float ui = themeUiScale <= 0.01f ? 1f : themeUiScale;
         int zoom = Math.round(themeTextScale / ui * 100f);
         return Math.max(10, Math.min(1000, zoom));
     }
 
     float pageUiScale() {
-        if (themeFollowSystem) return 1f;
+        if (!pageFollowScale || themeFollowSystem) return 1f;
         return themeUiScale;
     }
 
@@ -303,9 +318,11 @@ public class MainActivity extends AppCompatActivity {
         }
         Context themed = createConfigurationContext(config);
         int theme = pageFollowDarkMode && pageDarkMode
-                ? androidx.appcompat.R.style.Theme_AppCompat_NoActionBar
-                : androidx.appcompat.R.style.Theme_AppCompat_Light_NoActionBar;
-        return new ContextThemeWrapper(themed == null ? this : themed, theme);
+                ? R.style.Theme_WebManager_PageDark
+                : R.style.Theme_WebManager_PageLight;
+        ContextThemeWrapper wrapped = new ContextThemeWrapper(themed == null ? this : themed, theme);
+        wrapped.applyOverrideConfiguration(config);
+        return wrapped;
     }
 
     void applyTextZoom(WebView view) {
@@ -765,7 +782,7 @@ public class MainActivity extends AppCompatActivity {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) restoreTabsBtn.getLayoutParams();
             if (params != null) {
                 float density = getResources().getDisplayMetrics().density;
-                int margin = Math.round(16 * density * pageUiScale());
+                int margin = Math.round(16 * density * chromeUiScale());
                 params.rightMargin = Math.max(safeRight, 0) + margin;
                 params.bottomMargin = bottom + margin;
                 restoreTabsBtn.setLayoutParams(params);

@@ -121,8 +121,8 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
-    public void setThemeScale(boolean followSystem, float textScale, float uiScale) {
-        activity.applyThemeScale(followSystem, textScale, uiScale);
+    public void setThemeScale(boolean followSystem, boolean followPage, float textScale, float uiScale) {
+        activity.applyThemeScale(followSystem, followPage, textScale, uiScale);
     }
 
     @JavascriptInterface

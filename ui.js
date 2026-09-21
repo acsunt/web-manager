@@ -115,17 +115,19 @@ export async function copyTextToClipboard(text) {
 
 export function defaultThemeScale() {
     if (isNativeApp()) {
-        return { systemTextSize: false, textScale: 1, uiScale: 1 };
+        return { systemTextSize: false, pageFollowScale: true, textScale: 1, uiScale: 1 };
     }
-    return { systemTextSize: true, textScale: 1, uiScale: 1 };
+    return { systemTextSize: true, pageFollowScale: true, textScale: 1, uiScale: 1 };
 }
 
 export function currentThemeScale(config = {}) {
+    const pageFollowScale = config.pageFollowScale !== false;
     if (config.systemTextSize) {
-        return { systemTextSize: true, textScale: 1, uiScale: 1 };
+        return { systemTextSize: true, pageFollowScale, textScale: 1, uiScale: 1 };
     }
     return {
         systemTextSize: false,
+        pageFollowScale,
         textScale: clampThemeScale(config.textScale, 0.4, 3, 1),
         uiScale: clampThemeScale(config.uiScale, 0.5, 2, 1)
     };
@@ -141,7 +143,7 @@ export function syncNativeThemeScale(config) {
     if (typeof window === 'undefined' || typeof window.Android?.setThemeScale !== 'function') return;
     const scale = currentThemeScale(config);
     try {
-        window.Android.setThemeScale(!!scale.systemTextSize, scale.textScale, scale.uiScale);
+        window.Android.setThemeScale(!!scale.systemTextSize, !!scale.pageFollowScale, scale.textScale, scale.uiScale);
     } catch (e) { /* 网页没有原生桥 */ }
 }
 
