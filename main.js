@@ -16,7 +16,7 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativeSystemBars } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
 import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -120,7 +120,7 @@ const DEFAULT_TOOLBAR_CONFIG = [
 let toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG];
 const DEFAULT_CSS_TEMPLATE = `/* 基础 CSS 示例 (安全版) */\nbody {\n    /* --bg-color: #f2f4f6; */\n}\n`;
 
-const DEFAULT_THEME_CONFIG = { darkMode: false, customCss: '', presets: {}, lockedImg: true, lockedContent: true, systemTextSize: true, textScale: 1, uiScale: 1, day: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 }, night: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 } };
+const DEFAULT_THEME_CONFIG = { darkMode: false, pageFollowDarkMode: false, customCss: '', presets: {}, lockedImg: true, lockedContent: true, systemTextSize: true, textScale: 1, uiScale: 1, day: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 }, night: { theme: 'minimal', bgType: 'none', bgValue: '', bgBlur: 0, bgOpacity: 1.0, bgOverlay: 0.0, contentTransparency: 0, contentMask: 0 } };
 function createDefaultThemeConfig() { return { ...DEFAULT_THEME_CONFIG, ...defaultThemeScale() }; }
 let themeConfig = createDefaultThemeConfig();
 
@@ -1786,11 +1786,11 @@ function updateLockUI() { const lockImgBtn = document.getElementById('lockImgBtn
 
 function exportThemeSettings() { const configToExport = JSON.parse(JSON.stringify(themeConfig)); const hasDayImg = configToExport.day.bgType === 'image' && configToExport.day.bgValue && configToExport.day.bgValue.startsWith('data:image'); const hasNightImg = configToExport.night.bgType === 'image' && configToExport.night.bgValue && configToExport.night.bgValue.startsWith('data:image'); const includePresets = document.getElementById('exportIncludePresets').checked; if (hasDayImg || hasNightImg || includePresets) { const zip = new JSZip(); if (hasDayImg) { const mimeMatch = configToExport.day.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_day.${ext}`; zip.file(filename, configToExport.day.bgValue.split(',')[1], {base64: true}); configToExport.day.bgValue = filename; } if (hasNightImg) { const mimeMatch = configToExport.night.bgValue.match(/data:([^;]+);/); const ext = (mimeMatch && mimeMatch[1] === 'image/png') ? 'png' : 'jpg'; const filename = `bg_night.${ext}`; zip.file(filename, configToExport.night.bgValue.split(',')[1], {base64: true}); configToExport.night.bgValue = filename; } if (includePresets && configToExport.presets && Object.keys(configToExport.presets).length > 0) { const presetsMeta = {}; const cssFolder = zip.folder("presets/css"); const htmlFolder = zip.folder("presets/html"); Object.keys(configToExport.presets).forEach(presetName => { const content = configToExport.presets[presetName]; const isHtml = content.trim().startsWith('<'); if (isHtml) { htmlFolder.file(`${presetName}.html`, content); presetsMeta[presetName] = { type: 'html', file: `presets/html/${presetName}.html` }; } else { cssFolder.file(`${presetName}.css`, content); presetsMeta[presetName] = { type: 'css', file: `presets/css/${presetName}.css` }; } }); zip.file("presets.json", JSON.stringify(presetsMeta, null, 2)); delete configToExport.presets; } zip.file("theme_config.json", JSON.stringify(configToExport, null, 2)); zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, "web_manager_theme.zip"); }); } else { const blob = new Blob([JSON.stringify(configToExport, null, 2)], {type: "application/json"}); downloadBlob(blob, "web_manager_theme.json"); } }
 
-function openThemeModal() { document.getElementById('darkModeToggle').checked = themeConfig.darkMode; const input = document.getElementById('customCssInput'); if(!input.value.trim()) input.value = themeConfig.customCss || DEFAULT_CSS_TEMPLATE; updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); updateLockUI(); document.getElementById('themeModal').classList.add('active'); }
+function openThemeModal() { document.getElementById('darkModeToggle').checked = themeConfig.darkMode; const follow = document.getElementById('pageFollowDarkModeCheck'); if (follow) follow.checked = !!themeConfig.pageFollowDarkMode; const input = document.getElementById('customCssInput'); if(!input.value.trim()) input.value = themeConfig.customCss || DEFAULT_CSS_TEMPLATE; updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); updateLockUI(); document.getElementById('themeModal').classList.add('active'); }
 function updateSliderValuesFromConfig() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; document.getElementById('bgBlurRange').value = settings.bgBlur; document.getElementById('bgOpacityRange').value = settings.bgOpacity; document.getElementById('bgOverlayRange').value = settings.bgOverlay; document.getElementById('themeAlphaRange').value = settings.contentTransparency; document.getElementById('textMaskRange').value = settings.contentMask; if (themeConfig.systemTextSize) { document.getElementById('systemTextScaleCheck').checked = true; document.getElementById('textScaleRange').disabled = true; document.getElementById('uiScaleRange').disabled = true; document.getElementById('textScaleRange').value = 100; document.getElementById('uiScaleRange').value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; } else { document.getElementById('systemTextScaleCheck').checked = false; document.getElementById('textScaleRange').disabled = false; document.getElementById('uiScaleRange').disabled = false; const textVal = Math.round((themeConfig.textScale || 1) * 100); document.getElementById('textScaleRange').value = textVal; document.getElementById('textScaleDisplay').innerText = textVal + '%'; const uiVal = Math.round((themeConfig.uiScale || 1) * 100); document.getElementById('uiScaleRange').value = uiVal; document.getElementById('uiScaleDisplay').innerText = uiVal + '%'; } const hint = document.getElementById('themeModeHint'); hint.innerText = themeConfig.darkMode ? '当前配置：夜间模式风格' : '当前配置：日间模式风格'; hint.style.color = themeConfig.darkMode ? '#4dabf7' : '#e67700'; document.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active')); const currentTheme = settings.theme || 'minimal'; const activeEl = document.getElementById('theme-' + currentTheme); if(activeEl) activeEl.classList.add('active'); }
-function toggleSystemTextScale() { const isChecked = document.getElementById('systemTextScaleCheck').checked; const textRange = document.getElementById('textScaleRange'); const uiRange = document.getElementById('uiScaleRange'); if (isChecked) { textRange.disabled = true; uiRange.disabled = true; textRange.value = 100; uiRange.value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; document.documentElement.style.setProperty('--text-scale', 1); document.documentElement.style.setProperty('--ui-scale', 1); themeConfig.textScale = 1; themeConfig.uiScale = 1; themeConfig.systemTextSize = true; } else { textRange.disabled = false; uiRange.disabled = false; themeConfig.systemTextSize = false; } saveThemeConfig(); }
-function updateTextScale() { const range = document.getElementById('textScaleRange'); const val = range.value; document.getElementById('textScaleDisplay').innerText = val + '%'; document.documentElement.style.setProperty('--text-scale', val / 100); themeConfig.textScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('uiScaleRange').disabled = false; if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
-function updateUiScale() { const range = document.getElementById('uiScaleRange'); const val = range.value; document.getElementById('uiScaleDisplay').innerText = val + '%'; document.documentElement.style.setProperty('--ui-scale', val / 100); themeConfig.uiScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('textScaleRange').disabled = false; if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function toggleSystemTextScale() { const isChecked = document.getElementById('systemTextScaleCheck').checked; const textRange = document.getElementById('textScaleRange'); const uiRange = document.getElementById('uiScaleRange'); if (isChecked) { textRange.disabled = true; uiRange.disabled = true; textRange.value = 100; uiRange.value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; themeConfig.textScale = 1; themeConfig.uiScale = 1; themeConfig.systemTextSize = true; } else { textRange.disabled = false; uiRange.disabled = false; themeConfig.systemTextSize = false; } applyThemeSettings(); saveThemeConfig(); }
+function updateTextScale() { const range = document.getElementById('textScaleRange'); const val = range.value; document.getElementById('textScaleDisplay').innerText = val + '%'; themeConfig.textScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('uiScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function updateUiScale() { const range = document.getElementById('uiScaleRange'); const val = range.value; document.getElementById('uiScaleDisplay').innerText = val + '%'; themeConfig.uiScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('textScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
 
 function importThemeSettings(input) { 
     const file = input.files[0]; if (!file) return; 
@@ -1884,6 +1884,7 @@ function importCustomCodeFile(input) {
 function clearAllCssPresets() { if (Object.keys(themeConfig.presets).length === 0) return showToast("没有可清除的预设"); if (confirm("确定要清空所有已保存的代码预设吗？")) { themeConfig.presets = {}; saveThemeConfig(); updatePresetDropdown(); showToast("所有预设已清空"); } }
 function setTheme(themeName) { document.body.style.transition = 'none'; const mode = themeConfig.darkMode ? 'night' : 'day'; themeConfig[mode].theme = themeName; document.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active')); document.getElementById('theme-' + themeName).classList.add('active'); applyThemeSettings(); saveThemeConfig(); updateBgAdjustment(); setTimeout(() => { document.body.style.transition = ''; }, 50); }
 function toggleDarkMode() { themeConfig.darkMode = document.getElementById('darkModeToggle').checked; applyThemeSettings(); saveThemeConfig(); updateSliderValuesFromConfig(); updateBgAdjustment(); updateBgPreviewUI(); }
+function togglePageFollowDarkMode() { const follow = document.getElementById('pageFollowDarkModeCheck'); themeConfig.pageFollowDarkMode = !!(follow && follow.checked); applyThemeSettings(); saveThemeConfig(); }
 
 function applyThemeSettings() { 
     document.body.style.transition = 'none';
@@ -1909,6 +1910,7 @@ function applyThemeSettings() {
     const root = document.documentElement; 
     const textScale = themeConfig.systemTextSize ? 1 : (themeConfig.textScale || 1); const uiScale = themeConfig.systemTextSize ? 1 : (themeConfig.uiScale || 1);
     root.style.setProperty('--text-scale', textScale); root.style.setProperty('--ui-scale', uiScale);
+    syncNativeThemeScale(themeConfig);
 
     if (settings.bgType !== 'none' && settings.bgValue) { root.style.setProperty('--bg-image', `url("${settings.bgValue}")`); } else { root.style.setProperty('--bg-image', 'none'); } 
     root.style.setProperty('--bg-blur', settings.bgBlur + 'px'); root.style.setProperty('--bg-img-opacity', settings.bgOpacity); root.style.setProperty('--bg-overlay-alpha', settings.bgOverlay); 
@@ -1918,6 +1920,7 @@ function applyThemeSettings() {
     if (currentTheme === 'glass') { if (transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); } else { const dynamicBlur = 12 * (1 - (transVal / 100)); document.body.style.setProperty('--backdrop-filter', `blur(${dynamicBlur}px)`); } } else { document.body.style.removeProperty('--backdrop-filter', 'none'); } 
     if (transVal > 0) { const rgba = `rgba(${r}, ${g}, ${b}, ${mainAlpha})`; document.body.style.setProperty('--card-bg', rgba); document.body.style.setProperty('--root-cat-bg', rgba); document.body.style.setProperty('--root-header-bg', rgba); document.body.style.setProperty('--sub-cat-header-bg', rgba); document.body.style.setProperty('--input-bg', rgba); } else { document.body.style.removeProperty('--card-bg'); document.body.style.removeProperty('--root-cat-bg'); document.body.style.removeProperty('--root-header-bg'); document.body.style.removeProperty('--sub-cat-header-bg'); document.body.style.removeProperty('--input-bg'); } 
     syncNativeSystemBars(!!themeConfig.darkMode);
+    syncNativePageDarkMode(themeConfig);
     
     setTimeout(() => { if (!document.body.classList.contains('is-dragging')) { document.body.style.transition = ''; } }, 50);
 }
@@ -1936,7 +1939,7 @@ function performClearBg(type) {
         if(confirm('确定要将主题恢复为默认设置吗？')) { 
             const keepPresets = !document.getElementById('clearPresetsCheckbox').checked; let existingPresets = {}; if (keepPresets) existingPresets = JSON.parse(JSON.stringify(themeConfig.presets));
             themeConfig = createDefaultThemeConfig(); themeConfig.presets = existingPresets; 
-            document.getElementById('darkModeToggle').checked = false; document.getElementById('customCssInput').value = DEFAULT_CSS_TEMPLATE; updatePresetDropdown(); showToast("主题已初始化", 1500); 
+            document.getElementById('darkModeToggle').checked = false; const follow = document.getElementById('pageFollowDarkModeCheck'); if (follow) follow.checked = false; document.getElementById('customCssInput').value = DEFAULT_CSS_TEMPLATE; updatePresetDropdown(); showToast("主题已初始化", 1500); 
         } else { return; } 
     } applyThemeSettings(); saveThemeConfig(); updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); closeModal('clearBgOptionsModal'); 
 }
@@ -1992,6 +1995,8 @@ function resetSiteData(keepTheme = false) {
         applyThemeSettings();
         const darkToggle = document.getElementById('darkModeToggle');
         if (darkToggle) darkToggle.checked = false;
+        const follow = document.getElementById('pageFollowDarkModeCheck');
+        if (follow) follow.checked = false;
         updateSliderValuesFromConfig();
         updateBgPreviewUI();
     }
@@ -3637,6 +3642,7 @@ const inlineHandlers = {
     exportThemeSettings,
     importThemeSettings,
     toggleDarkMode,
+    togglePageFollowDarkMode,
     setTheme,
     toggleSystemTextScale,
     updateTextScale,

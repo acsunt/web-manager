@@ -42,6 +42,7 @@ import org.json.JSONObject;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ContextThemeWrapper;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -80,6 +81,11 @@ public class MainActivity extends AppCompatActivity {
     private WebView pendingWindowWebView;
     private String pendingImportJson;
     private boolean lightSystemBars = true;
+    private boolean themeFollowSystem = false;
+    private float themeTextScale = 1f;
+    private float themeUiScale = 1f;
+    private boolean pageFollowDarkMode = false;
+    private boolean pageDarkMode = false;
     private int safeTop;
     private int safeRight;
     private int safeBottom;
@@ -198,7 +204,7 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint({"SetJavaScriptEnabled", "SetAllowFileAccessFromFileURLs"})
     WebView createPageWebView() {
-        WebView webView = new WebView(this);
+        WebView webView = new WebView(pageWebViewContext());
         applyCommonWebSettings(webView.getSettings());
         webView.getSettings().setLoadWithOverviewMode(false);
         webView.getSettings().setSupportMultipleWindows(true);
@@ -229,6 +235,92 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setTextZoom(100);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+    }
+
+    void applyThemeScale(boolean followSystem, float textScale, float uiScale) {
+        boolean nextFollow = followSystem;
+        float nextText = clampScale(textScale, 0.4f, 3f, 1f);
+        float nextUi = clampScale(uiScale, 0.5f, 2f, 1f);
+        if (nextFollow == themeFollowSystem
+                && Math.abs(nextText - themeTextScale) < 0.001f
+                && Math.abs(nextUi - themeUiScale) < 0.001f) {
+            return;
+        }
+        themeFollowSystem = nextFollow;
+        themeTextScale = nextText;
+        themeUiScale = nextUi;
+        runOnUiThread(() -> {
+            if (appWebView != null && appWebView.getSettings() != null) {
+                appWebView.getSettings().setTextZoom(100);
+            }
+            if (tabs != null) tabs.applyThemeScale();
+            applyPageInsets();
+        });
+    }
+
+    float pageTextScale() {
+        if (themeFollowSystem) return 1f;
+        return themeTextScale;
+    }
+
+    int pageTextZoom() {
+        if (themeFollowSystem) return 100;
+        float ui = themeUiScale <= 0.01f ? 1f : themeUiScale;
+        int zoom = Math.round(themeTextScale / ui * 100f);
+        return Math.max(10, Math.min(1000, zoom));
+    }
+
+    float pageUiScale() {
+        if (themeFollowSystem) return 1f;
+        return themeUiScale;
+    }
+
+    void applyPageDarkMode(boolean follow, boolean dark) {
+        boolean nextFollow = follow;
+        boolean nextDark = dark;
+        if (nextFollow == pageFollowDarkMode && nextDark == pageDarkMode) return;
+        boolean reload = nextFollow != pageFollowDarkMode || (nextFollow && nextDark != pageDarkMode);
+        pageFollowDarkMode = nextFollow;
+        pageDarkMode = nextDark;
+        runOnUiThread(() -> {
+            if (tabs != null) tabs.applyPageDarkMode(reload);
+        });
+    }
+
+    boolean pageFollowDarkMode() {
+        return pageFollowDarkMode;
+    }
+
+    boolean pageDarkMode() {
+        return pageDarkMode;
+    }
+
+    private Context pageWebViewContext() {
+        Configuration config = new Configuration(getResources().getConfiguration());
+        if (pageFollowDarkMode) {
+            int night = pageDarkMode ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
+            config.uiMode = (config.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | night;
+        }
+        Context themed = createConfigurationContext(config);
+        int theme = pageFollowDarkMode && pageDarkMode
+                ? androidx.appcompat.R.style.Theme_AppCompat_NoActionBar
+                : androidx.appcompat.R.style.Theme_AppCompat_Light_NoActionBar;
+        return new ContextThemeWrapper(themed == null ? this : themed, theme);
+    }
+
+    void applyTextZoom(WebView view) {
+        if (view == null) return;
+        applyTextZoom(view.getSettings());
+    }
+
+    void applyTextZoom(WebSettings settings) {
+        if (settings == null) return;
+        settings.setTextZoom(pageTextZoom());
+    }
+
+    private static float clampScale(float value, float min, float max, float fallback) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) return fallback;
+        return Math.max(min, Math.min(max, value));
     }
 
     boolean openUrl(String url) {
@@ -673,7 +765,7 @@ public class MainActivity extends AppCompatActivity {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) restoreTabsBtn.getLayoutParams();
             if (params != null) {
                 float density = getResources().getDisplayMetrics().density;
-                int margin = Math.round(16 * density);
+                int margin = Math.round(16 * density * pageUiScale());
                 params.rightMargin = Math.max(safeRight, 0) + margin;
                 params.bottomMargin = bottom + margin;
                 restoreTabsBtn.setLayoutParams(params);

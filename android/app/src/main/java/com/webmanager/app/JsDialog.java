@@ -3,6 +3,7 @@ package com.webmanager.app;
 import android.app.Activity;
 import android.app.Dialog;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -137,6 +138,7 @@ final class JsDialog {
             TextView cancelView = dialog.findViewById(R.id.jsDialogCancel);
             TextView okView = dialog.findViewById(R.id.jsDialogOk);
             messageView.setText(message == null ? "" : message);
+            applyThemeScale(activity, messageView, inputView, cancelView, okView);
             final boolean[] settled = { false };
 
             if (showInput) {
@@ -175,6 +177,44 @@ final class JsDialog {
         } catch (Exception ignored) {
             if (onCancel != null) onCancel.run();
         }
+    }
+
+    private static void applyThemeScale(Activity activity, TextView messageView, EditText inputView, TextView cancelView, TextView okView) {
+        float text = 1f;
+        float ui = 1f;
+        if (activity instanceof MainActivity) {
+            MainActivity main = (MainActivity) activity;
+            text = main.pageTextScale();
+            ui = main.pageUiScale();
+        }
+        float density = activity.getResources().getDisplayMetrics().density;
+        int pad = Math.round(22 * density * ui);
+        View panel = messageView.getParent() instanceof View ? (View) messageView.getParent().getParent() : null;
+        if (panel != null) panel.setPadding(pad, pad, pad, Math.round(10 * density * ui));
+        messageView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * text);
+        messageView.setLineSpacing(4 * density * ui, 1f);
+        ViewGroup.LayoutParams inputParams = inputView.getLayoutParams();
+        if (inputParams != null) {
+            inputParams.height = Math.round(44 * density * ui);
+            inputView.setLayoutParams(inputParams);
+        }
+        inputView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * text);
+        int inputPad = Math.round(12 * density * ui);
+        inputView.setPadding(inputPad, 0, inputPad, 0);
+        scaleDialogButton(cancelView, 15f * text, 44 * density * ui, 16 * density * ui);
+        scaleDialogButton(okView, 15f * text, 44 * density * ui, 16 * density * ui);
+    }
+
+    private static void scaleDialogButton(TextView view, float textSp, float heightPx, float padPx) {
+        if (view == null) return;
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp);
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (params != null) {
+            params.height = Math.round(heightPx);
+            view.setLayoutParams(params);
+        }
+        int pad = Math.round(padPx);
+        view.setPadding(pad, 0, pad, 0);
     }
 
     private static boolean settle(boolean[] settled) {

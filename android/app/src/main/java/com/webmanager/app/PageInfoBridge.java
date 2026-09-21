@@ -121,6 +121,16 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void setThemeScale(boolean followSystem, float textScale, float uiScale) {
+        activity.applyThemeScale(followSystem, textScale, uiScale);
+    }
+
+    @JavascriptInterface
+    public void setPageDarkMode(boolean follow, boolean dark) {
+        activity.applyPageDarkMode(follow, dark);
+    }
+
+    @JavascriptInterface
     public void setBrowserChromeVisible(boolean visible) {
         activity.setBrowserChromeVisible(visible);
     }

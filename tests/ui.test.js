@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, installNativeDialogs, onSelectiveClearCheckChange, registerInlineHandlers, syncNativeSystemBars } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, currentThemeScale, defaultThemeScale, installNativeDialogs, onSelectiveClearCheckChange, registerInlineHandlers, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -144,6 +144,16 @@ describe('defaultThemeScale', () => {
   it('APK 默认关掉系统字号、界面大小 100%', () => {
     window.Android = {};
     expect(defaultThemeScale()).toEqual({ systemTextSize: false, textScale: 1, uiScale: 1 });
+  });
+
+  it('跟随系统时文字和界面都按 100%', () => {
+    expect(currentThemeScale({ systemTextSize: true, textScale: 1.5, uiScale: 1.2 }))
+      .toEqual({ systemTextSize: true, textScale: 1, uiScale: 1 });
+  });
+
+  it('自定义缩放会限制在滑块范围内', () => {
+    expect(currentThemeScale({ systemTextSize: false, textScale: 4, uiScale: 0.2 }))
+      .toEqual({ systemTextSize: false, textScale: 3, uiScale: 0.5 });
   });
 });
 
@@ -320,5 +330,49 @@ describe('syncNativeSystemBars', () => {
     window.Android = { setSystemBarsAppearance: vi.fn() };
     syncNativeSystemBars(false);
     expect(window.Android.setSystemBarsAppearance).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('syncNativeThemeScale', () => {
+  afterEach(() => {
+    delete window.Android;
+  });
+
+  it('网页没有原生桥时不抛错', () => {
+    expect(() => syncNativeThemeScale({ textScale: 1.2, uiScale: 1.1 })).not.toThrow();
+  });
+
+  it('APK 把文字大小和界面大小同步给原生', () => {
+    window.Android = { setThemeScale: vi.fn() };
+    syncNativeThemeScale({ systemTextSize: false, textScale: 1.5, uiScale: 1.2 });
+    expect(window.Android.setThemeScale).toHaveBeenCalledWith(false, 1.5, 1.2);
+  });
+
+  it('跟随系统时同步 100%', () => {
+    window.Android = { setThemeScale: vi.fn() };
+    syncNativeThemeScale({ systemTextSize: true, textScale: 1.8, uiScale: 1.4 });
+    expect(window.Android.setThemeScale).toHaveBeenCalledWith(true, 1, 1);
+  });
+});
+
+describe('syncNativePageDarkMode', () => {
+  afterEach(() => {
+    delete window.Android;
+  });
+
+  it('网页没有原生桥时不抛错', () => {
+    expect(() => syncNativePageDarkMode({ pageFollowDarkMode: true, darkMode: true })).not.toThrow();
+  });
+
+  it('勾选网页跟随时把管理系统的夜间模式同步给 APK 网页', () => {
+    window.Android = { setPageDarkMode: vi.fn() };
+    syncNativePageDarkMode({ pageFollowDarkMode: true, darkMode: true });
+    expect(window.Android.setPageDarkMode).toHaveBeenCalledWith(true, true);
+  });
+
+  it('未勾选网页跟随时告诉原生不要强制日夜间', () => {
+    window.Android = { setPageDarkMode: vi.fn() };
+    syncNativePageDarkMode({ pageFollowDarkMode: false, darkMode: true });
+    expect(window.Android.setPageDarkMode).toHaveBeenCalledWith(false, true);
   });
 });

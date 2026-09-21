@@ -120,10 +120,42 @@ export function defaultThemeScale() {
     return { systemTextSize: true, textScale: 1, uiScale: 1 };
 }
 
+export function currentThemeScale(config = {}) {
+    if (config.systemTextSize) {
+        return { systemTextSize: true, textScale: 1, uiScale: 1 };
+    }
+    return {
+        systemTextSize: false,
+        textScale: clampThemeScale(config.textScale, 0.4, 3, 1),
+        uiScale: clampThemeScale(config.uiScale, 0.5, 2, 1)
+    };
+}
+
+function clampThemeScale(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+}
+
+export function syncNativeThemeScale(config) {
+    if (typeof window === 'undefined' || typeof window.Android?.setThemeScale !== 'function') return;
+    const scale = currentThemeScale(config);
+    try {
+        window.Android.setThemeScale(!!scale.systemTextSize, scale.textScale, scale.uiScale);
+    } catch (e) { /* 网页没有原生桥 */ }
+}
+
 export function syncNativeSystemBars(darkMode) {
     if (typeof window === 'undefined' || typeof window.Android?.setSystemBarsAppearance !== 'function') return;
     try {
         window.Android.setSystemBarsAppearance(!darkMode);
+    } catch (e) { /* 网页没有原生桥 */ }
+}
+
+export function syncNativePageDarkMode(config = {}) {
+    if (typeof window === 'undefined' || typeof window.Android?.setPageDarkMode !== 'function') return;
+    try {
+        window.Android.setPageDarkMode(!!config.pageFollowDarkMode, !!config.darkMode);
     } catch (e) { /* 网页没有原生桥 */ }
 }
 

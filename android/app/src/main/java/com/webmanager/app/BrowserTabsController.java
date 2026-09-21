@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.TypedValue;
 import android.view.DragEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -78,6 +79,7 @@ final class BrowserTabsController {
     private final TextView tabsCount;
     private final View restoreBtn;
     private final View browserBar;
+    private final View browserActionsRow;
     private final View pageBottomInset;
     private final LayoutInflater inflater;
 
@@ -153,6 +155,7 @@ final class BrowserTabsController {
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.browserBar = activity.findViewById(R.id.browserBar);
+        this.browserActionsRow = activity.findViewById(R.id.browserActionsRow);
         this.pageBottomInset = activity.findViewById(R.id.pageBottomInset);
         this.inflater = LayoutInflater.from(activity);
         if (homeBtn != null) homeBtn.setOnClickListener(v -> hideOverlay());
@@ -531,6 +534,57 @@ final class BrowserTabsController {
         appDarkMode = dark;
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
         if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
+    }
+
+    void applyThemeScale() {
+        for (Tab tab : tabs) {
+            if (tab.webView == null) continue;
+            activity.applyTextZoom(tab.webView);
+            registerViewportScript(tab);
+            injectPageZoom(tab.webView);
+            injectPageColorScheme(tab.webView);
+        }
+        applyChromeLayout();
+        renderStrips();
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+        if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
+    }
+
+    void applyPageDarkMode(boolean reload) {
+        Tab active = activeTab();
+        for (Tab tab : tabs) {
+            if (tab.webView == null) continue;
+            if (reload) {
+                recreatePageWebView(tab, active != null && tab.id.equals(active.id));
+                continue;
+            }
+            applyPageDarkSettings(tab.webView);
+            registerViewportScript(tab);
+            injectPageColorScheme(tab.webView);
+        }
+        if (reload) persistState();
+    }
+
+    private void recreatePageWebView(Tab tab, boolean visible) {
+        if (tab == null || tab.webView == null) return;
+        saveWebViewState(tab);
+        String url = tab.webView.getUrl();
+        if (url == null || url.trim().isEmpty()) url = tab.url;
+        destroyTab(tab);
+        tab.webView = activity.createPageWebView();
+        applyDesktopMode(tab);
+        attachWebView(tab);
+        if (!restoreWebViewState(tab) && url != null && !url.trim().isEmpty()
+                && !url.startsWith("about:") && !url.startsWith("javascript:")) {
+            tab.webView.loadUrl(url);
+        }
+        tab.webView.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible) {
+            tab.webView.onResume();
+            activity.refreshPageChrome(tab.webView);
+        } else {
+            tab.webView.onPause();
+        }
     }
 
     void applyChromeColors(int color) {
@@ -964,6 +1018,7 @@ final class BrowserTabsController {
         title.setText(name + (count > 0 ? " " + count : ""));
         boolean active = activeGroupId.equals(groupId);
         chip.setTag(groupId);
+        scaleGroupChip(chip, title);
         styleChip(chip, title, active);
         chip.setOnClickListener(v -> {
             activeGroupId = groupId;
@@ -986,13 +1041,14 @@ final class BrowserTabsController {
         title.setText(displayTitle(tab));
         boolean active = tab.id.equals(activeTabId);
         chip.setTag(tab.id);
-        styleChip(chip, title, active);
         ImageView pin = chip.findViewById(R.id.tabPin);
+        ImageButton close = chip.findViewById(R.id.tabClose);
+        scaleTabChip(chip, title, pin, close);
+        styleChip(chip, title, active);
         if (pin != null) {
             pin.setVisibility(tab.pinned ? View.VISIBLE : View.GONE);
             pin.setColorFilter(tab.pinned ? chromeAccent : chromeMuted, PorterDuff.Mode.SRC_IN);
         }
-        ImageButton close = chip.findViewById(R.id.tabClose);
         if (close != null) close.setColorFilter(chromeMuted, PorterDuff.Mode.SRC_IN);
         chip.setOnClickListener(v -> showTab(tab.id));
         chip.setOnLongClickListener(v -> {
@@ -1145,6 +1201,7 @@ final class BrowserTabsController {
         ImageButton toggle = header.findViewById(R.id.sheetGroupToggle);
         boolean collapsed = isGroupCollapsed(groupId);
         title.setText(name + " (" + items.size() + ")");
+        scaleSheetGroupHeader(header, title, closeGroup, rename, delete, handle, toggle);
         toggle.setImageResource(collapsed ? R.drawable.ic_browser_expand : R.drawable.ic_browser_collapse);
         toggle.setContentDescription(collapsed ? "展开分组" : "折叠分组");
         View.OnClickListener toggleClick = v -> toggleGroupCollapsed(groupId);
@@ -1178,6 +1235,7 @@ final class BrowserTabsController {
             TextView titleView = row.findViewById(R.id.sheetTitle);
             TextView urlView = row.findViewById(R.id.sheetUrl);
             CheckBox check = row.findViewById(R.id.sheetCheck);
+            scaleSheetTabRow(row, titleView, urlView);
             titleView.setText(displayTitle(tab));
             urlView.setText(tab.url);
             check.setVisibility(selectMode ? View.VISIBLE : View.GONE);
@@ -1269,7 +1327,7 @@ final class BrowserTabsController {
         input.setSingleLine(true);
         stylePromptInput(input);
         FrameLayout wrap = new FrameLayout(activity);
-        int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
+        int pad = dp(20);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(input);
         new AlertDialog.Builder(activity, alertTheme())
@@ -1294,7 +1352,7 @@ final class BrowserTabsController {
         input.setText(currentName);
         stylePromptInput(input);
         FrameLayout wrap = new FrameLayout(activity);
-        int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
+        int pad = dp(20);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(input);
         new AlertDialog.Builder(activity, alertTheme())
@@ -1376,14 +1434,218 @@ final class BrowserTabsController {
             if (showFab) {
                 ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) tabsFab.getLayoutParams();
                 if (params != null) {
-                    float density = activity.getResources().getDisplayMetrics().density;
-                    int margin = Math.round(10 * density);
+                    params.width = dp(36);
+                    params.height = dp(36);
+                    int margin = dp(10);
                     params.rightMargin = activity.pageSafeRight() + margin;
                     params.bottomMargin = activity.pageSafeBottom() + margin;
                     tabsFab.setLayoutParams(params);
                 }
             }
         }
+        applyChromeMetrics();
+    }
+
+    private void applyChromeMetrics() {
+        if (browserBar != null) {
+            browserBar.setPadding(
+                    browserBar.getPaddingLeft(),
+                    dp(6),
+                    browserBar.getPaddingRight(),
+                    browserBar.getPaddingBottom()
+            );
+        }
+        setPxSize(browserActionsRow, ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        if (browserActionsRow != null) {
+            browserActionsRow.setPadding(dp(4), 0, dp(8), 0);
+        }
+        scaleBarButton(desktopBtn);
+        scaleBarButton(pagesBtn);
+        scaleBarButton(categoryBtn);
+        scaleBarButton(homeBtn);
+        scaleBarButton(refreshBtn);
+        if (tabsBtn != null) {
+            if (tabsBtn.getParent() instanceof View) {
+                setPxSize((View) tabsBtn.getParent(), dp(44), dp(44));
+            }
+            setPxSize(tabsBtn, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            setPadding(tabsBtn, 8);
+        }
+        setPxSize(tabsCount, dp(18), dp(18));
+        scaleText(tabsCount, 10f);
+        setPadding(tabsFab, 8);
+        setPxSize(refreshSpinner, dp(48), dp(48));
+        setPxSize(restoreBtn, dp(36), dp(36));
+        setPadding(restoreBtn, 8);
+        if (groupScroll != null) groupScroll.setPadding(dp(8), 0, dp(8), 0);
+        if (tabOverflowScroll != null) tabOverflowScroll.setPadding(dp(8), 0, dp(8), dp(4));
+        if (tabStrip != null) tabStrip.setPadding(dp(4), 0, 0, 0);
+    }
+
+    private void scaleBarButton(View button) {
+        setPxSize(button, dp(36), dp(36));
+        setPadding(button, 6);
+    }
+
+    private void scaleGroupChip(View chip, TextView title) {
+        if (chip == null) return;
+        setPxSize(chip, ViewGroup.LayoutParams.WRAP_CONTENT, dp(32));
+        chip.setMinimumWidth(dp(64));
+        chip.setPadding(dp(12), 0, dp(12), 0);
+        ViewGroup.MarginLayoutParams params = marginParams(chip);
+        if (params != null) {
+            params.rightMargin = dp(8);
+            chip.setLayoutParams(params);
+        }
+        scaleText(title, 12f);
+        if (title != null) title.setMaxWidth(dp(120));
+    }
+
+    private void scaleTabChip(View chip, TextView title, View pin, View close) {
+        if (chip == null) return;
+        setPxSize(chip, ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
+        chip.setMinimumWidth(dp(88));
+        chip.setPadding(dp(12), 0, dp(4), 0);
+        ViewGroup.MarginLayoutParams params = marginParams(chip);
+        if (params != null) {
+            params.rightMargin = dp(8);
+            chip.setLayoutParams(params);
+        }
+        scaleText(title, 13f);
+        if (title != null) title.setMaxWidth(dp(140));
+        setPxSize(pin, dp(14), dp(14));
+        ViewGroup.MarginLayoutParams pinParams = marginParams(pin);
+        if (pinParams != null) {
+            pinParams.rightMargin = dp(4);
+            pin.setLayoutParams(pinParams);
+        }
+        setPxSize(close, dp(28), dp(28));
+        setPadding(close, 4);
+    }
+
+    private void scaleSheetTabRow(View row, TextView title, TextView url) {
+        View inner = row == null ? null : row.findViewById(R.id.sheetTabRow);
+        if (inner != null) {
+            inner.setMinimumHeight(dp(52));
+            inner.setPadding(dp(2), 0, dp(2), 0);
+        }
+        scaleText(title, 15f);
+        scaleText(url, 12f);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetTabHandle), 32, 4);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetCopy), 28, 4);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetPin), 28, 4);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetMove), 28, 4);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetClose), 28, 4);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.sheetDelete), 28, 4);
+    }
+
+    private void scaleSheetGroupHeader(View header, TextView title, TextView close, TextView rename, TextView delete, View handle, View toggle) {
+        if (header != null) {
+            header.setMinimumHeight(dp(44));
+            header.setPadding(0, dp(8), 0, dp(4));
+        }
+        scaleText(title, 13f);
+        scaleText(close, 13f);
+        scaleText(rename, 13f);
+        scaleText(delete, 13f);
+        setPadding(close, 8);
+        setPadding(rename, 8);
+        setPadding(delete, 8);
+        scaleIconButton(handle, 32, 4);
+        scaleIconButton(toggle, 32, 4);
+    }
+
+    private void scaleManageGroupRow(View row, TextView title, TextView close, TextView open, TextView rename, TextView delete) {
+        if (row != null) {
+            row.setMinimumHeight(dp(52));
+            row.setPadding(dp(4), 0, dp(4), 0);
+        }
+        scaleText(title, 15f);
+        scaleText(close, 14f);
+        scaleText(open, 14f);
+        scaleText(rename, 14f);
+        scaleText(delete, 14f);
+        setPadding(close, 8);
+        setPadding(open, 8);
+        setPadding(rename, 8);
+        setPadding(delete, 8);
+        scaleIconButton(row == null ? null : row.findViewById(R.id.manageGroupHandle), 36, 6);
+    }
+
+    private void applySheetMetrics(Dialog dialog) {
+        if (dialog == null) return;
+        scaleText(asText(dialog, R.id.sheetHeading), 18f);
+        scaleText(asText(dialog, R.id.sheetManageGroups), 14f);
+        scaleText(asText(dialog, R.id.sheetSelectCount), 13f);
+        scaleText(asText(dialog, R.id.sheetSelectMode), 14f);
+        scaleText(asText(dialog, R.id.sheetSortMode), 14f);
+        scaleText(asText(dialog, R.id.sheetSortCancel), 14f);
+        scaleText(asText(dialog, R.id.sheetCollapseAll), 14f);
+        scaleText(asText(dialog, R.id.sheetSelectAll), 14f);
+        scaleText(asText(dialog, R.id.sheetPinSelected), 14f);
+        scaleText(asText(dialog, R.id.sheetMoveSelected), 14f);
+        scaleText(asText(dialog, R.id.sheetCloseSelected), 14f);
+        scaleText(asText(dialog, R.id.sheetDone), 15f);
+        scaleText(asText(dialog, R.id.manageGroupHeading), 18f);
+        scaleText(asText(dialog, R.id.manageGroupHint), 13f);
+        scaleText(asText(dialog, R.id.manageGroupDone), 15f);
+        EditText search = dialog.findViewById(R.id.sheetSearch);
+        if (search != null) {
+            setPxSize(search, ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
+            search.setPadding(dp(12), 0, dp(40), 0);
+            scaleText(search, 14f);
+        }
+        scaleIconButton(dialog.findViewById(R.id.sheetSearchClear), 36, 8);
+        setPxSize(dialog.findViewById(R.id.sheetDone), ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+        setPxSize(dialog.findViewById(R.id.manageGroupDone), ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+    }
+
+    private TextView asText(Dialog dialog, int id) {
+        View view = dialog.findViewById(id);
+        return view instanceof TextView ? (TextView) view : null;
+    }
+
+    private void scaleIconButton(View view, int sizeDp, int padDp) {
+        setPxSize(view, dp(sizeDp), dp(sizeDp));
+        setPadding(view, padDp);
+    }
+
+    private void scaleText(TextView view, float sp) {
+        if (view == null) return;
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp * activity.pageTextScale());
+    }
+
+    private void setPxSize(View view, int width, int height) {
+        if (view == null) return;
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (params == null) {
+            view.setLayoutParams(new ViewGroup.LayoutParams(width, height));
+            return;
+        }
+        params.width = width;
+        params.height = height;
+        view.setLayoutParams(params);
+    }
+
+    private void setPadding(View view, int allDp) {
+        if (view == null) return;
+        int pad = dp(allDp);
+        view.setPadding(pad, pad, pad, pad);
+    }
+
+    private ViewGroup.MarginLayoutParams marginParams(View view) {
+        if (view == null) return null;
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        return params instanceof ViewGroup.MarginLayoutParams ? (ViewGroup.MarginLayoutParams) params : null;
+    }
+
+    private int dp(int value) {
+        return Math.round(dpf(value));
+    }
+
+    private float dpf(float value) {
+        float density = activity.getResources().getDisplayMetrics().density;
+        return value * density * activity.pageUiScale();
     }
 
     private void toggleDesktopActive() {
@@ -1408,7 +1670,8 @@ final class BrowserTabsController {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(tab.desktop);
         settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
-        settings.setTextZoom(100);
+        activity.applyTextZoom(settings);
+        applyPageDarkSettings(tab.webView);
         if (tab.desktop) {
             settings.setUserAgentString(DESKTOP_UA);
         } else {
@@ -1461,7 +1724,25 @@ final class BrowserTabsController {
         String url = view.getUrl();
         if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
         view.evaluateJavascript(viewportScript(tab.desktop), null);
+        injectPageZoom(view);
+        injectPageColorScheme(view);
         injectPageSafeArea(view);
+    }
+
+    void injectPageZoom(WebView view) {
+        if (view == null) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        view.evaluateJavascript(pageZoomScript(), null);
+    }
+
+    void injectPageColorScheme(WebView view) {
+        if (view == null) return;
+        String url = view.getUrl();
+        if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
+        String script = pageColorSchemeScript();
+        if (script.isEmpty()) return;
+        view.evaluateJavascript(script, null);
     }
 
     void injectPageSafeArea() {
@@ -1474,10 +1755,10 @@ final class BrowserTabsController {
         String url = view.getUrl();
         if (url != null && (url.startsWith("about:") || url.startsWith("javascript:"))) return;
         boolean barShowing = chromeVisible && extrasVisible && activity.isPageOpen();
-        float top = cssPx(activity.pageSafeTop());
-        float right = cssPx(activity.pageSafeRight());
-        float left = cssPx(activity.pageSafeLeft());
-        float bottom = barShowing ? 0f : cssPx(activity.pageSafeBottom());
+        float top = cssPx(activity.pageSafeTop()) / Math.max(0.01f, activity.pageUiScale());
+        float right = cssPx(activity.pageSafeRight()) / Math.max(0.01f, activity.pageUiScale());
+        float left = cssPx(activity.pageSafeLeft()) / Math.max(0.01f, activity.pageUiScale());
+        float bottom = barShowing ? 0f : cssPx(activity.pageSafeBottom()) / Math.max(0.01f, activity.pageUiScale());
         String script = "(function(){var r=document.documentElement;if(!r||!r.style)return;"
                 + "r.style.setProperty('--safe-top','" + top + "px');"
                 + "r.style.setProperty('--safe-right','" + right + "px');"
@@ -1501,6 +1782,59 @@ final class BrowserTabsController {
         view.evaluateJavascript(script, null);
     }
 
+    private String pageZoomScript() {
+        float uiScale = activity.pageUiScale();
+        return "(function(){var r=document.documentElement;if(!r||!r.style)return;"
+                + "r.style.zoom='" + uiScale + "';"
+                + "})();";
+    }
+
+    private void applyPageDarkSettings(WebView view) {
+        if (view == null) return;
+        WebSettings settings = view.getSettings();
+        boolean follow = activity.pageFollowDarkMode();
+        boolean dark = follow && activity.pageDarkMode();
+        view.setBackgroundColor(dark ? Color.parseColor("#121212") : Color.WHITE);
+        if (settings == null) return;
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, dark);
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                int mode = !follow
+                        ? WebSettingsCompat.FORCE_DARK_AUTO
+                        : (dark ? WebSettingsCompat.FORCE_DARK_ON : WebSettingsCompat.FORCE_DARK_OFF);
+                WebSettingsCompat.setForceDark(settings, mode);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private String pageColorSchemeScript() {
+        if (!activity.pageFollowDarkMode()) return "";
+        boolean dark = activity.pageDarkMode();
+        String scheme = dark ? "dark" : "light";
+        return "(function(){var dark=" + (dark ? "true" : "false") + ";var scheme='" + scheme + "';"
+                + "var r=document.documentElement;if(r&&r.style){r.style.colorScheme=scheme;"
+                + "r.style.setProperty('color-scheme',scheme);r.setAttribute('data-wm-color-scheme',scheme);}"
+                + "function applyMeta(){var h=document.head||document.documentElement;if(!h)return;"
+                + "var meta=document.querySelector('meta[name=color-scheme]');"
+                + "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','color-scheme');h.appendChild(meta);}"
+                + "meta.setAttribute('content',scheme);}"
+                + "applyMeta();"
+                + "try{var native=window.matchMedia.bind(window);"
+                + "window.matchMedia=function(query){var q=String(query||'');"
+                + "if(q.indexOf('prefers-color-scheme')<0)return native(query);"
+                + "var wantDark=q.indexOf('dark')>=0;var wantLight=q.indexOf('light')>=0;"
+                + "var matches=wantDark?dark:(wantLight?!dark:native(query).matches);"
+                + "return {matches:matches,media:query,onchange:null,addListener:function(){},removeListener:function(){},"
+                + "addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return false;}};};"
+                + "}catch(e){}})();";
+    }
+
     private float cssPx(int px) {
         float density = activity.getResources().getDisplayMetrics().density;
         if (density <= 0f) return px;
@@ -1514,7 +1848,7 @@ final class BrowserTabsController {
             removeViewportScript(tab);
             tab.desktopScriptHandle = WebViewCompat.addDocumentStartJavaScript(
                     tab.webView,
-                    viewportScript(tab.desktop),
+                    viewportScript(tab.desktop) + pageZoomScript() + pageColorSchemeScript(),
                     Collections.singleton("*")
             );
         } catch (Throwable ignored) {
@@ -1620,6 +1954,7 @@ final class BrowserTabsController {
             TextView openGroup = row.findViewById(R.id.manageGroupOpen);
             TextView rename = row.findViewById(R.id.manageGroupRename);
             TextView delete = row.findViewById(R.id.manageGroupDelete);
+            scaleManageGroupRow(row, title, closeGroup, openGroup, rename, delete);
             if (closeGroup != null) {
                 closeGroup.setTextColor(sheetAccent());
                 closeGroup.setVisibility(countInGroup(group.id) > 0 ? View.VISIBLE : View.GONE);
@@ -2333,11 +2668,11 @@ final class BrowserTabsController {
     private GradientDrawable chipBackground(boolean active) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
-        float radius = 16f * activity.getResources().getDisplayMetrics().density;
+        float radius = dp(16);
         drawable.setCornerRadius(radius);
         drawable.setColor(active ? chromeChipActive : chromeChip);
         if (active) {
-            int stroke = Math.max(1, Math.round(activity.getResources().getDisplayMetrics().density));
+            int stroke = Math.max(1, dp(1));
             drawable.setStroke(stroke, chromeAccent);
         }
         return drawable;
@@ -2442,6 +2777,7 @@ final class BrowserTabsController {
             search.setBackground(roundedSurface(sheetInput(), 10f));
         }
         tint(dialog.findViewById(R.id.sheetSearchClear), sheetMuted());
+        applySheetMetrics(dialog);
         TextView manage = dialog.findViewById(R.id.sheetManageGroups);
         if (manage != null) {
             android.graphics.drawable.Drawable[] icons = manage.getCompoundDrawablesRelative();
@@ -2470,7 +2806,7 @@ final class BrowserTabsController {
     private GradientDrawable roundedSurface(int color, float radiusDp) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setCornerRadius(radiusDp * activity.getResources().getDisplayMetrics().density);
+        drawable.setCornerRadius(dpf(radiusDp));
         drawable.setColor(color);
         return drawable;
     }
