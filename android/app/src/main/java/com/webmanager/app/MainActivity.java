@@ -1,10 +1,14 @@
 package com.webmanager.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.DownloadManager;
 import android.content.ClipData;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -18,6 +22,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -27,6 +32,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -57,6 +63,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -109,6 +117,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int SAMPLE_STRIP_PX = 8;
     private static final long SAMPLE_THROTTLE_MS = 180;
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int DOWNLOAD_PERMISSION_REQUEST = 1002;
+    private Runnable pendingDownload;
     private static final String THEME_PREFS = "theme_scale";
     private static final String PREF_FOLLOW_SYSTEM = "followSystem";
     private static final String PREF_FOLLOW_PAGE = "followPage";
@@ -217,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         appWebView.setWebChromeClient(new AppChromeClient());
-        appWebView.setDownloadListener(downloadListener());
+        appWebView.setDownloadListener(downloadListener(appWebView));
         registerAppScaleScript();
         appWebView.loadUrl("file:///android_asset/index.html");
     }
@@ -239,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
         webView.setOnScrollChangeListener((v, l, t, oldl, oldt) -> refreshPageChrome((WebView) v, false));
         webView.setWebViewClient(new PageWebViewClient());
         webView.setWebChromeClient(new PageChromeClient());
-        webView.setDownloadListener(downloadListener());
+        webView.setDownloadListener(downloadListener(webView));
         applyTextZoom(webView);
         return webView;
     }
@@ -1093,6 +1103,11 @@ public class MainActivity extends AppCompatActivity {
         public void saveLogin(String json) {
             if (passwordStore != null) passwordStore.capture(json);
         }
+
+        @JavascriptInterface
+        public void saveBlobDownload(String dataUrl, String mime, String filename) {
+            saveDataUrlDownload(dataUrl, mime, filename);
+        }
     }
 
     private float cssPx(int px) {
@@ -1210,14 +1225,196 @@ public class MainActivity extends AppCompatActivity {
         pendingWindowWebView = null;
     }
 
-    private DownloadListener downloadListener() {
-        return (url, userAgent, contentDisposition, mimeType, contentLength) -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-            } catch (Exception ignored) {
-                Toast.makeText(MainActivity.this, "无法打开下载链接", Toast.LENGTH_SHORT).show();
+    private DownloadListener downloadListener(WebView webView) {
+        return (url, userAgent, contentDisposition, mimeType, contentLength) ->
+                runOnUiThread(() -> enqueueDownload(webView, url, userAgent, contentDisposition, mimeType));
+    }
+
+    private void enqueueDownload(WebView webView, String url, String userAgent, String contentDisposition, String mimeType) {
+        if (url == null || url.trim().isEmpty()) {
+            Toast.makeText(this, "无法下载该文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String target = url.trim();
+        if (target.startsWith("blob:")) {
+            downloadBlob(webView, target, contentDisposition, mimeType);
+            return;
+        }
+        if (target.startsWith("data:")) {
+            saveDataUrlDownload(target, mimeType, URLUtil.guessFileName(target, contentDisposition, mimeType));
+            return;
+        }
+        if (target.startsWith("http://") || target.startsWith("https://")) {
+            String referer = webView == null ? target : webView.getUrl();
+            ensureStorageThen(() -> startHttpDownload(target, userAgent, contentDisposition, mimeType, referer));
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(target));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ignored) {
+            Toast.makeText(this, "无法下载该文件", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void ensureStorageThen(Runnable action) {
+        if (action == null) return;
+        if (Build.VERSION.SDK_INT >= 29 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            action.run();
+            return;
+        }
+        pendingDownload = action;
+        requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, DOWNLOAD_PERMISSION_REQUEST);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != DOWNLOAD_PERMISSION_REQUEST) return;
+        Runnable next = pendingDownload;
+        pendingDownload = null;
+        if (next != null && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            next.run();
+        } else {
+            Toast.makeText(this, "没有存储权限，无法保存下载文件", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void startHttpDownload(String url, String userAgent, String contentDisposition, String mimeType, String referer) {
+        String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
+        try {
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+            if (mimeType != null && !mimeType.trim().isEmpty()) request.setMimeType(mimeType);
+            if (userAgent != null && !userAgent.trim().isEmpty()) request.addRequestHeader("User-Agent", userAgent);
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) request.addRequestHeader("Cookie", cookie);
+            if (referer != null && !referer.trim().isEmpty()) request.addRequestHeader("Referer", referer);
+            request.setTitle(name);
+            request.setDescription("网页下载");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) throw new IllegalStateException("系统下载服务不可用");
+            manager.enqueue(request);
+            Toast.makeText(this, "开始下载 " + name, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void downloadBlob(WebView webView, String url, String contentDisposition, String mimeType) {
+        if (webView == null) {
+            Toast.makeText(this, "无法下载该文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
+        String mime = mimeType == null ? "" : mimeType;
+        String bridge = webView == appWebView ? "Android" : "WebManagerChrome";
+        String script = "(function(){try{fetch(" + JSONObject.quote(url) + ").then(function(r){return r.blob();}).then(function(b){"
+                + "var reader=new FileReader();reader.onload=function(){try{" + bridge + ".saveBlobDownload(String(reader.result||''),"
+                + JSONObject.quote(mime) + "," + JSONObject.quote(name) + ");}catch(e){}};"
+                + "reader.readAsDataURL(b);}).catch(function(){try{" + bridge + ".saveBlobDownload('','','');}catch(e){}});}catch(e){"
+                + "try{" + bridge + ".saveBlobDownload('','','');}catch(x){}}})();";
+        webView.evaluateJavascript(script, null);
+    }
+
+    void saveDataUrlDownload(String dataUrl, String mime, String filename) {
+        runOnUiThread(() -> {
+            if (dataUrl == null || dataUrl.trim().isEmpty()) {
+                Toast.makeText(this, "下载失败", Toast.LENGTH_SHORT).show();
+                return;
             }
-        };
+            try {
+                byte[] bytes = decodeDataUrl(dataUrl);
+                String resolvedMime = mime;
+                if (resolvedMime == null || resolvedMime.trim().isEmpty()) resolvedMime = dataUrlMime(dataUrl);
+                String name = (filename == null || filename.trim().isEmpty())
+                        ? URLUtil.guessFileName("https://download.local/file", null, resolvedMime)
+                        : filename;
+                saveDownloadBytes(bytes, resolvedMime, name);
+            } catch (Exception e) {
+                Toast.makeText(this, "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private byte[] decodeDataUrl(String dataUrl) {
+        String raw = dataUrl.trim();
+        int comma = raw.indexOf(',');
+        if (raw.startsWith("data:") && comma > 0) {
+            String meta = raw.substring(5, comma);
+            String payload = raw.substring(comma + 1);
+            if (meta.toLowerCase().contains(";base64")) {
+                return Base64.decode(payload, Base64.DEFAULT);
+            }
+            return Uri.decode(payload).getBytes(StandardCharsets.UTF_8);
+        }
+        return Base64.decode(raw, Base64.DEFAULT);
+    }
+
+    private String dataUrlMime(String dataUrl) {
+        if (dataUrl == null || !dataUrl.startsWith("data:")) return "application/octet-stream";
+        int comma = dataUrl.indexOf(',');
+        String meta = comma > 0 ? dataUrl.substring(5, comma) : "";
+        int semi = meta.indexOf(';');
+        String mime = (semi >= 0 ? meta.substring(0, semi) : meta).trim();
+        return mime.isEmpty() ? "application/octet-stream" : mime;
+    }
+
+    void saveDownloadBytes(byte[] bytes, String mime, String filename) {
+        final byte[] payload = bytes == null ? new byte[0] : bytes;
+        runOnUiThread(() -> {
+            try {
+                String safeName = (filename == null || filename.trim().isEmpty())
+                        ? "download.bin"
+                        : filename.replaceAll("[\\\\/:*?\"<>|]", "_");
+                String safeMime = (mime == null || mime.trim().isEmpty()) ? "application/octet-stream" : mime;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, safeMime);
+                    values.put(MediaStore.Downloads.IS_PENDING, 1);
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new IllegalStateException("无法创建下载文件");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new IllegalStateException("无法写入下载文件");
+                        out.write(payload);
+                    }
+                    values.clear();
+                    values.put(MediaStore.Downloads.IS_PENDING, 0);
+                    getContentResolver().update(uri, values, null, null);
+                    Toast.makeText(this, "已保存到下载目录: " + safeName, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (dir == null) dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (dir != null && !dir.exists()) dir.mkdirs();
+                if (dir == null) dir = getCacheDir();
+                File out = uniqueDownloadFile(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(out)) {
+                    fos.write(payload);
+                }
+                Toast.makeText(this, "已保存到下载目录: " + out.getName(), Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private File uniqueDownloadFile(File dir, String filename) {
+        File out = new File(dir, filename);
+        if (!out.exists()) return out;
+        int dot = filename.lastIndexOf('.');
+        String stem = dot > 0 ? filename.substring(0, dot) : filename;
+        String ext = dot > 0 ? filename.substring(dot) : "";
+        for (int i = 1; i < 1000; i++) {
+            File next = new File(dir, stem + "-" + i + ext);
+            if (!next.exists()) return next;
+        }
+        return new File(dir, stem + "-" + System.currentTimeMillis() + ext);
     }
 
     void attachHiddenWebView(WebView hidden) {
@@ -1507,16 +1704,20 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
-            if (filePathCallback != null) {
-                filePathCallback.onReceiveValue(null);
-                filePathCallback = null;
-            }
-            filePathCallback = callback;
-            if (launchFileChooser(fileChooserParams)) return true;
-            filePathCallback = null;
-            callback.onReceiveValue(null);
-            return false;
+            return handleShowFileChooser(callback, fileChooserParams);
         }
+    }
+
+    private boolean handleShowFileChooser(ValueCallback<Uri[]> callback, WebChromeClient.FileChooserParams fileChooserParams) {
+        if (filePathCallback != null) {
+            filePathCallback.onReceiveValue(null);
+            filePathCallback = null;
+        }
+        filePathCallback = callback;
+        if (launchFileChooser(fileChooserParams)) return true;
+        filePathCallback = null;
+        callback.onReceiveValue(null);
+        return false;
     }
 
     private class PageWebViewClient extends WebViewClient {
@@ -1565,6 +1766,11 @@ public class MainActivity extends AppCompatActivity {
     private class PageChromeClient extends JsChromeClient {
         PageChromeClient() {
             super(MainActivity.this, true);
+        }
+
+        @Override
+        public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
+            return handleShowFileChooser(callback, fileChooserParams);
         }
 
         @Override

@@ -62,6 +62,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void saveBlobDownload(String dataUrl, String mime, String filename) {
+        activity.saveDataUrlDownload(dataUrl, mime, filename);
+    }
+
+    @JavascriptInterface
     public boolean beginSaveFile(String mime, String filename) {
         synchronized (exportLock) {
             pendingExport = new ByteArrayOutputStream();
