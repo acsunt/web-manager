@@ -125,6 +125,15 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="8dp">
 
+                <ImageButton
+                    android:id="@+id/downloadBtn"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="下载管理"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_browser_download" />
+
                 <HorizontalScrollView
                     android:id="@+id/tabScroll"
                     android:layout_width="0dp"

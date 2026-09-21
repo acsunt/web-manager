@@ -73,6 +73,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -90,12 +91,14 @@ public class MainActivity extends AppCompatActivity {
     private PageInfoBridge bridge;
     private SavedPasswordStore passwordStore;
     private BrowserTabsController tabs;
+    private DownloadManagerController downloads;
     private String passwordAutofillScript;
     private String pageDownloadScript;
     private final Object pageDownloadLock = new Object();
     private ByteArrayOutputStream pendingPageDownload;
     private String pendingPageDownloadMime;
     private String pendingPageDownloadName;
+    private String pendingPageDownloadId;
     private ValueCallback<Uri[]> filePathCallback;
     private WebView pendingWindowWebView;
     private String pendingImportJson;
@@ -186,6 +189,7 @@ public class MainActivity extends AppCompatActivity {
         restoreTabsBtn = findViewById(R.id.restoreTabsBtn);
         applyEdgeToEdge();
         passwordStore = new SavedPasswordStore(this);
+        downloads = new DownloadManagerController(this);
         bridge = new PageInfoBridge(this);
         tabs = new BrowserTabsController(this);
         tabs.restoreState();
@@ -545,12 +549,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     boolean beginPageDownload(String mime, String filename) {
+        final String id;
         synchronized (pageDownloadLock) {
+            if (pendingPageDownloadId != null && downloads != null) {
+                downloads.cancelLocal(pendingPageDownloadId);
+            }
             pendingPageDownload = new ByteArrayOutputStream();
             pendingPageDownloadMime = mime;
             pendingPageDownloadName = filename;
-            return true;
+            pendingPageDownloadId = UUID.randomUUID().toString();
+            id = pendingPageDownloadId;
         }
+        if (downloads != null) downloads.beginLocal(id, mime, filename);
+        return true;
     }
 
     boolean appendPageDownload(String base64Chunk) {
@@ -559,11 +570,17 @@ public class MainActivity extends AppCompatActivity {
             try {
                 byte[] bytes = Base64.decode(base64Chunk == null ? "" : base64Chunk, Base64.DEFAULT);
                 pendingPageDownload.write(bytes);
+                if (downloads != null && pendingPageDownloadId != null) {
+                    downloads.setLocalProgress(pendingPageDownloadId, pendingPageDownload.size());
+                }
                 return true;
             } catch (Exception e) {
+                String id = pendingPageDownloadId;
                 pendingPageDownload = null;
                 pendingPageDownloadMime = null;
                 pendingPageDownloadName = null;
+                pendingPageDownloadId = null;
+                if (downloads != null && id != null) downloads.failLocal(id, "下载失败");
                 return false;
             }
         }
@@ -573,25 +590,44 @@ public class MainActivity extends AppCompatActivity {
         final byte[] bytes;
         final String mime;
         final String filename;
+        final String id;
         synchronized (pageDownloadLock) {
             if (pendingPageDownload == null) return false;
             bytes = pendingPageDownload.toByteArray();
             mime = pendingPageDownloadMime;
             filename = pendingPageDownloadName;
+            id = pendingPageDownloadId;
             pendingPageDownload = null;
             pendingPageDownloadMime = null;
             pendingPageDownloadName = null;
+            pendingPageDownloadId = null;
         }
-        saveDownloadBytes(bytes, mime, filename);
+        saveDownloadBytes(bytes, mime, filename, id);
         return true;
     }
 
     void cancelPageDownload() {
+        final String id;
         synchronized (pageDownloadLock) {
+            id = pendingPageDownloadId;
             pendingPageDownload = null;
             pendingPageDownloadMime = null;
             pendingPageDownloadName = null;
+            pendingPageDownloadId = null;
         }
+        if (downloads != null && id != null) downloads.cancelLocal(id);
+    }
+
+    void showDownloadManager() {
+        if (downloads != null) downloads.show();
+    }
+
+    boolean handleDownloadBack() {
+        return downloads != null && downloads.handleBack();
+    }
+
+    void setDownloadManagerDarkMode(boolean dark) {
+        if (downloads != null) downloads.setAppDarkMode(dark);
     }
 
     void clearAppCache() {
@@ -1397,7 +1433,8 @@ public class MainActivity extends AppCompatActivity {
             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             if (manager == null) throw new IllegalStateException("系统下载服务不可用");
-            manager.enqueue(request);
+            long id = manager.enqueue(request);
+            if (downloads != null) downloads.trackSystemDownload(id, name, mimeType);
             Toast.makeText(this, "开始下载 " + name, Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Toast.makeText(this, "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -1446,7 +1483,7 @@ public class MainActivity extends AppCompatActivity {
                                 ? URLUtil.guessFileName("https://download.local/file", null, resolvedMime)
                                 : filename,
                         resolvedMime);
-                saveDownloadBytes(bytes, resolvedMime, name);
+                saveDownloadBytes(bytes, resolvedMime, name, null);
             } catch (Exception e) {
                 Toast.makeText(this, "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
@@ -1477,6 +1514,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void saveDownloadBytes(byte[] bytes, String mime, String filename) {
+        saveDownloadBytes(bytes, mime, filename, null);
+    }
+
+    void saveDownloadBytes(byte[] bytes, String mime, String filename, String recordId) {
         final byte[] payload = bytes == null ? new byte[0] : bytes;
         runOnUiThread(() -> {
             try {
@@ -1485,6 +1526,9 @@ public class MainActivity extends AppCompatActivity {
                                 ? "download.bin"
                                 : filename.replaceAll("[\\\\/:*?\"<>|]", "_"),
                         mime);
+                String savedName = safeName;
+                String savedUri = "";
+                String savedPath = "";
                 if (Build.VERSION.SDK_INT >= 29) {
                     Uri uri = insertDownloadUri(safeName, mime);
                     if (uri == null) throw new IllegalStateException("无法创建下载文件");
@@ -1495,7 +1539,11 @@ public class MainActivity extends AppCompatActivity {
                     ContentValues done = new ContentValues();
                     done.put(MediaStore.Downloads.IS_PENDING, 0);
                     getContentResolver().update(uri, done, null, null);
-                    Toast.makeText(this, "已保存到下载目录: " + safeName, Toast.LENGTH_SHORT).show();
+                    String queried = queryDisplayName(uri);
+                    if (queried != null && !queried.trim().isEmpty()) savedName = queried;
+                    savedUri = uri.toString();
+                    recordDownload(recordId, savedName, mime, savedUri, savedPath, payload.length);
+                    Toast.makeText(this, "已保存到下载目录: " + savedName, Toast.LENGTH_SHORT).show();
                     return;
                 }
                 File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
@@ -1506,11 +1554,37 @@ public class MainActivity extends AppCompatActivity {
                 try (FileOutputStream fos = new FileOutputStream(out)) {
                     fos.write(payload);
                 }
-                Toast.makeText(this, "已保存到下载目录: " + out.getName(), Toast.LENGTH_SHORT).show();
+                savedName = out.getName();
+                savedPath = out.getAbsolutePath();
+                savedUri = Uri.fromFile(out).toString();
+                recordDownload(recordId, savedName, mime, savedUri, savedPath, payload.length);
+                Toast.makeText(this, "已保存到下载目录: " + savedName, Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
+                if (downloads != null && recordId != null) downloads.failLocal(recordId, e.getMessage());
                 Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void recordDownload(String recordId, String name, String mime, String uri, String path, long bytes) {
+        if (downloads == null) return;
+        if (recordId != null && !recordId.trim().isEmpty()) {
+            downloads.finishLocal(recordId, name, mime, uri, path, bytes);
+            return;
+        }
+        downloads.addCompleted(name, mime, uri, path, bytes);
+    }
+
+    private String queryDisplayName(Uri uri) {
+        if (uri == null) return null;
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) return cursor.getString(index);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private Uri insertDownloadUri(String filename, String mime) {
@@ -1755,6 +1829,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (downloads != null) downloads.refresh();
         if (tabs != null && isPageOpen()) {
             tabs.resumeActive();
             if (chromeWebView != null) refreshPageChrome(chromeWebView, true);
@@ -1767,6 +1842,7 @@ public class MainActivity extends AppCompatActivity {
         if (bridge != null) bridge.cancelAll();
         destroyPendingWindow();
         cancelPageChromeSample();
+        if (downloads != null) downloads.destroy();
         if (tabs != null) tabs.destroyAll();
         super.onDestroy();
     }

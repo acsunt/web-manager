@@ -70,6 +70,7 @@ final class BrowserTabsController {
     private final ImageButton categoryBtn;
     private final ImageButton homeBtn;
     private final ImageButton refreshBtn;
+    private final ImageButton downloadBtn;
     private final ImageButton desktopBtn;
     private final ImageButton pagesBtn;
     private final View tabsBtn;
@@ -147,6 +148,7 @@ final class BrowserTabsController {
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.homeBtn = activity.findViewById(R.id.homeBtn);
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
+        this.downloadBtn = activity.findViewById(R.id.downloadBtn);
         this.desktopBtn = activity.findViewById(R.id.desktopBtn);
         this.pagesBtn = activity.findViewById(R.id.pagesBtn);
         this.tabsBtn = activity.findViewById(R.id.tabsBtn);
@@ -163,6 +165,7 @@ final class BrowserTabsController {
         bindTabsOpener(tabsBtn);
         bindTabsOpener(tabsFab);
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
+        if (downloadBtn != null) downloadBtn.setOnClickListener(v -> activity.showDownloadManager());
         if (desktopBtn != null) desktopBtn.setOnClickListener(v -> toggleDesktopActive());
         if (pagesBtn != null) pagesBtn.setOnClickListener(v -> togglePagesVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
@@ -241,6 +244,7 @@ final class BrowserTabsController {
     }
 
     boolean handleBack() {
+        if (activity.handleDownloadBack()) return true;
         Tab tab = activeTab();
         if (tab != null && tab.webView != null && tab.webView.canGoBack()) {
             tab.webView.goBack();
@@ -532,6 +536,7 @@ final class BrowserTabsController {
     void setAppDarkMode(boolean dark) {
         if (appDarkMode == dark) return;
         appDarkMode = dark;
+        activity.setDownloadManagerDarkMode(dark);
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
         if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
     }
@@ -1430,6 +1435,7 @@ final class BrowserTabsController {
         if (categoryBtn != null) categoryBtn.setVisibility(extras);
         if (homeBtn != null) homeBtn.setVisibility(extras);
         if (refreshBtn != null) refreshBtn.setVisibility(extras);
+        if (downloadBtn != null) downloadBtn.setVisibility(extras);
         if (desktopBtn != null) desktopBtn.setVisibility(extras);
         if (pagesBtn != null) pagesBtn.setVisibility(extras);
         if (tabScroll != null) tabScroll.setVisibility(extras);
@@ -1474,6 +1480,7 @@ final class BrowserTabsController {
         if (browserActionsRow != null) {
             browserActionsRow.setPadding(dp(4), 0, dp(8), 0);
         }
+        scaleBarButton(downloadBtn);
         scaleBarButton(desktopBtn);
         scaleBarButton(pagesBtn);
         scaleBarButton(categoryBtn);
@@ -2805,6 +2812,7 @@ final class BrowserTabsController {
         tint(categoryBtn, chromeText);
         tint(homeBtn, chromeText);
         tint(refreshBtn, chromeText);
+        tint(downloadBtn, chromeText);
         tint(desktopBtn, chromeText);
         tint(pagesBtn, chromeText);
         tint(tabsBtn, chromeMuted);
