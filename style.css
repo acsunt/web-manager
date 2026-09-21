@@ -214,7 +214,7 @@ body.theme-neumorphism .cat-btn:hover { background: var(--card-bg, var(--bg-colo
 .cat-count { font-size: calc(12px * var(--text-scale, 1)); color: var(--text-secondary); margin-left: 6px; font-weight: normal; background: rgba(0,0,0,0.05); padding: 1px 6px; border-radius: 10px; display: none; }
 body.show-counts .cat-count { display: inline-block; }
 
-.pages-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(10px * var(--ui-scale, 1)); padding: calc(5px * var(--ui-scale, 1)) 0; min-height: 10px; transition: 0.3s; }
+.pages-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(10px * var(--ui-scale, 1)); padding: calc(5px * var(--ui-scale, 1)) 0; min-height: 10px; transition: 0.3s; align-items: stretch; }
 body:not(.icon-mode).col-mode-auto .pages-container { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 
 /* ======== 列表模式的列数控制 ======== */
@@ -241,24 +241,24 @@ body.icon-mode.col-mode-8 .pages-container { grid-template-columns: repeat(8, 1f
 body.icon-mode .page-card { align-items: center; text-align: center; padding: 10px 5px; box-shadow: none; background: transparent; border: none; }
 body.theme-neumorphism.icon-mode .page-card, body.theme-glass.icon-mode .page-card { background: transparent; box-shadow: none; border: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 body.icon-mode .page-card:hover { transform: translateY(-3px); }
-body.icon-mode .page-card-header { flex-direction: column; justify-content: center; width: 100%; position: relative; align-items: center; }
+body.icon-mode .page-card-header { flex-direction: column; justify-content: flex-start; width: 100%; position: relative; align-items: center; }
 
 .page-icon-wrapper { display: none; width: calc(56px * var(--ui-scale, 1)); height: calc(56px * var(--ui-scale, 1)); margin: 0 auto 8px auto; border-radius: calc(14px * var(--ui-scale, 1)); overflow: hidden; background-color: var(--card-bg); display: flex; align-items: center; justify-content: center; font-size: calc(26px * var(--text-scale, 1)); font-weight: bold; border: 1px solid var(--border-color); box-shadow: var(--card-shadow); transition: 0.2s; position: relative; flex-shrink: 0; }
 body.icon-shape-circle .page-icon-wrapper { border-radius: 50%; }
 body.icon-mode .page-icon-wrapper { display: flex; }
 
-body.icon-mode .page-name { font-size: calc(12px * var(--text-scale, 1)); line-height: 1.3; overflow: hidden; background: transparent !important; }
+body.icon-mode .page-name { font-size: calc(12px * var(--text-scale, 1)); line-height: 1.3; overflow: hidden; background: transparent !important; flex: 1 1 auto; width: 100%; }
 body.icon-mode .page-name-inner { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; word-break: break-all; width: 100%; }
 body.icon-mode .page-url, body.icon-mode .page-note, body.icon-mode .sub-links-container, body.icon-mode .expand-urls-btn, body.icon-mode .url-type-badge { display: none !important; }
 body.icon-mode.edit-mode .page-card-header .item-checkbox { position: absolute; top: -5px; right: 5px; z-index: 10; transform: scale(1.3); }
 
-.page-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: calc(8px * var(--ui-scale, 1)); padding: calc(10px * var(--ui-scale, 1)); display: flex; flex-direction: column; position: relative; cursor: pointer; box-shadow: var(--card-shadow); transition: transform 0.1s, box-shadow 0.1s; text-align: center; }
+.page-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: calc(8px * var(--ui-scale, 1)); padding: calc(10px * var(--ui-scale, 1)); display: flex; flex-direction: column; position: relative; cursor: pointer; box-shadow: var(--card-shadow); transition: transform 0.1s, box-shadow 0.1s; text-align: center; height: 100%; }
 body.theme-glass .page-card { backdrop-filter: var(--backdrop-filter); -webkit-backdrop-filter: var(--backdrop-filter); }
 body.theme-neumorphism .page-card { border: none; background: var(--card-bg, var(--bg-color)); }
 .page-card:hover { transform: translateY(-1px); box-shadow: var(--card-hover-shadow); }
 
-.page-card-header { display: flex; align-items: center; width: 100%; justify-content: center; position: relative; }
-.page-name { font-weight: 500; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.2; margin-bottom: 4px; color: var(--text-color); width: 100%; min-height: calc(20px * var(--text-scale, 1)); text-align: center; overflow-wrap: anywhere; word-break: normal; display: flex; align-items: center; justify-content: center; }
+.page-card-header { display: flex; align-items: center; width: 100%; justify-content: center; position: relative; flex: 1 1 auto; }
+.page-name { font-weight: 500; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.2; margin-bottom: 4px; color: var(--text-color); width: 100%; min-height: calc(20px * var(--text-scale, 1)); text-align: center; overflow-wrap: anywhere; word-break: normal; display: flex; align-items: center; justify-content: center; align-self: stretch; }
 .page-name-inner { min-width: 0; max-width: 100%; line-height: 1.2; }
 .cat-name-text, .page-name-text { white-space: pre-line; } 
 .page-url { font-size: calc(11px * var(--text-scale, 1)); color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-top: 2px; }
