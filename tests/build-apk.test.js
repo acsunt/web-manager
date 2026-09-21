@@ -256,6 +256,9 @@ describe('APK 版本号', () => {
     expect(main).toContain('clearRuntimeCache');
     expect(main).toContain('confirmClearSiteData');
     expect(main).toContain('openSelectiveClearModal');
+    expect(main).toContain('setSelectiveClearTypeFilter');
+    expect(main).toContain('flattenSelectiveClearNodes');
+    expect(main).toContain('isToolbarEditItem');
     expect(main).toContain('filterSelectiveClearList');
     expect(main).toContain('handleSelectiveClearCheckChange');
     expect(main).toContain('updateSelectiveClearSubmitLabel');
@@ -271,6 +274,11 @@ describe('APK 版本号', () => {
     expect(html).toContain('id="selectiveClearModal"');
     expect(html).toContain('id="selectiveClearSearch"');
     expect(html).toContain('id="selectiveClearSubmitBtn"');
+    expect(html).toContain("setSelectiveClearTypeFilter('workspace')");
+    expect(html).toContain("setSelectiveClearTypeFilter('category')");
+    expect(html).toContain("setSelectiveClearTypeFilter('page')");
+    expect(html).toContain('仅主页');
+    expect(html).toContain('仅分类');
     expect(html).toContain('class="site-data-clear-types"');
     expect(html).toContain('data-type="localStorage"');
     expect(html).toContain('data-type="indexedDB"');
@@ -283,6 +291,9 @@ describe('APK 版本号', () => {
     expect(bridge).toContain('public String getNativeAbi()');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetPinSelected"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetPin"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('@drawable/bg_browser_sheet_action');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'drawable', 'bg_browser_sheet_action.xml'), 'utf8')).toContain('android:shape="oval"');
+    expect(tabs).toContain('styleSheetAction');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_tab.xml'), 'utf8')).toContain('id="@+id/tabPin"');
     expect(main).toContain("id: 'browserWidgetBtn'");
     expect(main).toContain("name: '浏览器部件'");
@@ -311,8 +322,8 @@ describe('APK 版本号', () => {
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:contentDescription="排序状态"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetDelete"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetCopy"');
-    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_width="22dp"');
-    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_marginStart="4dp"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_width="32dp"');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('android:layout_marginStart="6dp"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('android:paddingStart="8dp"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetRoot"');
     expect(tabs).toContain('scaleSheetActionButton(');
@@ -377,7 +388,7 @@ describe('APK 版本号', () => {
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'sheet_browser_tabs.xml'), 'utf8')).toContain('id="@+id/sheetSelectAll"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_tab.xml'), 'utf8')).toContain('id="@+id/sheetTabHandle"');
     expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'item_browser_sheet_group.xml'), 'utf8')).toContain('id="@+id/sheetGroupToggle"');
-    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'drawable', 'ic_browser_move.xml'), 'utf8')).toContain('h-8l-2,-2H4');
+    expect(readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'drawable', 'ic_browser_move.xml'), 'utf8')).toContain('L19,15.5l-4.25,2.75z');
     expect(main).toContain('rememberSearchQuery');
     expect(main).toContain('handleSearchKeydown');
     expect(html).toContain('onkeydown="handleSearchKeydown(event)"');

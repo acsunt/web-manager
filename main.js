@@ -8,6 +8,7 @@ import {
     findParent as findParentInTree,
     collectPagesFromWorkspaces,
     collectSelectiveClearTree,
+    flattenSelectiveClearNodes,
     filterSelectiveClearTree,
     getAllPages,
     insertByOrderedPeers,
@@ -409,6 +410,7 @@ function initToolbar() {
             toolbarConfig = merged;
         } catch (e) { toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG]; }
     }
+    toolbarConfig.forEach((item) => { if (isToolbarEditItem(item)) item.show = true; });
     renderToolbar();
 }
 
@@ -425,6 +427,10 @@ function syncBrowserChrome() {
     try { window.Android.setBrowserChromeVisible(isBrowserWidgetEnabled()); } catch (e) { /* 网页没有原生桥 */ }
 }
 
+function isToolbarEditItem(item) {
+    return item && item.id === 'toolbarEditBtn';
+}
+
 function isIconFeatureItem(item) {
     return item && item.id === 'iconGlobalConfigBtn';
 }
@@ -436,7 +442,7 @@ function renderToolbar() {
         if (isBrowserWidgetItem(item)) return;
         const btn = document.getElementById(item.id);
         if (btn) {
-            const show = item.show && !(hideIcons && isIconFeatureItem(item));
+            const show = (isToolbarEditItem(item) || item.show) && !(hideIcons && isIconFeatureItem(item));
             btn.style.display = show ? '' : 'none';
             frag.appendChild(btn);
         }
@@ -462,8 +468,13 @@ function updateToolbarColBtn() { document.getElementById('toolbarColBtn').innerH
 
 function createToolbarConfigItem(item) {
     const div = document.createElement('div');
-    div.className = 'toolbar-config-item';
+    const locked = isToolbarEditItem(item);
+    div.className = 'toolbar-config-item' + (locked ? ' toolbar-config-locked' : '');
     div.dataset.id = item.id;
+    if (locked) {
+        div.innerHTML = `<span class="toolbar-config-name">${item.name}</span>`;
+        return div;
+    }
     div.onclick = function(e) {
         if (isToolbarSorting) return;
         if (e.target.type !== 'checkbox') {
@@ -537,7 +548,7 @@ function collectToolbarItemsFrom(list) {
         const checkbox = div.querySelector('input[type="checkbox"]');
         const original = toolbarConfig.find(t => t.id === id) || DEFAULT_TOOLBAR_CONFIG.find(t => t.id === id);
         if (!original) return null;
-        return { id, name: original.name, show: !!checkbox?.checked };
+        return { id, name: original.name, show: isToolbarEditItem(original) ? true : !!checkbox?.checked };
     }).filter(Boolean);
 }
 
@@ -2047,8 +2058,25 @@ function confirmClearSiteData() {
     showToast(`已清理 ${cleared} 个网页的 ${summary}`, 1800);
 }
 
+let selectiveClearTypeFilter = '';
+
 function visibleSelectiveClearChecks() {
     return Array.from(document.querySelectorAll('.selective-clear-check')).filter((cb) => cb.closest('.selective-clear-row')?.style.display !== 'none');
+}
+
+function updateSelectiveClearFilterButtons() {
+    document.querySelectorAll('.selective-clear-type-filters [data-clear-type]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.clearType === selectiveClearTypeFilter);
+    });
+}
+
+function setSelectiveClearTypeFilter(type) {
+    selectiveClearTypeFilter = selectiveClearTypeFilter === type ? '' : type;
+    renderSelectiveClearList();
+    if (selectiveClearTypeFilter) {
+        visibleSelectiveClearChecks().forEach((cb) => setSelectiveClearChecked(cb, true));
+        updateSelectiveClearSelectAllState();
+    }
 }
 
 function renderSelectiveClearList() {
@@ -2056,7 +2084,9 @@ function renderSelectiveClearList() {
     const selectAll = document.getElementById('selectiveClearSelectAll');
     if (!list) return;
     const query = document.getElementById('selectiveClearSearch')?.value || '';
-    const tree = filterSelectiveClearTree(collectSelectiveClearTree(appData.workspaces, appData.workspaceGroups), query);
+    let tree = filterSelectiveClearTree(collectSelectiveClearTree(appData.workspaces, appData.workspaceGroups), query);
+    if (selectiveClearTypeFilter) tree = flattenSelectiveClearNodes(tree, selectiveClearTypeFilter);
+    updateSelectiveClearFilterButtons();
     list.innerHTML = '';
     if (!tree.length) {
         list.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">${query.trim() ? '无匹配项' : '暂无可清理的数据'}</div>`;
@@ -2091,6 +2121,7 @@ function openSelectiveClearModal() {
     closeModal('toolsModal');
     const search = document.getElementById('selectiveClearSearch');
     if (search) search.value = '';
+    selectiveClearTypeFilter = '';
     applySiteDataClearTypeChecks();
     renderSelectiveClearList();
     document.getElementById('selectiveClearModal').classList.add('active');
@@ -3640,6 +3671,7 @@ const inlineHandlers = {
     confirmClearSiteData,
     onSiteDataClearTypeChange,
     openSelectiveClearModal,
+    setSelectiveClearTypeFilter,
     filterSelectiveClearList,
     handleSelectiveClearCheckChange,
     toggleSelectAllSelectiveClear,

@@ -9,6 +9,7 @@ import {
   getAllPages,
   collectPagesFromWorkspaces,
   collectSelectiveClearTree,
+  flattenSelectiveClearNodes,
   filterSelectiveClearTree,
   deleteNodesByIds,
   insertByOrderedPeers,
@@ -136,6 +137,19 @@ describe('collectSelectiveClearTree', () => {
       expect.objectContaining({ type: 'page', id: 'page-1', name: '文档' }),
       expect.objectContaining({ type: 'category', id: 'cat-nested', name: '子分类' }),
     ]));
+  });
+});
+
+describe('flattenSelectiveClearNodes', () => {
+  it('可按主页、分类或网页展平，方便分级删除快速勾选', () => {
+    const tree = collectSelectiveClearTree([
+      { id: 'ws_a', name: '工作', group: '办公', data: sampleTree() },
+      { id: 'ws_b', name: '生活', group: '', data: [{ id: 'p3', type: 'page', name: '笔记' }] },
+    ], ['办公']);
+    expect(flattenSelectiveClearNodes(tree, 'workspace').map((node) => node.id)).toEqual(['ws_a', 'ws_b']);
+    expect(flattenSelectiveClearNodes(tree, 'category').map((node) => node.id)).toEqual(['cat-root', 'cat-nested']);
+    expect(flattenSelectiveClearNodes(tree, 'page').map((node) => node.id)).toEqual(['page-1', 'page-2', 'page-root', 'p3']);
+    expect(flattenSelectiveClearNodes(tree, 'workspace')[0].children).toEqual([]);
   });
 });
 

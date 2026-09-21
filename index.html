@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.52</title>
+    <title>网页管理系统 v13.0.53</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -536,6 +536,11 @@
                         <input type="checkbox" id="selectiveClearSelectAll" onchange="toggleSelectAllSelectiveClear(this)" style="margin-right:4px;"> 全选
                     </label>
                 </label>
+                <div class="selective-clear-type-filters">
+                    <button type="button" class="btn small" data-clear-type="workspace" onclick="setSelectiveClearTypeFilter('workspace')">仅主页</button>
+                    <button type="button" class="btn small" data-clear-type="category" onclick="setSelectiveClearTypeFilter('category')">仅分类</button>
+                    <button type="button" class="btn small" data-clear-type="page" onclick="setSelectiveClearTypeFilter('page')">网页</button>
+                </div>
                 <div id="selectiveClearList" class="checkbox-list selective-clear-list" style="margin-bottom: 15px; max-height:280px; overflow-y:auto; padding:5px;"></div>
                 <button class="btn danger" id="selectiveClearSubmitBtn" style="width:100%; justify-content:center;" onclick="performSelectiveClearPages()"><i class="fas fa-broom"></i> 清理选中</button>
             </div>

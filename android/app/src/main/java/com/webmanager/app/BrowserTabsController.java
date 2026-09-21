@@ -1261,30 +1261,38 @@ final class BrowserTabsController {
             if (pin != null) {
                 pin.setOnClickListener(v -> togglePinTab(tab.id));
                 pin.setContentDescription(tab.pinned ? "取消置顶" : "置顶网页");
-                tint(pin, tab.pinned ? sheetAccent() : sheetMuted());
+                styleSheetAction(pin, tab.pinned ? sheetAccent() : sheetMuted());
             }
             ImageButton copy = row.findViewById(R.id.sheetCopy);
             if (copy != null) {
                 copy.setOnClickListener(v -> copyTabUrl(tab));
-                tint(copy, sheetMuted());
+                styleSheetAction(copy, sheetMuted());
             }
-            row.findViewById(R.id.sheetMove).setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
-            row.findViewById(R.id.sheetClose).setOnClickListener(v -> closeTab(tab.id));
+            View moveBtn = row.findViewById(R.id.sheetMove);
+            if (moveBtn != null) {
+                moveBtn.setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
+                styleSheetAction(moveBtn, sheetMuted());
+            }
+            View closeBtn = row.findViewById(R.id.sheetClose);
+            if (closeBtn != null) {
+                closeBtn.setOnClickListener(v -> closeTab(tab.id));
+                styleSheetAction(closeBtn, sheetMuted());
+            }
             View deleteTabBtn = row.findViewById(R.id.sheetDelete);
-            if (deleteTabBtn != null) deleteTabBtn.setOnClickListener(v -> deleteTab(tab.id));
+            if (deleteTabBtn != null) {
+                deleteTabBtn.setOnClickListener(v -> deleteTab(tab.id));
+                styleSheetAction(deleteTabBtn, SHEET_DANGER);
+            }
             View handleView = row.findViewById(R.id.sheetTabHandle);
             handleView.setVisibility(sortMode ? View.VISIBLE : View.GONE);
             int actionVisibility = sortMode ? View.GONE : View.VISIBLE;
             if (copy != null) copy.setVisibility(actionVisibility);
             if (pin != null) pin.setVisibility(actionVisibility);
-            row.findViewById(R.id.sheetMove).setVisibility(actionVisibility);
-            row.findViewById(R.id.sheetClose).setVisibility(actionVisibility);
+            if (moveBtn != null) moveBtn.setVisibility(actionVisibility);
+            if (closeBtn != null) closeBtn.setVisibility(actionVisibility);
             if (deleteTabBtn != null) deleteTabBtn.setVisibility(actionVisibility);
             if (sortMode) enableTabDrag(row, tab.id);
             tint(handleView, sheetMuted());
-            tint(row.findViewById(R.id.sheetMove), sheetMuted());
-            tint(row.findViewById(R.id.sheetClose), sheetMuted());
-            tint(deleteTabBtn, SHEET_DANGER);
             titleView.setTextColor(sheetText());
             urlView.setTextColor(sheetMuted());
             check.setButtonTintList(android.content.res.ColorStateList.valueOf(sheetAccent()));
@@ -1532,10 +1540,10 @@ final class BrowserTabsController {
         scaleText(url, 12f);
         scaleIconButton(row == null ? null : row.findViewById(R.id.sheetTabHandle), 32, 4);
         scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetCopy), 0);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetPin), 4);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetMove), 4);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetClose), 4);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetDelete), 4);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetPin), 6);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetMove), 6);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetClose), 6);
+        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetDelete), 6);
     }
 
     private void scaleSheetGroupHeader(View header, TextView title, TextView close, TextView rename, TextView delete, View handle, View toggle) {
@@ -1614,12 +1622,25 @@ final class BrowserTabsController {
     }
 
     private void scaleSheetActionButton(View view, int startMarginDp) {
-        scaleIconButton(view, 22, 3);
+        scaleIconButton(view, 32, 7);
         ViewGroup.MarginLayoutParams params = marginParams(view);
         if (params != null) {
             params.setMarginStart(dp(startMarginDp));
             view.setLayoutParams(params);
         }
+    }
+
+    private void styleSheetAction(View view, int color) {
+        if (view == null) return;
+        view.setBackground(sheetActionBackground());
+        tint(view, color);
+    }
+
+    private GradientDrawable sheetActionBackground() {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.OVAL);
+        drawable.setColor(sheetInput());
+        return drawable;
     }
 
     private void scaleText(TextView view, float sp) {

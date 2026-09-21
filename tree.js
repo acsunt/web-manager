@@ -271,6 +271,18 @@ export function collectSelectiveClearTree(workspaces, workspaceGroups = []) {
     return out;
 }
 
+export function flattenSelectiveClearNodes(tree, type) {
+    const out = [];
+    const walk = (nodes) => {
+        (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+            if (node?.type === type) out.push({ ...node, children: [] });
+            walk(node?.children);
+        });
+    };
+    walk(tree);
+    return out;
+}
+
 export function filterSelectiveClearTree(tree, query) {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return Array.isArray(tree) ? tree : [];
