@@ -468,13 +468,8 @@ function updateToolbarColBtn() { document.getElementById('toolbarColBtn').innerH
 
 function createToolbarConfigItem(item) {
     const div = document.createElement('div');
-    const locked = isToolbarEditItem(item);
-    div.className = 'toolbar-config-item' + (locked ? ' toolbar-config-locked' : '');
+    div.className = 'toolbar-config-item';
     div.dataset.id = item.id;
-    if (locked) {
-        div.innerHTML = `<span class="toolbar-config-name">${item.name}</span>`;
-        return div;
-    }
     div.onclick = function(e) {
         if (isToolbarSorting) return;
         if (e.target.type !== 'checkbox') {
@@ -529,6 +524,7 @@ function openToolbarEditModal() {
     updateToolbarColBtn();
     toolbarConfig.forEach(item => {
         if (isBrowserWidgetItem(item)) return;
+        if (isToolbarEditItem(item)) return;
         if (hideIcons && isIconFeatureItem(item)) return;
         list.appendChild(createToolbarConfigItem(item));
     });
@@ -576,6 +572,10 @@ function confirmToolbarSort() {
     if (iconItem && !newConfig.find(isIconFeatureItem)) {
         const autoIndex = newConfig.findIndex(item => item.id === 'autoRefreshToggleBtn');
         newConfig.splice(autoIndex >= 0 ? autoIndex + 1 : Math.max(0, newConfig.length - 1), 0, iconItem);
+    }
+    const editItem = toolbarConfig.find(isToolbarEditItem) || DEFAULT_TOOLBAR_CONFIG.find(isToolbarEditItem);
+    if (editItem && !newConfig.find(isToolbarEditItem)) {
+        newConfig.push({ ...editItem, show: true });
     }
     toolbarConfig = newConfig;
     localStorage.setItem('webManagerToolbarConfig', JSON.stringify(toolbarConfig));

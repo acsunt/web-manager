@@ -78,8 +78,8 @@ test('隐藏图标默认开启，取消后相关功能才出现，本地图标�
   await expect(page.locator('#toolbarCheckedCount')).toBeVisible();
   await expect(page.locator('#toolbarCheckedCount')).toHaveText(/\(\d+个\)/);
   await expect(page.locator('#toolbarApkSection')).toBeHidden();
-  await expect(page.locator('#toolbarConfigList [data-id="toolbarEditBtn"]')).toHaveClass(/toolbar-config-locked/);
-  await expect(page.locator('#toolbarConfigList [data-id="toolbarEditBtn"] input')).toHaveCount(0);
+  await expect(page.locator('#toolbarConfigList [data-id="toolbarEditBtn"]')).toHaveCount(0);
+  await expect(page.locator('#toolbarConfigList')).not.toContainText('自定义工具栏');
   await expect(page.locator('#toolbarConfigList')).toContainText('图标设置');
   await page.locator('#hideIconsToggle').uncheck();
   await expect(page.locator('#hideIconsToggle')).not.toBeChecked();

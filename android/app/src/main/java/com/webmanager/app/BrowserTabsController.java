@@ -98,6 +98,7 @@ final class BrowserTabsController {
     private String sheetQuery = "";
     private boolean selectMode;
     private boolean sortMode;
+    private boolean deleteMode;
     private List<String> sortRestoreTabIds;
     private final List<String> sortRestoreTabGroups = new ArrayList<>();
     private final List<Boolean> sortRestoreTabPinned = new ArrayList<>();
@@ -1094,6 +1095,8 @@ final class BrowserTabsController {
         if (sortCancelBtn != null) sortCancelBtn.setOnClickListener(v -> cancelSortMode());
         View collapseAll = dialog.findViewById(R.id.sheetCollapseAll);
         if (collapseAll != null) collapseAll.setOnClickListener(v -> toggleAllGroupsCollapsed());
+        View deleteModeBtn = dialog.findViewById(R.id.sheetDeleteMode);
+        if (deleteModeBtn != null) deleteModeBtn.setOnClickListener(v -> toggleDeleteMode());
         dialog.findViewById(R.id.sheetSelectAll).setOnClickListener(v -> toggleSelectAllVisible());
         View pinSelected = dialog.findViewById(R.id.sheetPinSelected);
         if (pinSelected != null) pinSelected.setOnClickListener(v -> togglePinTabs(selectedList()));
@@ -1105,6 +1108,15 @@ final class BrowserTabsController {
                 return;
             }
             closeTabs(ids);
+        });
+        View deleteSelected = dialog.findViewById(R.id.sheetDeleteSelected);
+        if (deleteSelected != null) deleteSelected.setOnClickListener(v -> {
+            List<String> ids = selectedList();
+            if (ids.isEmpty()) {
+                toast("请先勾选网页");
+                return;
+            }
+            deleteTabs(ids);
         });
         EditText search = dialog.findViewById(R.id.sheetSearch);
         ImageButton clear = dialog.findViewById(R.id.sheetSearchClear);
@@ -1178,13 +1190,20 @@ final class BrowserTabsController {
         if (selectModeBtn != null) selectModeBtn.setText(selectMode ? "完成多选" : "多选");
         TextView sortModeBtn = dialog.findViewById(R.id.sheetSortMode);
         if (sortModeBtn != null) sortModeBtn.setText(sortMode ? "完成排序" : "排序");
+        TextView deleteModeBtn = dialog.findViewById(R.id.sheetDeleteMode);
+        if (deleteModeBtn != null) deleteModeBtn.setText(deleteMode ? "完成删除" : "删除");
         setVisible(dialog, R.id.sheetSortCancel, sortMode ? View.VISIBLE : View.GONE);
         int batchVisibility = selectMode ? View.VISIBLE : View.GONE;
+        int idleVisibility = selectMode ? View.GONE : View.VISIBLE;
         setVisible(dialog, R.id.sheetSelectCount, batchVisibility);
         setVisible(dialog, R.id.sheetSelectAll, batchVisibility);
         setVisible(dialog, R.id.sheetPinSelected, batchVisibility);
         setVisible(dialog, R.id.sheetMoveSelected, batchVisibility);
         setVisible(dialog, R.id.sheetCloseSelected, batchVisibility);
+        setVisible(dialog, R.id.sheetDeleteSelected, batchVisibility);
+        setVisible(dialog, R.id.sheetSortMode, idleVisibility);
+        setVisible(dialog, R.id.sheetCollapseAll, idleVisibility);
+        setVisible(dialog, R.id.sheetDeleteMode, idleVisibility);
         applySheetChrome(dialog);
     }
 
@@ -1257,21 +1276,10 @@ final class BrowserTabsController {
                     return true;
                 });
             }
-            ImageButton pin = row.findViewById(R.id.sheetPin);
-            if (pin != null) {
-                pin.setOnClickListener(v -> togglePinTab(tab.id));
-                pin.setContentDescription(tab.pinned ? "取消置顶" : "置顶网页");
-                styleSheetAction(pin, tab.pinned ? sheetAccent() : sheetMuted());
-            }
             ImageButton copy = row.findViewById(R.id.sheetCopy);
             if (copy != null) {
                 copy.setOnClickListener(v -> copyTabUrl(tab));
                 styleSheetAction(copy, sheetMuted());
-            }
-            View moveBtn = row.findViewById(R.id.sheetMove);
-            if (moveBtn != null) {
-                moveBtn.setOnClickListener(v -> pickGroupFor(singletonList(tab.id)));
-                styleSheetAction(moveBtn, sheetMuted());
             }
             View closeBtn = row.findViewById(R.id.sheetClose);
             if (closeBtn != null) {
@@ -1287,10 +1295,10 @@ final class BrowserTabsController {
             handleView.setVisibility(sortMode ? View.VISIBLE : View.GONE);
             int actionVisibility = sortMode ? View.GONE : View.VISIBLE;
             if (copy != null) copy.setVisibility(actionVisibility);
-            if (pin != null) pin.setVisibility(actionVisibility);
-            if (moveBtn != null) moveBtn.setVisibility(actionVisibility);
             if (closeBtn != null) closeBtn.setVisibility(actionVisibility);
-            if (deleteTabBtn != null) deleteTabBtn.setVisibility(actionVisibility);
+            if (deleteTabBtn != null) {
+                deleteTabBtn.setVisibility(!sortMode && deleteMode ? View.VISIBLE : View.GONE);
+            }
             if (sortMode) enableTabDrag(row, tab.id);
             tint(handleView, sheetMuted());
             titleView.setTextColor(sheetText());
@@ -1540,8 +1548,6 @@ final class BrowserTabsController {
         scaleText(url, 12f);
         scaleIconButton(row == null ? null : row.findViewById(R.id.sheetTabHandle), 32, 4);
         scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetCopy), 0);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetPin), 6);
-        scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetMove), 6);
         scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetClose), 6);
         scaleSheetActionButton(row == null ? null : row.findViewById(R.id.sheetDelete), 6);
     }
@@ -1592,10 +1598,12 @@ final class BrowserTabsController {
         scaleText(asText(dialog, R.id.sheetSortMode), 14f);
         scaleText(asText(dialog, R.id.sheetSortCancel), 14f);
         scaleText(asText(dialog, R.id.sheetCollapseAll), 14f);
+        scaleText(asText(dialog, R.id.sheetDeleteMode), 14f);
         scaleText(asText(dialog, R.id.sheetSelectAll), 14f);
         scaleText(asText(dialog, R.id.sheetPinSelected), 14f);
         scaleText(asText(dialog, R.id.sheetMoveSelected), 14f);
         scaleText(asText(dialog, R.id.sheetCloseSelected), 14f);
+        scaleText(asText(dialog, R.id.sheetDeleteSelected), 14f);
         scaleText(asText(dialog, R.id.sheetDone), 15f);
         scaleText(asText(dialog, R.id.manageGroupHeading), 18f);
         scaleText(asText(dialog, R.id.manageGroupHint), 13f);
@@ -2423,6 +2431,7 @@ final class BrowserTabsController {
                 sortMode = false;
                 clearSortSnapshot();
             }
+            deleteMode = false;
             selectMode = true;
         }
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
@@ -2437,9 +2446,20 @@ final class BrowserTabsController {
                 selectMode = false;
                 selectedIds.clear();
             }
+            deleteMode = false;
             sortMode = true;
             captureSortSnapshot();
         }
+        if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
+    }
+
+    private void toggleDeleteMode() {
+        if (selectMode) return;
+        if (sortMode) {
+            sortMode = false;
+            clearSortSnapshot();
+        }
+        deleteMode = !deleteMode;
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
     }
 
@@ -2849,10 +2869,12 @@ final class BrowserTabsController {
         setText(dialog, R.id.sheetSortMode, sheetAccent());
         setText(dialog, R.id.sheetSortCancel, sheetAccent());
         setText(dialog, R.id.sheetCollapseAll, sheetAccent());
+        setText(dialog, R.id.sheetDeleteMode, SHEET_DANGER);
         setText(dialog, R.id.sheetSelectAll, sheetAccent());
         setText(dialog, R.id.sheetPinSelected, sheetAccent());
         setText(dialog, R.id.sheetMoveSelected, sheetAccent());
         setText(dialog, R.id.sheetCloseSelected, SHEET_DANGER);
+        setText(dialog, R.id.sheetDeleteSelected, SHEET_DANGER);
         setText(dialog, R.id.sheetDone, sheetAccent());
         setText(dialog, R.id.manageGroupHeading, sheetText());
         setText(dialog, R.id.manageGroupHint, sheetMuted());

@@ -132,6 +132,15 @@
             android:textSize="14sp" />
 
         <TextView
+            android:id="@+id/sheetDeleteMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="删除"
+            android:textColor="@color/browser_danger"
+            android:textSize="14sp" />
+
+        <TextView
             android:id="@+id/sheetSelectAll"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -167,6 +176,16 @@
             android:layout_height="wrap_content"
             android:padding="8dp"
             android:text="关闭"
+            android:textColor="@color/browser_danger"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/sheetDeleteSelected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="删除"
             android:textColor="@color/browser_danger"
             android:textSize="14sp"
             android:visibility="gone" />

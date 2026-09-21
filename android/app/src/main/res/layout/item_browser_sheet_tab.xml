@@ -70,26 +70,6 @@
             android:src="@drawable/ic_browser_copy" />
 
         <ImageButton
-            android:id="@+id/sheetPin"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_browser_sheet_action"
-            android:contentDescription="置顶网页"
-            android:padding="7dp"
-            android:src="@drawable/ic_browser_pin" />
-
-        <ImageButton
-            android:id="@+id/sheetMove"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_browser_sheet_action"
-            android:contentDescription="移动到分组"
-            android:padding="7dp"
-            android:src="@drawable/ic_browser_move" />
-
-        <ImageButton
             android:id="@+id/sheetClose"
             android:layout_width="32dp"
             android:layout_height="32dp"
@@ -107,7 +87,8 @@
             android:background="@drawable/bg_browser_sheet_action"
             android:contentDescription="删除网页"
             android:padding="7dp"
-            android:src="@drawable/ic_browser_delete" />
+            android:src="@drawable/ic_browser_delete"
+            android:visibility="gone" />
     </LinearLayout>
 
     <View

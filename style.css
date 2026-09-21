@@ -317,8 +317,6 @@ body.hide-local-tags .url-type-badge { display: none !important; }
 .toolbar-config-list.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
 .toolbar-config-item { display: flex; align-items: center; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); cursor: pointer; gap: 8px; }
 .toolbar-config-item:hover { background: var(--bg-color); }
-.toolbar-config-item.toolbar-config-locked { cursor: default; }
-.toolbar-config-item.toolbar-config-locked .toolbar-config-name { order: 1; }
 .toolbar-config-name { flex-grow: 1; font-weight: 500; font-size: calc(14px * var(--text-scale, 1)); order: 2; }
 .toolbar-config-checkbox { order: 1; margin: 0; transform: scale(1.1); accent-color: var(--primary-color); cursor: pointer; }
 .toolbar-sort-active .toolbar-config-checkbox { display: none; }
