@@ -4,7 +4,9 @@
 
     var CHUNK = 256 * 1024;
     var blobs = window.__wmDlBlobs || Object.create(null);
+    var names = window.__wmDlNames || Object.create(null);
     window.__wmDlBlobs = blobs;
+    window.__wmDlNames = names;
     function hookUrl(api) {
         if (!api || typeof api.createObjectURL !== 'function') return;
         var origCreate = api.createObjectURL.bind(api);
@@ -15,9 +17,11 @@
             return url;
         };
         api.revokeObjectURL = function (url) {
-            try { origRevoke(url); } catch (e) {}
+            // 页面常在 a.click() 后立刻 revoke。ZIP 走异步 arrayBuffer，必须推迟撤销。
             setTimeout(function () {
+                try { origRevoke(url); } catch (e) {}
                 try { delete blobs[url]; } catch (e) {}
+                try { delete names[url]; } catch (e) {}
             }, 8000);
         };
     }
@@ -58,32 +62,36 @@
         return false;
     }
 
+    function saveFromReader(blob, name) {
+        var reader = new FileReader();
+        reader.onload = function () {
+            try {
+                var buf = reader.result;
+                if (buf && buf.byteLength != null) {
+                    saveBytes(new Uint8Array(buf), blob.type || '', name);
+                    return;
+                }
+            } catch (e) {}
+            var n = native();
+            if (n && typeof n.saveBlobDownload === 'function') {
+                n.saveBlobDownload(String(reader.result || ''), blob.type || '', name || '');
+            }
+        };
+        reader.readAsArrayBuffer(blob);
+        return true;
+    }
+
     function saveBlob(blob, name) {
         if (!blob) return false;
         if (typeof blob.arrayBuffer === 'function') {
             blob.arrayBuffer().then(function (buf) {
                 saveBytes(new Uint8Array(buf), blob.type || '', name);
             }).catch(function () {
-                var reader = new FileReader();
-                reader.onload = function () {
-                    var n = native();
-                    if (n && typeof n.saveBlobDownload === 'function') {
-                        n.saveBlobDownload(String(reader.result || ''), blob.type || '', name || '');
-                    }
-                };
-                reader.readAsDataURL(blob);
+                saveFromReader(blob, name);
             });
             return true;
         }
-        var reader = new FileReader();
-        reader.onload = function () {
-            var n = native();
-            if (n && typeof n.saveBlobDownload === 'function') {
-                n.saveBlobDownload(String(reader.result || ''), blob.type || '', name || '');
-            }
-        };
-        reader.readAsDataURL(blob);
-        return true;
+        return saveFromReader(blob, name);
     }
 
     function filenameFrom(a, href) {
@@ -101,10 +109,14 @@
     function interceptHref(href, name) {
         if (!href) return false;
         if (href.indexOf('blob:') === 0) {
-            if (blobs[href]) return saveBlob(blobs[href], name);
+            if (name) {
+                try { names[href] = name; } catch (e) {}
+            }
+            var fileName = name || names[href] || '';
+            if (blobs[href]) return saveBlob(blobs[href], fileName);
             try {
                 fetch(href).then(function (r) { return r.blob(); }).then(function (b) {
-                    saveBlob(b, name);
+                    saveBlob(b, fileName);
                 }).catch(function () {});
                 return true;
             } catch (e) {

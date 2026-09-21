@@ -461,7 +461,16 @@ describe('APK 版本号', () => {
     expect(pageDownload).toContain('hookUrl(URL)');
     expect(pageDownload).toContain('HTMLAnchorElement.prototype.click');
     expect(pageDownload).toContain('__wmDlBlobs');
+    expect(pageDownload).toContain('__wmDlNames');
     expect(pageDownload).toContain('beginDownloadFile');
+    expect(pageDownload).toContain('origRevoke(url)');
+    expect(pageDownload).toContain('readAsArrayBuffer');
+    expect(pageDownload).toMatch(/revokeObjectURL[\s\S]*setTimeout/);
+    expect(activity).toContain('downloadMimeFallbacks');
+    expect(activity).toContain('mediaStoreDownloadMime');
+    expect(activity).toContain('ensureDownloadExtension');
+    expect(activity).toContain('insertDownloadUri');
+    expect(activity).toContain('if (lower.contains("zip") || name.endsWith(".zip")) return "application/octet-stream"');
     expect(tabs).toContain('activity.pageDownloadScript()');
     expect(tabs).toContain('activity.injectPageDownloadHook(view)');
     expect(activity).not.toContain('Intent.EXTRA_MIME_TYPES');

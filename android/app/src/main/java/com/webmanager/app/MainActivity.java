@@ -71,6 +71,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -1408,20 +1409,23 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "无法下载该文件", Toast.LENGTH_SHORT).show();
             return;
         }
-        String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
         String mime = mimeType == null ? "" : mimeType;
+        String name = ensureDownloadExtension(URLUtil.guessFileName(url, contentDisposition, mimeType), mime);
         String quotedUrl = JSONObject.quote(url);
         String quotedMime = JSONObject.quote(mime);
         String quotedName = JSONObject.quote(name);
         String script = "(function(){function fail(){try{(window.WebManagerChrome||window.Android).saveBlobDownload('','','');}catch(e){}}"
-                + "function save(b){if(!b){fail();return;}if(typeof(window.WebManagerChrome||window.Android).beginDownloadFile==='function'){"
+                + "function save(b,nameHint){if(!b){fail();return;}"
+                + "var mime=(b.type||" + quotedMime + "||'');"
+                + "var name=(nameHint||(window.__wmDlNames&&window.__wmDlNames[" + quotedUrl + "])||" + quotedName + "||'');"
+                + "if(typeof(window.WebManagerChrome||window.Android).beginDownloadFile==='function'){"
                 + "b.arrayBuffer().then(function(buf){var u8=new Uint8Array(buf);var n=window.WebManagerChrome||window.Android;"
-                + "try{n.beginDownloadFile(" + quotedMime + "," + quotedName + ");"
+                + "try{n.beginDownloadFile(mime,name);"
                 + "var CHUNK=262144;function toB64(part){var s='';for(var i=0;i<part.length;i++)s+=String.fromCharCode(part[i]);return btoa(s);}"
                 + "for(var i=0;i<u8.length;i+=CHUNK){if(n.appendDownloadFile(toB64(u8.subarray(i,Math.min(i+CHUNK,u8.length))))===false)throw 0;}"
                 + "n.finishDownloadFile();}catch(e){try{n.cancelDownloadFile();}catch(x){}fail();}}).catch(fail);return;}"
                 + "var reader=new FileReader();reader.onload=function(){try{(window.WebManagerChrome||window.Android).saveBlobDownload(String(reader.result||''),"
-                + quotedMime + "," + quotedName + ");}catch(e){fail();}};reader.readAsDataURL(b);}"
+                + "mime,name);}catch(e){fail();}};reader.readAsDataURL(b);}"
                 + "try{if(window.__wmDlBlobs&&window.__wmDlBlobs[" + quotedUrl + "]){save(window.__wmDlBlobs[" + quotedUrl + "]);return;}"
                 + "fetch(" + quotedUrl + ").then(function(r){return r.blob();}).then(save).catch(fail);}catch(e){fail();}})();";
         webView.evaluateJavascript(script, null);
@@ -1437,9 +1441,11 @@ public class MainActivity extends AppCompatActivity {
                 byte[] bytes = decodeDataUrl(dataUrl);
                 String resolvedMime = mime;
                 if (resolvedMime == null || resolvedMime.trim().isEmpty()) resolvedMime = dataUrlMime(dataUrl);
-                String name = (filename == null || filename.trim().isEmpty())
-                        ? URLUtil.guessFileName("https://download.local/file", null, resolvedMime)
-                        : filename;
+                String name = ensureDownloadExtension(
+                        (filename == null || filename.trim().isEmpty())
+                                ? URLUtil.guessFileName("https://download.local/file", null, resolvedMime)
+                                : filename,
+                        resolvedMime);
                 saveDownloadBytes(bytes, resolvedMime, name);
             } catch (Exception e) {
                 Toast.makeText(this, "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -1474,24 +1480,21 @@ public class MainActivity extends AppCompatActivity {
         final byte[] payload = bytes == null ? new byte[0] : bytes;
         runOnUiThread(() -> {
             try {
-                String safeName = (filename == null || filename.trim().isEmpty())
-                        ? "download.bin"
-                        : filename.replaceAll("[\\\\/:*?\"<>|]", "_");
-                String safeMime = (mime == null || mime.trim().isEmpty()) ? "application/octet-stream" : mime;
+                String safeName = ensureDownloadExtension(
+                        (filename == null || filename.trim().isEmpty())
+                                ? "download.bin"
+                                : filename.replaceAll("[\\\\/:*?\"<>|]", "_"),
+                        mime);
                 if (Build.VERSION.SDK_INT >= 29) {
-                    ContentValues values = new ContentValues();
-                    values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
-                    values.put(MediaStore.Downloads.MIME_TYPE, safeMime);
-                    values.put(MediaStore.Downloads.IS_PENDING, 1);
-                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    Uri uri = insertDownloadUri(safeName, mime);
                     if (uri == null) throw new IllegalStateException("无法创建下载文件");
                     try (OutputStream out = getContentResolver().openOutputStream(uri)) {
                         if (out == null) throw new IllegalStateException("无法写入下载文件");
                         out.write(payload);
                     }
-                    values.clear();
-                    values.put(MediaStore.Downloads.IS_PENDING, 0);
-                    getContentResolver().update(uri, values, null, null);
+                    ContentValues done = new ContentValues();
+                    done.put(MediaStore.Downloads.IS_PENDING, 0);
+                    getContentResolver().update(uri, done, null, null);
                     Toast.makeText(this, "已保存到下载目录: " + safeName, Toast.LENGTH_SHORT).show();
                     return;
                 }
@@ -1508,6 +1511,68 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private Uri insertDownloadUri(String filename, String mime) {
+        String[] mimeTries = downloadMimeFallbacks(mime, filename);
+        String[] names = new String[] { filename, uniquifyDownloadName(filename) };
+        for (String candidateName : names) {
+            for (String candidate : mimeTries) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, candidateName);
+                values.put(MediaStore.Downloads.MIME_TYPE, candidate);
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+                try {
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri != null) return uri;
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return null;
+    }
+
+    private String uniquifyDownloadName(String filename) {
+        int dot = filename.lastIndexOf('.');
+        String stem = dot > 0 ? filename.substring(0, dot) : filename;
+        String ext = dot > 0 ? filename.substring(dot) : "";
+        return stem + "-" + System.currentTimeMillis() + ext;
+    }
+
+    String[] downloadMimeFallbacks(String mime, String filename) {
+        String preferred = mediaStoreDownloadMime(mime, filename);
+        if ("application/octet-stream".equals(preferred)) {
+            return new String[] { preferred };
+        }
+        return new String[] { preferred, "application/octet-stream" };
+    }
+
+    String mediaStoreDownloadMime(String mime, String filename) {
+        String raw = mime == null ? "" : mime.trim();
+        String lower = raw.toLowerCase(Locale.US);
+        String name = filename == null ? "" : filename.toLowerCase(Locale.US);
+        // 不少 Android 10+ 机型的 Downloads 集合拒收 application/zip，TXT 能下、ZIP 不能下。
+        if (lower.contains("zip") || name.endsWith(".zip")) return "application/octet-stream";
+        if (raw.isEmpty()) return "application/octet-stream";
+        int semicolon = raw.indexOf(';');
+        return semicolon >= 0 ? raw.substring(0, semicolon).trim() : raw;
+    }
+
+    String ensureDownloadExtension(String filename, String mime) {
+        String safe = filename == null ? "" : filename.trim();
+        if (safe.isEmpty()) safe = "download.bin";
+        String lower = safe.toLowerCase(Locale.US);
+        String mimeLower = mime == null ? "" : mime.toLowerCase(Locale.US);
+        boolean zip = mimeLower.contains("zip") || lower.endsWith(".zip");
+        if (zip && !lower.endsWith(".zip")) {
+            int dot = safe.lastIndexOf('.');
+            String stem = dot > 0 ? safe.substring(0, dot) : safe;
+            if (stem.isEmpty() || "download".equalsIgnoreCase(stem) || "downloadfile".equalsIgnoreCase(stem)) {
+                stem = "download";
+            }
+            return stem + ".zip";
+        }
+        return safe;
     }
 
     private File uniqueDownloadFile(File dir, String filename) {
