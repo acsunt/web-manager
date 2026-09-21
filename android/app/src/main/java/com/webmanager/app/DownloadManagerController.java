@@ -14,6 +14,9 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.text.format.Formatter;
 import android.util.TypedValue;
 import android.view.KeyEvent;
@@ -322,6 +325,11 @@ final class DownloadManagerController {
                 int mimeIdx = cursor.getColumnIndex(DownloadManager.COLUMN_MEDIA_TYPE);
                 int titleIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE);
                 int reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON);
+                int filenameIdx = -1;
+                try {
+                    filenameIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_FILENAME);
+                } catch (Exception ignored) {
+                }
                 while (cursor.moveToNext()) {
                     SystemSnapshot snap = new SystemSnapshot();
                     snap.id = idIdx >= 0 ? cursor.getLong(idIdx) : 0;
@@ -331,6 +339,12 @@ final class DownloadManagerController {
                     snap.uri = uriIdx >= 0 ? cursor.getString(uriIdx) : null;
                     snap.mime = mimeIdx >= 0 ? cursor.getString(mimeIdx) : null;
                     snap.title = titleIdx >= 0 ? cursor.getString(titleIdx) : null;
+                    if (filenameIdx >= 0) {
+                        try {
+                            snap.filename = cursor.getString(filenameIdx);
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (STATUS_FAILED.equals(snap.status) && reasonIdx >= 0) snap.error = "下载失败";
                     snapshots.add(snap);
                 }
@@ -345,54 +359,25 @@ final class DownloadManagerController {
                 seen.add(snap.id);
                 Item item = findBySystemIdUnlocked(snap.id);
                 if (item == null) continue;
-                String uri = snap.uri;
-                if (STATUS_SUCCESS.equals(snap.status) && (uri == null || uri.trim().isEmpty())) {
-                    File guessed = publicDownloadFile(snap.title == null || snap.title.trim().isEmpty() ? item.name : snap.title);
-                    if (guessed != null && guessed.exists()) {
-                        uri = Uri.fromFile(guessed).toString();
-                        if (!guessed.getAbsolutePath().equals(item.path)) {
-                            item.path = guessed.getAbsolutePath();
-                            persistNeeded = true;
-                        }
-                    }
-                }
-                if (uri != null && uri.startsWith("file://")) {
-                    String path = Uri.parse(uri).getPath();
-                    if (path != null && !path.equals(item.path)) {
-                        item.path = path;
-                        persistNeeded = true;
-                    }
-                }
-                boolean itemChanged = !snap.status.equals(item.status)
-                        || snap.bytes != item.bytesDownloaded
-                        || snap.total != item.totalBytes
-                        || (uri != null && !uri.equals(item.uri));
-                if (!snap.status.equals(item.status)
-                        || (uri != null && !uri.equals(item.uri))
-                        || (snap.mime != null && !snap.mime.trim().isEmpty() && !snap.mime.equals(item.mime))
-                        || (snap.title != null && !snap.title.trim().isEmpty() && !snap.title.equals(item.name))) {
+                if (applySystemSnapshotUnlocked(item, snap, manager)) {
                     persistNeeded = true;
+                    changed = true;
                 }
-                item.status = snap.status;
-                item.bytesDownloaded = snap.bytes;
-                item.totalBytes = snap.total;
-                if (uri != null) item.uri = uri;
-                if (snap.mime != null && !snap.mime.trim().isEmpty()) item.mime = snap.mime;
-                if (snap.title != null && !snap.title.trim().isEmpty()) item.name = snap.title;
-                item.error = snap.error;
-                if (itemChanged) changed = true;
             }
             for (Item item : items) {
-                if (item.systemId > 0 && isActive(item.status) && !seen.contains(item.systemId)) {
-                    if (fileExists(item)) {
-                        item.status = STATUS_SUCCESS;
-                    } else {
-                        item.status = STATUS_FAILED;
-                        item.error = "下载中断";
-                    }
-                    changed = true;
-                    persistNeeded = true;
+                if (item.systemId <= 0 || seen.contains(item.systemId)) continue;
+                if (!isActive(item.status) && STATUS_SUCCESS.equals(item.status)) continue;
+                if (resolveExistingFileUnlocked(item, manager)) {
+                    item.status = STATUS_SUCCESS;
+                    item.error = "";
+                } else if (isActive(item.status)) {
+                    item.status = STATUS_FAILED;
+                    item.error = "下载中断";
+                } else {
+                    continue;
                 }
+                changed = true;
+                persistNeeded = true;
             }
         }
         if (persistNeeded) persist();
@@ -406,8 +391,7 @@ final class DownloadManagerController {
             while (it.hasNext()) {
                 Item item = it.next();
                 if (!STATUS_SUCCESS.equals(item.status)) continue;
-                if (!hasStoredLocation(item)) continue;
-                if (fileExists(item)) continue;
+                if (shouldKeepCompletedItemUnlocked(item)) continue;
                 it.remove();
                 selectedIds.remove(item.id);
                 changed = true;
@@ -425,22 +409,225 @@ final class DownloadManagerController {
 
     boolean fileExists(Item item) {
         if (item == null) return false;
-        if (item.path != null && !item.path.trim().isEmpty()) {
-            if (new File(item.path).exists()) return true;
+        synchronized (lock) {
+            return resolveExistingFileUnlocked(item, null);
         }
+    }
+
+    private boolean applySystemSnapshotUnlocked(Item item, SystemSnapshot snap, DownloadManager manager) {
+        boolean persistNeeded = false;
+        if (snap.bytes != item.bytesDownloaded) {
+            item.bytesDownloaded = snap.bytes;
+            persistNeeded = true;
+        }
+        if (snap.total != item.totalBytes) {
+            item.totalBytes = snap.total;
+            persistNeeded = true;
+        }
+        if (snap.mime != null && !snap.mime.trim().isEmpty() && !snap.mime.equals(item.mime)) {
+            item.mime = snap.mime;
+            persistNeeded = true;
+        }
+        if (snap.title != null && !snap.title.trim().isEmpty() && !snap.title.equals(item.name)) {
+            item.name = snap.title;
+            persistNeeded = true;
+        }
+        if (snap.uri != null && !snap.uri.trim().isEmpty() && !snap.uri.equals(item.uri)) {
+            item.uri = snap.uri;
+            persistNeeded = true;
+        }
+        if (snap.filename != null && !snap.filename.trim().isEmpty()) {
+            String path = pathFromMaybeUri(snap.filename);
+            if (path != null && !path.equals(item.path)) {
+                item.path = path;
+                persistNeeded = true;
+            }
+        }
+        if (STATUS_SUCCESS.equals(snap.status)) {
+            if (!STATUS_SUCCESS.equals(item.status) || !safeText(item.error).isEmpty()) persistNeeded = true;
+            item.status = STATUS_SUCCESS;
+            item.error = "";
+            if (item.bytesDownloaded <= 0 && item.totalBytes > 0) {
+                item.bytesDownloaded = item.totalBytes;
+                persistNeeded = true;
+            }
+            if (resolveExistingFileUnlocked(item, manager)) persistNeeded = true;
+        } else {
+            if (!snap.status.equals(item.status) || !safeText(snap.error).equals(safeText(item.error))) persistNeeded = true;
+            item.status = snap.status;
+            item.error = snap.error;
+        }
+        return persistNeeded;
+    }
+
+    private boolean shouldKeepCompletedItemUnlocked(Item item) {
+        if (item == null) return false;
+        if (item.systemId > 0) return true;
+        if (resolveExistingFileUnlocked(item, null)) return true;
+        if (item.uri != null && item.uri.startsWith("content://") && contentPresence(Uri.parse(item.uri)) != 0) {
+            return true;
+        }
+        return !hasStoredLocation(item);
+    }
+
+    private boolean resolveExistingFileUnlocked(Item item, DownloadManager manager) {
+        if (item == null) return false;
+        boolean mutated = false;
+        if (fileExistsUnlocked(item)) return true;
+        if (item.systemId > 0) {
+            Uri downloaded = downloadManagerUri(manager, item.systemId);
+            if (downloaded != null) {
+                mutated |= applyResolvedLocationUnlocked(item, downloaded.toString());
+                if (fileExistsUnlocked(item) || contentPresence(downloaded) != 0) return true;
+            }
+        }
+        if (item.uri != null && !item.uri.trim().isEmpty()) {
+            mutated |= applyResolvedLocationUnlocked(item, item.uri);
+            if (fileExistsUnlocked(item)) return true;
+        }
+        File guessed = publicDownloadFile(item.name);
+        if (guessed != null && readableFile(guessed)) {
+            item.path = guessed.getAbsolutePath();
+            if (item.uri == null || item.uri.trim().isEmpty()) item.uri = Uri.fromFile(guessed).toString();
+            return true;
+        }
+        if (lookupMediaStoreUnlocked(item)) return true;
+        return mutated && fileExistsUnlocked(item);
+    }
+
+    private boolean lookupMediaStoreUnlocked(Item item) {
+        if (Build.VERSION.SDK_INT < 29 || item == null) return false;
+        String name = item.name == null ? "" : item.name.trim();
+        if (name.isEmpty()) return false;
+        try (Cursor cursor = activity.getContentResolver().query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE},
+                MediaStore.Downloads.DISPLAY_NAME + "=?",
+                new String[]{name},
+                MediaStore.Downloads.DATE_ADDED + " DESC")) {
+            if (cursor != null && cursor.moveToFirst()) {
+                long id = cursor.getLong(0);
+                Uri uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                item.uri = uri.toString();
+                if (item.bytesDownloaded <= 0) {
+                    long size = cursor.getLong(2);
+                    if (size > 0) {
+                        item.bytesDownloaded = size;
+                        item.totalBytes = size;
+                    }
+                }
+                return contentExists(uri);
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private boolean fileExistsUnlocked(Item item) {
+        if (item == null) return false;
+        if (item.path != null && !item.path.trim().isEmpty() && readableFile(new File(item.path))) return true;
         if (item.uri == null || item.uri.trim().isEmpty()) return false;
-        Uri uri = Uri.parse(item.uri);
+        return uriExists(item.uri, item.systemId > 0);
+    }
+
+    private boolean applyResolvedLocationUnlocked(Item item, String raw) {
+        if (item == null || raw == null || raw.trim().isEmpty()) return false;
+        boolean mutated = false;
+        String value = raw.trim();
+        if (value.startsWith("content://") || value.startsWith("file://")) {
+            if (item.uri == null || item.uri.trim().isEmpty() || (value.startsWith("content://") && !value.equals(item.uri))) {
+                item.uri = value;
+                mutated = true;
+            }
+        }
+        String path = pathFromMaybeUri(value);
+        if (path != null && readableFile(new File(path)) && !path.equals(item.path)) {
+            item.path = path;
+            mutated = true;
+        }
+        if (value.startsWith("content://")) {
+            String display = queryDisplayName(Uri.parse(value));
+            if (display != null && !display.trim().isEmpty() && !display.equals(item.name)) {
+                item.name = display;
+                mutated = true;
+            }
+        }
+        return mutated;
+    }
+
+    private Uri downloadManagerUri(DownloadManager manager, long systemId) {
+        if (systemId <= 0) return null;
+        DownloadManager dm = manager != null
+                ? manager
+                : (DownloadManager) activity.getSystemService(MainActivity.DOWNLOAD_SERVICE);
+        if (dm == null) return null;
+        try {
+            return dm.getUriForDownloadedFile(systemId);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean uriExists(String raw, boolean keepIfUnknown) {
+        if (raw == null || raw.trim().isEmpty()) return false;
+        Uri uri = Uri.parse(raw);
         String scheme = uri.getScheme();
         if (scheme == null || "file".equalsIgnoreCase(scheme)) {
             String path = uri.getPath();
-            return path != null && new File(path).exists();
+            return path != null && readableFile(new File(path));
         }
+        int presence = contentPresence(uri);
+        return presence == 1 || (presence < 0 && keepIfUnknown);
+    }
+
+    private boolean contentExists(Uri uri) {
+        return contentPresence(uri) != 0;
+    }
+
+    private int contentPresence(Uri uri) {
+        if (uri == null) return 0;
         ContentResolver resolver = activity.getContentResolver();
-        try (android.content.res.AssetFileDescriptor fd = resolver.openAssetFileDescriptor(uri, "r")) {
-            return fd != null;
+        try (Cursor cursor = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null)) {
+            if (cursor != null) return cursor.moveToFirst() ? 1 : 0;
+        } catch (SecurityException ignored) {
+            return -1;
         } catch (Exception ignored) {
-            return false;
         }
+        try (ParcelFileDescriptor fd = resolver.openFileDescriptor(uri, "r")) {
+            return fd != null ? 1 : 0;
+        } catch (SecurityException ignored) {
+            return -1;
+        } catch (Exception ignored) {
+            return -1;
+        }
+    }
+
+    private String queryDisplayName(Uri uri) {
+        if (uri == null) return null;
+        try (Cursor cursor = activity.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) return cursor.getString(0);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static boolean readableFile(File file) {
+        return file != null && file.exists() && file.isFile() && file.canRead();
+    }
+
+    private static String pathFromMaybeUri(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return null;
+        String value = raw.trim();
+        if (value.startsWith("file://")) {
+            String path = Uri.parse(value).getPath();
+            return path == null || path.trim().isEmpty() ? null : path;
+        }
+        if (value.startsWith("content://")) return null;
+        return value;
+    }
+
+    private static String safeText(String value) {
+        return value == null ? "" : value;
     }
 
     private void render() {
@@ -598,8 +785,12 @@ final class DownloadManagerController {
     }
 
     private Uri viewUri(Item item) {
+        if (item.systemId > 0) {
+            Uri downloaded = downloadManagerUri(null, item.systemId);
+            if (downloaded != null) return downloaded;
+        }
         File file = item.path == null || item.path.trim().isEmpty() ? null : new File(item.path);
-        if (file != null && file.exists()) {
+        if (file != null && readableFile(file)) {
             try {
                 return FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", file);
             } catch (Exception ignored) {
@@ -612,13 +803,14 @@ final class DownloadManagerController {
             String path = uri.getPath();
             if (path == null) return null;
             File parsed = new File(path);
-            if (!parsed.exists()) return null;
+            if (!readableFile(parsed)) return null;
             try {
                 return FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", parsed);
             } catch (Exception ignored) {
                 return uri;
             }
         }
+        if (contentPresence(uri) == 0) return null;
         return uri;
     }
 
@@ -957,6 +1149,7 @@ final class DownloadManagerController {
         String uri;
         String mime;
         String title;
+        String filename;
         String error = "";
     }
 

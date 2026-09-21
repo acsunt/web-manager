@@ -470,6 +470,9 @@ describe('APK 版本号', () => {
     expect(activity).toContain('mediaStoreDownloadMime');
     expect(activity).toContain('ensureDownloadExtension');
     expect(activity).toContain('insertDownloadUri');
+    expect(activity).toContain('numberedDownloadName');
+    expect(activity).toContain('uniquePublicDownloadName');
+    expect(activity).toContain('stem + "(" + index + ")" + ext');
     expect(activity).toContain('if (lower.contains("zip") || name.endsWith(".zip")) return "application/octet-stream"');
     expect(activity).toContain('trackSystemDownload(');
     expect(activity).toContain('beginLocal(');
@@ -494,6 +497,9 @@ describe('APK 版本号', () => {
     const downloads = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'java', 'com', 'webmanager', 'app', 'DownloadManagerController.java'), 'utf8');
     expect(downloads).toContain('pruneMissingFiles()');
     expect(downloads).toContain('hasStoredLocation(');
+    expect(downloads).toContain('getUriForDownloadedFile');
+    expect(downloads).toContain('shouldKeepCompletedItemUnlocked');
+    expect(downloads).toContain('MediaStore.Downloads.EXTERNAL_CONTENT_URI');
     expect(downloads).toContain('已选择 " + selectedIds.size() + " 个下载项');
     expect(downloads).toContain('setOnLongClickListener');
     expect(downloads).toContain('confirmClearRecords()');

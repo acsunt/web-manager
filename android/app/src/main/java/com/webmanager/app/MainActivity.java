@@ -1417,7 +1417,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startHttpDownload(String url, String userAgent, String contentDisposition, String mimeType, String referer) {
-        String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
+        String name = uniquePublicDownloadName(URLUtil.guessFileName(url, contentDisposition, mimeType));
         try {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             if (mimeType != null && !mimeType.trim().isEmpty()) request.setMimeType(mimeType);
@@ -1547,6 +1547,7 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception ignored) {
                     }
                     savedUri = uri.toString();
+                    savedPath = queryDownloadPath(uri);
                     recordDownload(recordId, savedName, mime, savedUri, savedPath, payload.length);
                     Toast.makeText(this, "已保存到下载目录: " + savedName, Toast.LENGTH_SHORT).show();
                     return;
@@ -1582,8 +1583,8 @@ public class MainActivity extends AppCompatActivity {
 
     private Uri insertDownloadUri(String filename, String mime) {
         String[] mimeTries = downloadMimeFallbacks(mime, filename);
-        String[] names = new String[] { filename, uniquifyDownloadName(filename) };
-        for (String candidateName : names) {
+        for (int i = 0; i < 1000; i++) {
+            String candidateName = i == 0 ? filename : numberedDownloadName(filename, i);
             for (String candidate : mimeTries) {
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.Downloads.DISPLAY_NAME, candidateName);
@@ -1599,11 +1600,54 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    private String uniquifyDownloadName(String filename) {
+    private String uniquePublicDownloadName(String filename) {
+        String safe = ensureDownloadExtension(
+                (filename == null || filename.trim().isEmpty())
+                        ? "download.bin"
+                        : filename.replaceAll("[\\\\/:*?\"<>|]", "_"),
+                null);
+        if (!publicDownloadNameTaken(safe)) return safe;
+        for (int i = 1; i < 1000; i++) {
+            String next = numberedDownloadName(safe, i);
+            if (!publicDownloadNameTaken(next)) return next;
+        }
+        return numberedDownloadName(safe, (int) (System.currentTimeMillis() % 100000));
+    }
+
+    String numberedDownloadName(String filename, int index) {
         int dot = filename.lastIndexOf('.');
         String stem = dot > 0 ? filename.substring(0, dot) : filename;
         String ext = dot > 0 ? filename.substring(dot) : "";
-        return stem + "-" + System.currentTimeMillis() + ext;
+        return stem + "(" + index + ")" + ext;
+    }
+
+    private boolean publicDownloadNameTaken(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (dir != null && new File(dir, name).exists()) return true;
+        if (Build.VERSION.SDK_INT < 29) return false;
+        try (Cursor cursor = getContentResolver().query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Downloads._ID},
+                MediaStore.Downloads.DISPLAY_NAME + "=?",
+                new String[]{name},
+                null)) {
+            return cursor != null && cursor.moveToFirst();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String queryDownloadPath(Uri uri) {
+        if (uri == null || Build.VERSION.SDK_INT < 29) return "";
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{MediaStore.Downloads.DATA}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String path = cursor.getString(0);
+                return path == null ? "" : path;
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     String[] downloadMimeFallbacks(String mime, String filename) {
@@ -1649,10 +1693,10 @@ public class MainActivity extends AppCompatActivity {
         String stem = dot > 0 ? filename.substring(0, dot) : filename;
         String ext = dot > 0 ? filename.substring(dot) : "";
         for (int i = 1; i < 1000; i++) {
-            File next = new File(dir, stem + "-" + i + ext);
+            File next = new File(dir, stem + "(" + i + ")" + ext);
             if (!next.exists()) return next;
         }
-        return new File(dir, stem + "-" + System.currentTimeMillis() + ext);
+        return new File(dir, stem + "(" + System.currentTimeMillis() + ")" + ext);
     }
 
     void attachHiddenWebView(WebView hidden) {
