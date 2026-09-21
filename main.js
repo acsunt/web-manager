@@ -2298,31 +2298,34 @@ function createNodeEl(node,level=0){
         }
         
         const nameDiv=document.createElement('div'); 
-        nameDiv.className='page-name'; 
+        nameDiv.className='page-name';
+        const nameInner=document.createElement('span');
+        nameInner.className='page-name-inner';
         if (urls.length > 0) {
             const isLocal = mainUrl.toLowerCase().startsWith('file://') || /^[a-zA-Z]:[\\/]/.test(mainUrl);
             const typeBadge = document.createElement('span');
             typeBadge.className = isLocal ? 'url-type-badge badge-local' : 'url-type-badge badge-web';
             typeBadge.textContent = isLocal ? '本地' : '网络';
-            nameDiv.appendChild(typeBadge);
+            nameInner.appendChild(typeBadge);
         }
         const pageNameText=document.createElement('span');
         pageNameText.className='page-name-text';
         pageNameText.textContent=node.name;
-        nameDiv.appendChild(pageNameText);
+        nameInner.appendChild(pageNameText);
         if(node.isPinned){
             const pin=document.createElement('i');
             pin.className='fas fa-thumbtack';
             pin.style.fontSize='calc(10px * var(--text-scale, 1))';
             pin.style.color='#ffc107';
-            nameDiv.append(' ', pin);
+            nameInner.append(' ', pin);
         }
         if(urls.length > 1){
             const multiBadge=document.createElement('span');
             multiBadge.className='multi-url-badge';
             multiBadge.textContent=String(urls.length);
-            nameDiv.append(' ', multiBadge);
+            nameInner.append(' ', multiBadge);
         }
+        nameDiv.appendChild(nameInner);
         header.append(checkbox, nameDiv); 
         
         if (urls.length > 1) { 

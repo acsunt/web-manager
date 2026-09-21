@@ -69,7 +69,7 @@ body.is-dragging { scroll-behavior: auto !important; user-select: none; }
 .sortable-drag { opacity: 1 !important; background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important; z-index: 9999 !important; pointer-events: none !important; }
 
 .page-name, .category-header, .page-note { background-color: rgba(var(--theme-base-rgb), var(--text-mask-alpha)); border-radius: 4px; transition: background-color 0.2s; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.page-name { padding: 0 4px; }
+.page-name { padding: 3px 4px 1px; }
 .page-note { padding: 4px; margin-top: 4px; display: inline-block; width: 100%; }
 
 body.theme-neumorphism { --bg-color: #e0e5ec; --neu-shadow-light: rgba(255, 255, 255, 0.6); --neu-shadow-dark: #a3b1c6; --card-shadow: 6px 6px 12px var(--neu-shadow-dark), -6px -6px 12px var(--neu-shadow-light); --card-hover-shadow: inset 6px 6px 12px var(--neu-shadow-dark), inset -6px -6px 12px var(--neu-shadow-light); --toolbar-shadow: 0 4px 15px var(--neu-shadow-dark); --bg-overlay-color: 224, 229, 236; }
@@ -247,7 +247,8 @@ body.icon-mode .page-card-header { flex-direction: column; justify-content: cent
 body.icon-shape-circle .page-icon-wrapper { border-radius: 50%; }
 body.icon-mode .page-icon-wrapper { display: flex; }
 
-body.icon-mode .page-name { font-size: calc(12px * var(--text-scale, 1)); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; background: transparent !important; word-break: break-all; }
+body.icon-mode .page-name { font-size: calc(12px * var(--text-scale, 1)); line-height: 1.3; overflow: hidden; background: transparent !important; }
+body.icon-mode .page-name-inner { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; word-break: break-all; width: 100%; }
 body.icon-mode .page-url, body.icon-mode .page-note, body.icon-mode .sub-links-container, body.icon-mode .expand-urls-btn, body.icon-mode .url-type-badge { display: none !important; }
 body.icon-mode.edit-mode .page-card-header .item-checkbox { position: absolute; top: -5px; right: 5px; z-index: 10; transform: scale(1.3); }
 
@@ -257,7 +258,8 @@ body.theme-neumorphism .page-card { border: none; background: var(--card-bg, var
 .page-card:hover { transform: translateY(-1px); box-shadow: var(--card-hover-shadow); }
 
 .page-card-header { display: flex; align-items: center; width: 100%; justify-content: center; position: relative; }
-.page-name { font-weight: 500; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.4; margin-bottom: 4px; color: var(--text-color); width: 100%; min-height: 20px; text-align: center; overflow-wrap: anywhere; word-break: normal; }
+.page-name { font-weight: 500; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.2; margin-bottom: 4px; color: var(--text-color); width: 100%; min-height: calc(20px * var(--text-scale, 1)); text-align: center; overflow-wrap: anywhere; word-break: normal; display: flex; align-items: center; justify-content: center; }
+.page-name-inner { min-width: 0; max-width: 100%; line-height: 1.2; }
 .cat-name-text, .page-name-text { white-space: pre-line; } 
 .page-url { font-size: calc(11px * var(--text-scale, 1)); color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-top: 2px; }
 .page-note { font-size: calc(11px * var(--text-scale, 1)); color: var(--note-color); font-weight: 600; border-top: 1px dashed var(--separator-line); padding-top: 4px; white-space: pre-wrap; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -267,10 +269,10 @@ body.hide-urls .page-url { display: none !important; }
 /* 布局对齐 (统一支持列表与图标模式) */
 body.align-left .page-card { text-align: left; }
 body.align-left .page-card-header { justify-content: flex-start; }
-body.align-left .page-name { text-align: left; } 
+body.align-left .page-name { text-align: left; justify-content: flex-start; } 
 body.align-right .page-card { text-align: right; }
 body.align-right .page-card-header { justify-content: flex-end; }
-body.align-right .page-name { text-align: right; } 
+body.align-right .page-name { text-align: right; justify-content: flex-end; } 
 
 body.align-left.icon-mode .page-icon-wrapper { margin: 0 auto 8px 0; }
 body.align-right.icon-mode .page-icon-wrapper { margin: 0 0 8px auto; }

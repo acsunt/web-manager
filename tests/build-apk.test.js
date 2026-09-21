@@ -165,6 +165,10 @@ describe('APK 版本号', () => {
     expect(css).toContain('.view-check-label { display: inline-flex; flex-direction: row; align-items: center;');
     expect(css).toContain('.view-check-label span { display: inline-flex; align-items: center; line-height: 1; }');
     expect(css).toContain('width: 1em; height: 1em;');
+    expect(css).toContain('word-break: normal; display: flex; align-items: center; justify-content: center;');
+    expect(css).toContain('.page-name-inner { min-width: 0; max-width: 100%; line-height: 1.2; }');
+    expect(css).toContain('.page-name { padding: 3px 4px 1px; }');
+    expect(main).toContain("nameInner.className='page-name-inner'");
     expect(main).toContain('syncNativePageDarkMode(themeConfig)');
     expect(ui).toContain('window.Android?.setPageDarkMode');
     expect(bridge).toContain('public void setPageDarkMode(boolean follow, boolean dark)');
