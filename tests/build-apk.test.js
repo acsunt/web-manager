@@ -449,7 +449,7 @@ describe('APK 版本号', () => {
     expect(activity).toContain('DIRECTORY_DOWNLOADS');
     expect(activity).toContain('saveBlobDownload(');
     expect(activity).toContain('saveDataUrlDownload(');
-    expect(activity).toContain('MediaStore.Downloads.EXTERNAL_CONTENT_URI');
+    expect(activity).toContain('appDownloadDir()');
     expect(activity).toContain('beginDownloadFile');
     expect(activity).toContain('page-download.js');
     expect(activity).toContain('|| "blob".equals(scheme)');
@@ -469,9 +469,9 @@ describe('APK 版本号', () => {
     expect(activity).toContain('downloadMimeFallbacks');
     expect(activity).toContain('mediaStoreDownloadMime');
     expect(activity).toContain('ensureDownloadExtension');
-    expect(activity).toContain('insertDownloadUri');
     expect(activity).toContain('numberedDownloadName');
-    expect(activity).toContain('uniquePublicDownloadName');
+    expect(activity).toContain('uniqueDownloadFile');
+    expect(activity).toContain('setDestinationInExternalFilesDir');
     expect(activity).toContain('stem + "(" + index + ")" + ext');
     expect(activity).toContain('if (lower.contains("zip") || name.endsWith(".zip")) return "application/octet-stream"');
     expect(activity).toContain('trackSystemDownload(');
@@ -498,8 +498,8 @@ describe('APK 版本号', () => {
     expect(downloads).toContain('pruneMissingFiles()');
     expect(downloads).toContain('hasStoredLocation(');
     expect(downloads).toContain('getUriForDownloadedFile');
-    expect(downloads).toContain('shouldKeepCompletedItemUnlocked');
-    expect(downloads).toContain('MediaStore.Downloads.EXTERNAL_CONTENT_URI');
+    expect(downloads).toContain('trackSystemDownload(long systemId, String name, String mime, String path)');
+    expect(downloads).toContain('if (item.systemId > 0) continue');
     expect(downloads).toContain('已选择 " + selectedIds.size() + " 个下载项');
     expect(downloads).toContain('setOnLongClickListener');
     expect(downloads).toContain('confirmClearRecords()');

@@ -153,6 +153,18 @@ final class DownloadManagerController {
         startPolling();
     }
 
+    boolean hasFileName(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        String needle = name.trim();
+        synchronized (lock) {
+            for (Item item : items) {
+                if (needle.equalsIgnoreCase(item.name)) return true;
+                if (item.path != null && item.path.endsWith("/" + needle)) return true;
+            }
+        }
+        return false;
+    }
+
     void destroy() {
         handler.removeCallbacks(pollRunnable);
         polling = false;
@@ -160,11 +172,17 @@ final class DownloadManagerController {
     }
 
     void trackSystemDownload(long systemId, String name, String mime) {
+        trackSystemDownload(systemId, name, mime, "");
+    }
+
+    void trackSystemDownload(long systemId, String name, String mime, String path) {
         Item item = new Item();
         item.id = UUID.randomUUID().toString();
         item.systemId = systemId;
         item.name = safeName(name);
         item.mime = mime == null ? "" : mime;
+        item.path = path == null ? "" : path;
+        if (!item.path.isEmpty()) item.uri = Uri.fromFile(new File(item.path)).toString();
         item.status = STATUS_PENDING;
         item.createdAt = System.currentTimeMillis();
         synchronized (lock) {
@@ -366,13 +384,12 @@ final class DownloadManagerController {
             }
             for (Item item : items) {
                 if (item.systemId <= 0 || seen.contains(item.systemId)) continue;
-                if (!isActive(item.status) && STATUS_SUCCESS.equals(item.status)) continue;
-                if (resolveExistingFileUnlocked(item, manager)) {
+                if (STATUS_SUCCESS.equals(item.status)) continue;
+                if (fileExistsUnlocked(item) || resolveExistingFileUnlocked(item, manager)) {
                     item.status = STATUS_SUCCESS;
                     item.error = "";
                 } else if (isActive(item.status)) {
-                    item.status = STATUS_FAILED;
-                    item.error = "下载中断";
+                    continue;
                 } else {
                     continue;
                 }
@@ -390,8 +407,11 @@ final class DownloadManagerController {
             Iterator<Item> it = items.iterator();
             while (it.hasNext()) {
                 Item item = it.next();
+                if (isActive(item.status)) continue;
                 if (!STATUS_SUCCESS.equals(item.status)) continue;
-                if (shouldKeepCompletedItemUnlocked(item)) continue;
+                if (item.systemId > 0) continue;
+                if (!hasStoredLocation(item)) continue;
+                if (fileExistsUnlocked(item)) continue;
                 it.remove();
                 selectedIds.remove(item.id);
                 changed = true;
@@ -428,9 +448,12 @@ final class DownloadManagerController {
             item.mime = snap.mime;
             persistNeeded = true;
         }
-        if (snap.title != null && !snap.title.trim().isEmpty() && !snap.title.equals(item.name)) {
-            item.name = snap.title;
-            persistNeeded = true;
+        if (snap.title != null && !snap.title.trim().isEmpty()) {
+            String nextName = displayNameFromTitle(snap.title);
+            if (!nextName.equals(item.name)) {
+                item.name = nextName;
+                persistNeeded = true;
+            }
         }
         if (snap.uri != null && !snap.uri.trim().isEmpty() && !snap.uri.equals(item.uri)) {
             item.uri = snap.uri;
@@ -458,16 +481,6 @@ final class DownloadManagerController {
             item.error = snap.error;
         }
         return persistNeeded;
-    }
-
-    private boolean shouldKeepCompletedItemUnlocked(Item item) {
-        if (item == null) return false;
-        if (item.systemId > 0) return true;
-        if (resolveExistingFileUnlocked(item, null)) return true;
-        if (item.uri != null && item.uri.startsWith("content://") && contentPresence(Uri.parse(item.uri)) != 0) {
-            return true;
-        }
-        return !hasStoredLocation(item);
     }
 
     private boolean resolveExistingFileUnlocked(Item item, DownloadManager manager) {
@@ -785,10 +798,6 @@ final class DownloadManagerController {
     }
 
     private Uri viewUri(Item item) {
-        if (item.systemId > 0) {
-            Uri downloaded = downloadManagerUri(null, item.systemId);
-            if (downloaded != null) return downloaded;
-        }
         File file = item.path == null || item.path.trim().isEmpty() ? null : new File(item.path);
         if (file != null && readableFile(file)) {
             try {
@@ -796,6 +805,10 @@ final class DownloadManagerController {
             } catch (Exception ignored) {
                 return Uri.fromFile(file);
             }
+        }
+        if (item.systemId > 0) {
+            Uri downloaded = downloadManagerUri(null, item.systemId);
+            if (downloaded != null) return downloaded;
         }
         if (item.uri == null || item.uri.trim().isEmpty()) return null;
         Uri uri = Uri.parse(item.uri);
@@ -1129,9 +1142,10 @@ final class DownloadManagerController {
         return STATUS_PENDING;
     }
 
-    private static String safeName(String name) {
-        if (name == null || name.trim().isEmpty()) return "未命名文件";
-        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+    private static String displayNameFromTitle(String title) {
+        String value = safeName(title);
+        int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+        return slash >= 0 ? value.substring(slash + 1) : value;
     }
 
     private static File publicDownloadFile(String name) {
