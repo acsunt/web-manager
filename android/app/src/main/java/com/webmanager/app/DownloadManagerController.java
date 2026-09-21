@@ -1142,6 +1142,11 @@ final class DownloadManagerController {
         return STATUS_PENDING;
     }
 
+    private static String safeName(String name) {
+        if (name == null || name.trim().isEmpty()) return "未命名文件";
+        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+
     private static String displayNameFromTitle(String title) {
         String value = safeName(title);
         int slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));

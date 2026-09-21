@@ -499,6 +499,7 @@ describe('APK 版本号', () => {
     expect(downloads).toContain('hasStoredLocation(');
     expect(downloads).toContain('getUriForDownloadedFile');
     expect(downloads).toContain('trackSystemDownload(long systemId, String name, String mime, String path)');
+    expect(downloads).toContain('private static String safeName(String name)');
     expect(downloads).toContain('if (item.systemId > 0) continue');
     expect(downloads).toContain('已选择 " + selectedIds.size() + " 个下载项');
     expect(downloads).toContain('setOnLongClickListener');
