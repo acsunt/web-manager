@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.66</title>
+    <title>网页管理系统 v13.0.67</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -459,6 +459,7 @@
                 <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkDuplicates()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
                 <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkLinks()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
                 <button class="btn primary" id="checkAllIconsBtn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkAllIcons()"><i class="fas fa-icons"></i> 一键识别所有图标 (全站)</button>
+                <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openLocalPageToolModal()"><i class="fas fa-file-code"></i> 处理本地网页</button>
             </div>
             <div class="html-only-item">
                 <hr style="border:0; border-top:1px solid var(--border-color); margin:8px 0 15px;">
@@ -550,6 +551,23 @@
         </div>
     </div>
     
+    <div id="localPageToolModal" class="modal">
+        <div class="modal-content" style="max-width:700px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>处理本地网页</span>
+                <i class="fas fa-times close-modal-btn" style="cursor:pointer;" onclick="closeModal('localPageToolModal')"></i>
+            </div>
+            <div class="form-group">
+                <textarea id="localPageToolText" class="form-control" rows="10" placeholder="粘贴网页内容、文件路径或 HTML..."></textarea>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                <button class="btn primary" onclick="convertLocalPageText('decode')"><i class="fas fa-language"></i> 转中文</button>
+                <button class="btn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
+            </div>
+            <div class="text-muted" style="margin-top:10px;font-size:12px;">全部替换模式：转中文使用 decodeURIComponent()，转原始使用 encodeURI()。</div>
+        </div>
+    </div>
+
     <div id="reportModal" class="modal">
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">

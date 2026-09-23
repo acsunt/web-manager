@@ -1794,6 +1794,19 @@ function loadThemeConfig() { const savedTheme = localStorage.getItem('webManager
 function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
 function openToolsModal() { applySiteDataClearTypeChecks(); document.getElementById('toolsModal').classList.add('active'); }
+function openLocalPageToolModal() {
+    closeModal('toolsModal');
+    document.getElementById('localPageToolModal').classList.add('active');
+}
+function convertLocalPageText(mode) {
+    const el = document.getElementById('localPageToolText');
+    if (!el) return;
+    let text = el.value || '';
+    try {
+        text = mode === 'decode' ? decodeURIComponent(text) : encodeURI(text);
+    } catch (e) {}
+    el.value = text;
+}
 function toggleThemeLock(type) { if (type === 'img') { themeConfig.lockedImg = !themeConfig.lockedImg; } else if (type === 'content') { themeConfig.lockedContent = !themeConfig.lockedContent; } updateLockUI(); saveThemeConfig(); }
 
 function updateLockUI() { const lockImgBtn = document.getElementById('lockImgBtn'); const lockContentBtn = document.getElementById('lockContentBtn'); const imgInputs = [ document.getElementById('bgBlurRange'), document.getElementById('bgOpacityRange'), document.getElementById('bgOverlayRange') ]; const contentInputs = [ document.getElementById('themeAlphaRange'), document.getElementById('textMaskRange') ]; if (themeConfig.lockedImg) { lockImgBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockImgBtn.classList.add('locked'); lockImgBtn.title = "点击解锁"; imgInputs.forEach(r => r.disabled = true); } else { lockImgBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockImgBtn.classList.remove('locked'); lockImgBtn.title = "点击锁定"; imgInputs.forEach(r => r.disabled = false); } if (themeConfig.lockedContent) { lockContentBtn.innerHTML = '<i class="fas fa-lock"></i>'; lockContentBtn.classList.add('locked'); lockContentBtn.title = "点击解锁"; contentInputs.forEach(r => r.disabled = true); } else { lockContentBtn.innerHTML = '<i class="fas fa-lock-open"></i>'; lockContentBtn.classList.remove('locked'); lockContentBtn.title = "点击锁定"; contentInputs.forEach(r => r.disabled = false); } }
