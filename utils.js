@@ -15,6 +15,28 @@ export function countTotalPages(nodes) {
     return nodes.reduce((total, node) => total + countPages(node), 0);
 }
 
+export function countLocalAndWebUrls(nodes) {
+    let local = 0;
+    let web = 0;
+    const walk = (list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((node) => {
+            if (node?.type === 'page') {
+                normalizeUrls(node).forEach((item) => {
+                    const url = String(item?.url || '').trim();
+                    if (!url) return;
+                    if (/^https?:\/\//i.test(url)) web++;
+                    else local++;
+                });
+            } else if (node?.type === 'category') {
+                walk(node.children);
+            }
+        });
+    };
+    walk(nodes);
+    return { local, web };
+}
+
 export function isOpenableUrl(url = '') {
     const trimmed = String(url || '').trim();
     return /^https?:\/\//i.test(trimmed) || /^file:\/\//i.test(trimmed);

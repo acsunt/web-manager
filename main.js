@@ -18,7 +18,7 @@ import {
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
-import { collectOpenablePages, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
+import { collectOpenablePages, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -1649,16 +1649,19 @@ function renderWorkspaceList() {
 
     ensureWorkspaceGroups(appData);
 
-    let totalPages = 0; let totalCats = 0;
+    let totalPages = 0; let totalCats = 0; let totalLocal = 0; let totalWeb = 0;
     appData.workspaces.forEach(w => {
         let pages = 0; let cats = 0;
+        const stats = countLocalAndWebUrls(w.data);
+        totalLocal += stats.local;
+        totalWeb += stats.web;
         function countRec(nodes){ nodes.forEach(n => { if(n.type === 'page') pages++; else if(n.type === 'category'){ cats++; countRec(n.children); } }); }
         if(w.data) countRec(w.data); totalPages += pages; totalCats += cats;
     });
     
     let totalWsGroups = appData.workspaceGroups ? appData.workspaceGroups.length : 0;
     const wsModalHeader = document.querySelector('#workspaceModal .modal-header span');
-    if(wsModalHeader) { wsModalHeader.innerHTML = `主页管理 <span style="font-size:calc(14px * var(--text-scale, 1)); font-weight:normal; margin-left:5px;">(总计: 网页 ${totalPages}, 分类 ${totalCats}, 主页分类 ${totalWsGroups})</span>`; }
+    if(wsModalHeader) { wsModalHeader.innerHTML = `主页管理 <span style="font-size:calc(14px * var(--text-scale, 1)); font-weight:normal; margin-left:5px;">(总计: 本地 ${totalLocal}，网址 ${totalWeb}，网页 ${totalPages}，分类 ${totalCats}，主页分类 ${totalWsGroups})</span>`; }
 
     const groupsMap = {}; appData.workspaceGroups.forEach(g => { groupsMap[g] = []; }); groupsMap[''] = [];
     appData.workspaces.forEach(ws => { const g = ws.group || ''; if(!groupsMap[g]) { groupsMap[g] = []; if (g !== '') appData.workspaceGroups.push(g); } groupsMap[g].push(ws); });
@@ -2641,19 +2644,21 @@ function exportJsonFile(isAll = false){
     
     if (ids.length === 1) { 
         const ws = workspacesToExport[0]; const wsCount = countTotalPages(ws.data); const wsDispName = ws.group ? `${ws.group}_${ws.name}`.replace(/\//g, '_') : ws.name;
-        const content = treeJson(ws.data); const blob = new Blob([content], {type: "application/json"}); downloadBlob(blob, `${wsDispName} (${wsCount}).json`); 
+        const stats = countLocalAndWebUrls(ws.data);
+        const content = treeJson(ws.data); const blob = new Blob([content], {type: "application/json"}); downloadBlob(blob, `${wsDispName} (${wsCount}页，本地${stats.local}个，网址${stats.web}个).json`); 
     } else { 
         const zip = new JSZip(); let groupOrder = appData.workspaceGroups || []; let existingGroupsInExport = [...new Set(workspacesToExport.map(w => w.group || ''))];
         existingGroupsInExport.sort((a,b) => { if (a === '') return -1; if (b === '') return 1; const idxA = groupOrder.indexOf(a); const idxB = groupOrder.indexOf(b); if (idxA!==-1 && idxB!==-1) return idxA - idxB; if (idxA!==-1) return -1; if (idxB!==-1) return 1; return a.localeCompare(b); });
         let groupFolderMap = {}; existingGroupsInExport.forEach((grp, idx) => { if (grp === '') groupFolderMap[grp] = '000_未分类'; else { const paddedGroupIdx = String(idx + 1).padStart(3, '0'); groupFolderMap[grp] = `${paddedGroupIdx}_${grp.replace(/\//g, '_')}`; } });
         workspacesToExport.sort((a, b) => { const indexA = appData.workspaces.findIndex(w => w.id === a.id); const indexB = appData.workspaces.findIndex(w => w.id === b.id); return indexA - indexB; });
-        let wsIndexMap = {}; let totalOverallCount = 0; 
+        let wsIndexMap = {}; let totalOverallCount = 0; let totalLocal = 0; let totalWeb = 0;
         workspacesToExport.forEach(ws => {
-            const g = ws.group || ''; if (wsIndexMap[g] === undefined) wsIndexMap[g] = 0; const wsCount = countTotalPages(ws.data); totalOverallCount += wsCount; 
+            const g = ws.group || ''; if (wsIndexMap[g] === undefined) wsIndexMap[g] = 0; const wsCount = countTotalPages(ws.data); totalOverallCount += wsCount;
+            const stats = countLocalAndWebUrls(ws.data); totalLocal += stats.local; totalWeb += stats.web;
             const wsDispName = ws.name.replace(/\//g, '_'); const content = treeJson(ws.data); const paddedIndex = String(wsIndexMap[g]).padStart(3, '0'); const folderName = groupFolderMap[g];
-            zip.folder(folderName).file(`${paddedIndex}_${wsDispName} (${wsCount}).json`, content); wsIndexMap[g]++;
+            zip.folder(folderName).file(`${paddedIndex}_${wsDispName} (${wsCount}页，本地${stats.local}个，网址${stats.web}个).json`, content); wsIndexMap[g]++;
         }); 
-        zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, `workspaces_backup_trees (${totalOverallCount}页).zip`); }); 
+        zip.generateAsync({type:"blob"}).then(function(content) { downloadBlob(content, `主页备份 (${totalOverallCount}页，本地${totalLocal}个，网址${totalWeb}个).zip`); }); 
     } 
 }
 
