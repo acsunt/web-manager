@@ -1850,19 +1850,18 @@ public class MainActivity extends AppCompatActivity {
         return n.endsWith(".html") || n.endsWith(".htm") || m.contains("html") || m.contains("xhtml");
     }
 
-    private File importHtmlDir() {
-        File dir = new File(getFilesDir(), "imported-html");
-        if (!dir.exists()) dir.mkdirs();
-        return dir;
-    }
-
     private String copyHtmlToLocalFile(String displayName, byte[] bytes) throws Exception {
         String safe = (displayName == null || displayName.trim().isEmpty())
                 ? "page.html"
                 : displayName.replaceAll("[\\\\/:*?\"<>|]", "_");
         String lower = safe.toLowerCase();
         if (!lower.endsWith(".html") && !lower.endsWith(".htm")) safe += ".html";
-        File out = new File(importHtmlDir(), System.currentTimeMillis() + "_" + safe);
+        // 只写应用外部 Download：/storage/emulated/0/Android/data/<包名>/files/Download/
+        // 不用 appDownloadDir()，它在外部目录不可用时会退回私有 files。
+        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (dir == null) throw new IllegalStateException("没有可写的下载目录");
+        if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("无法创建下载目录");
+        File out = new File(dir, System.currentTimeMillis() + "_" + safe);
         try (FileOutputStream fos = new FileOutputStream(out)) {
             fos.write(bytes == null ? new byte[0] : bytes);
         }

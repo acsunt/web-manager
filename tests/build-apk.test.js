@@ -246,7 +246,8 @@ describe('APK 版本号', () => {
     expect(activity).toContain('setBrowserChromeVisible(');
     expect(activity).toContain('consumeImportFile(');
     expect(activity).toContain('copyHtmlToLocalFile(');
-    expect(activity).toContain('imported-html');
+    expect(activity).toContain('getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)');
+    expect(activity).not.toContain('imported-html');
     expect(activity).toContain('clearAppCache(');
     expect(activity).toContain('clearBrowserSession(');
     expect(activity).toContain('clearPageSiteData(');
