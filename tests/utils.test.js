@@ -11,6 +11,10 @@ import {
   htmlFileTitle,
   parseBookmarkHtml,
   isLocalUrl,
+  isFileProtocolUrl,
+  convertUriText,
+  collectFileProtocolPages,
+  convertPageFileUrls,
   isOpenableUrl,
   normalizeWebUrl,
   escapeHtml,
@@ -306,6 +310,32 @@ describe('isLocalUrl', () => {
   it('普通 http 不是本地路径', () => {
     expect(isLocalUrl('http://example.com')).toBe(false);
     expect(isLocalUrl('https://example.com/a')).toBe(false);
+  });
+});
+
+describe('处理 file:/// 本地网页', () => {
+  it('只认 file:/// 开头', () => {
+    expect(isFileProtocolUrl('file:///C:/notes/a.html')).toBe(true);
+    expect(isFileProtocolUrl('C:\\docs\\a.html')).toBe(false);
+    expect(isFileProtocolUrl('https://example.com')).toBe(false);
+  });
+
+  it('转中文和转原始互相还原', () => {
+    const raw = 'file:///C:/笔记/a b.html';
+    const encoded = convertUriText(raw, 'encode');
+    expect(encoded).not.toBe(raw);
+    expect(convertUriText(encoded, 'decode')).toBe(raw);
+  });
+
+  it('收集全部主页里 file:/// 网页并原地转换', () => {
+    const page = { type: 'page', id: 'p1', url: 'file:///C:/%E7%AC%94%E8%AE%B0.html', urls: [{ url: 'file:///C:/%E7%AC%94%E8%AE%B0.html', name: '' }] };
+    const skipped = { type: 'page', id: 'p2', url: 'https://example.com' };
+    const workspaces = [{ id: 'ws', data: [page, { type: 'category', children: [skipped] }] }];
+    expect(collectFileProtocolPages(workspaces)).toEqual([page]);
+    expect(convertPageFileUrls(page, 'decode')).toBe(true);
+    expect(page.url).toBe('file:///C:/笔记.html');
+    expect(page.urls[0].url).toBe('file:///C:/笔记.html');
+    expect(skipped.url).toBe('https://example.com');
   });
 });
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.69</title>
+    <title>网页管理系统 v13.0.70</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -562,14 +562,17 @@
                 <span>处理本地网页</span>
                 <i class="fas fa-times close-modal-btn" style="cursor:pointer;" onclick="closeModal('localPageToolModal')"></i>
             </div>
-            <div class="form-group">
-                <textarea id="localPageToolText" class="form-control" rows="10" placeholder="粘贴网页内容、文件路径或 HTML..."></textarea>
+            <p class="text-muted" style="color:var(--text-secondary); font-size:calc(13px * var(--text-scale, 1)); margin:0 0 16px;">转换本系统里全部以 file:/// 开头的本地网页。转中文使用 decodeURIComponent()，转原始使用 encodeURI()。</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="btn primary" id="localPageDecodeBtn" onclick="convertLocalPageText('decode')"><i class="fas fa-language"></i> 转中文</button>
+                <button class="btn" id="localPageEncodeBtn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-                <button class="btn primary" onclick="convertLocalPageText('decode')"><i class="fas fa-language"></i> 转中文</button>
-                <button class="btn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
+            <div id="localPageToolProgress" class="local-page-progress" style="display:none;">
+                <div class="local-page-progress-track">
+                    <div id="localPageToolProgressBar" class="local-page-progress-bar"></div>
+                </div>
+                <div id="localPageToolProgressText" class="local-page-progress-text">0/0</div>
             </div>
-            <div class="text-muted" style="margin-top:10px;font-size:12px;">全部替换模式：转中文使用 decodeURIComponent()，转原始使用 encodeURI()。</div>
         </div>
     </div>
 

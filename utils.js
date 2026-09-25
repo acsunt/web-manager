@@ -228,6 +228,54 @@ export function isLocalUrl(url = '') {
     return /^file:\/\//i.test(url) || /^[a-zA-Z]:[\\/]/.test(url);
 }
 
+export function isFileProtocolUrl(url = '') {
+    return /^file:\/\//i.test(String(url).trim());
+}
+
+export function convertUriText(text, mode) {
+    const value = String(text ?? '');
+    try {
+        return mode === 'decode' ? decodeURIComponent(value) : encodeURI(value);
+    } catch (e) {
+        return value;
+    }
+}
+
+function pageHasFileProtocolUrl(node) {
+    if (isFileProtocolUrl(node?.url)) return true;
+    return Array.isArray(node?.urls) && node.urls.some((item) => isFileProtocolUrl(item?.url));
+}
+
+export function collectFileProtocolPages(workspaces) {
+    const pages = [];
+    const visit = (nodes) => {
+        if (!Array.isArray(nodes)) return;
+        nodes.forEach((node) => {
+            if (node?.type === 'page') {
+                if (pageHasFileProtocolUrl(node)) pages.push(node);
+                return;
+            }
+            if (Array.isArray(node?.children)) visit(node.children);
+        });
+    };
+    (Array.isArray(workspaces) ? workspaces : []).forEach((ws) => visit(ws?.data));
+    return pages;
+}
+
+export function convertPageFileUrls(node, mode) {
+    let changed = false;
+    const apply = (holder) => {
+        if (!holder || !isFileProtocolUrl(holder.url)) return;
+        const next = convertUriText(holder.url, mode);
+        if (next === holder.url) return;
+        holder.url = next;
+        changed = true;
+    };
+    apply(node);
+    if (Array.isArray(node?.urls)) node.urls.forEach(apply);
+    return changed;
+}
+
 export function normalizeWebUrl(url = '') {
     const trimmed = url.trim();
     if (!trimmed || /^https?:\/\//i.test(trimmed) || isLocalUrl(trimmed)) return trimmed;

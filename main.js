@@ -18,7 +18,7 @@ import {
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
-import { collectOpenablePages, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
+import { collectFileProtocolPages, collectOpenablePages, convertPageFileUrls, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -1837,18 +1837,67 @@ function startPendingCheck() {
     else if (kind === 'links') checkLinks();
 }
 
+let localPageConverting = false;
+
+function resetLocalPageProgress() {
+    const wrap = document.getElementById('localPageToolProgress');
+    const bar = document.getElementById('localPageToolProgressBar');
+    const text = document.getElementById('localPageToolProgressText');
+    if (wrap) wrap.style.display = 'none';
+    if (bar) bar.style.width = '0%';
+    if (text) text.textContent = '0/0';
+}
+
+function setLocalPageConvertBusy(busy) {
+    ['localPageDecodeBtn', 'localPageEncodeBtn'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = busy;
+    });
+}
+
 function openLocalPageToolModal() {
     closeModal('toolsModal');
+    if (!localPageConverting) resetLocalPageProgress();
     document.getElementById('localPageToolModal').classList.add('active');
 }
-function convertLocalPageText(mode) {
-    const el = document.getElementById('localPageToolText');
-    if (!el) return;
-    let text = el.value || '';
-    try {
-        text = mode === 'decode' ? decodeURIComponent(text) : encodeURI(text);
-    } catch (e) {}
-    el.value = text;
+
+async function convertLocalPageText(mode) {
+    if (localPageConverting) return;
+    const pages = collectFileProtocolPages(appData.workspaces);
+    if (pages.length === 0) {
+        showToast('没有 file:/// 开头的本地网页', 1800);
+        return;
+    }
+    localPageConverting = true;
+    setLocalPageConvertBusy(true);
+    const wrap = document.getElementById('localPageToolProgress');
+    const bar = document.getElementById('localPageToolProgressBar');
+    const text = document.getElementById('localPageToolProgressText');
+    if (wrap) wrap.style.display = 'block';
+    if (bar) bar.style.width = '0%';
+    if (text) text.textContent = `0/${pages.length}`;
+
+    let changed = 0;
+    const batch = 40;
+    for (let i = 0; i < pages.length; i++) {
+        if (convertPageFileUrls(pages[i], mode)) changed++;
+        const done = i === pages.length - 1 || i % batch === batch - 1;
+        if (!done) continue;
+        const current = i + 1;
+        if (bar) bar.style.width = `${Math.round((current / pages.length) * 100)}%`;
+        if (text) text.textContent = `${current}/${pages.length}`;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    if (changed > 0) {
+        save();
+        renderTree();
+    }
+    if (text) text.textContent = '转换完成';
+    const action = mode === 'decode' ? '转中文' : '转原始';
+    showToast(changed > 0 ? `已${action} ${changed} 个本地网页` : '转换完成，没有需要改动的本地网页', 2000);
+    localPageConverting = false;
+    setLocalPageConvertBusy(false);
 }
 function toggleThemeLock(type) { if (type === 'img') { themeConfig.lockedImg = !themeConfig.lockedImg; } else if (type === 'content') { themeConfig.lockedContent = !themeConfig.lockedContent; } updateLockUI(); saveThemeConfig(); }
 
