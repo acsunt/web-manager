@@ -1861,7 +1861,8 @@ public class MainActivity extends AppCompatActivity {
         File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         if (dir == null) throw new IllegalStateException("没有可写的下载目录");
         if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("无法创建下载目录");
-        File out = new File(dir, System.currentTimeMillis() + "_" + safe);
+        // 保留原文件名，不在前面加时间戳。同名直接覆盖。
+        File out = new File(dir, safe);
         try (FileOutputStream fos = new FileOutputStream(out)) {
             fos.write(bytes == null ? new byte[0] : bytes);
         }

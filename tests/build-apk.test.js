@@ -247,6 +247,8 @@ describe('APK 版本号', () => {
     expect(activity).toContain('consumeImportFile(');
     expect(activity).toContain('copyHtmlToLocalFile(');
     expect(activity).toContain('getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)');
+    expect(activity).not.toContain('System.currentTimeMillis() + "_" + safe');
+    expect(activity).toContain('File out = new File(dir, safe);');
     expect(activity).not.toContain('imported-html');
     expect(activity).toContain('clearAppCache(');
     expect(activity).toContain('clearBrowserSession(');
