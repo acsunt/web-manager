@@ -1980,6 +1980,7 @@ public class MainActivity extends AppCompatActivity {
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             applyTextZoom(view);
             if (tabs != null) {
+                tabs.beginPageLoad(view);
                 tabs.updateUrl(view, url);
                 tabs.injectPageLayoutOnLoad(view, false);
             }
@@ -1993,7 +1994,7 @@ public class MainActivity extends AppCompatActivity {
                 tabs.updateUrl(view, url);
                 tabs.injectPageLayoutOnLoad(view, true);
                 tabs.restoreViewState(view);
-                tabs.hideRefreshSpinner();
+                tabs.finishPageLoad(view);
             }
             injectPasswordAutofill(view);
             injectPageDownloadHook(view);
@@ -2031,10 +2032,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onProgressChanged(WebView view, int newProgress) {
-            if (newProgress >= 100) {
-                if (tabs != null) tabs.hideRefreshSpinner();
-                if (isActivePage(view)) refreshPageChrome(view, true);
-            }
+            if (newProgress >= 100 && isActivePage(view)) refreshPageChrome(view, true);
         }
 
         @Override

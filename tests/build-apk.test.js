@@ -358,6 +358,12 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('tabsFab');
     expect(tabs).toContain('hideRefreshSpinner()');
     expect(tabs).toContain('showRefreshSpinner()');
+    expect(tabs).toContain('beginPageLoad(');
+    expect(tabs).toContain('finishPageLoad(');
+    expect(tabs).toContain('pageLoadCover');
+    expect(layout).toContain('id="@+id/pageLoadCover"');
+    expect(activity).toContain('tabs.beginPageLoad(view)');
+    expect(activity).toContain('tabs.finishPageLoad(view)');
     expect(tabs).toContain('R.anim.refresh_spin');
     expect(layout).toContain('id="@+id/browserActionsRow"');
     expect(layout).toContain('id="@+id/tabsFab"');

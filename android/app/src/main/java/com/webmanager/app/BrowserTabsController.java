@@ -76,6 +76,7 @@ final class BrowserTabsController {
     private final View tabsBtn;
     private final View tabsFab;
     private final ImageView refreshSpinner;
+    private final View pageLoadCover;
     private final TextView tabsCount;
     private final View restoreBtn;
     private final View browserBar;
@@ -154,6 +155,7 @@ final class BrowserTabsController {
         this.tabsBtn = activity.findViewById(R.id.tabsBtn);
         this.tabsFab = activity.findViewById(R.id.tabsFab);
         this.refreshSpinner = activity.findViewById(R.id.refreshSpinner);
+        this.pageLoadCover = activity.findViewById(R.id.pageLoadCover);
         this.tabsCount = activity.findViewById(R.id.tabsCount);
         this.restoreBtn = activity.findViewById(R.id.restoreTabsBtn);
         this.browserBar = activity.findViewById(R.id.browserBar);
@@ -258,7 +260,7 @@ final class BrowserTabsController {
     }
 
     void hideOverlay() {
-        hideRefreshSpinner();
+        hidePageLoadCover();
         pauseAll();
         activity.setPageWindow(false);
         persistState();
@@ -413,7 +415,12 @@ final class BrowserTabsController {
                     tab.webView = activity.createPageWebView();
                     applyDesktopMode(tab);
                     attachWebView(tab);
-                    if (!restoreWebViewState(tab)) tab.webView.loadUrl(url);
+                    if (!restoreWebViewState(tab)) {
+                        beginPageLoad(tab);
+                        tab.webView.loadUrl(url);
+                    } else {
+                        beginPageLoad(tab);
+                    }
                     tabs.add(tab);
                 }
             }
@@ -506,12 +513,73 @@ final class BrowserTabsController {
     void refreshActive() {
         Tab tab = activeTab();
         if (tab != null && tab.webView != null) {
-            showRefreshSpinner();
+            beginPageLoad(tab);
             tab.webView.reload();
         }
     }
 
+    void beginPageLoad(WebView view) {
+        beginPageLoad(findTab(view));
+    }
+
+    void beginPageLoad(Tab tab) {
+        if (tab == null) return;
+        tab.layoutReady = false;
+        int generation = ++tab.loadGeneration;
+        showPageLoadCover(tab);
+        WebView view = tab.webView;
+        if (view == null) return;
+        schedulePageLoadReveal(tab, view, generation, 0);
+    }
+
+    private void schedulePageLoadReveal(Tab tab, WebView view, int generation, int attempt) {
+        view.postDelayed(() -> {
+            if (tab.loadGeneration != generation || tab.layoutReady) return;
+            if (view.getProgress() < 100 && attempt < 40) {
+                schedulePageLoadReveal(tab, view, generation, attempt + 1);
+                return;
+            }
+            finishPageLoad(view);
+        }, attempt == 0 ? 400 : 200);
+    }
+
+    void finishPageLoad(WebView view) {
+        Tab tab = findTab(view);
+        if (tab == null || view == null) return;
+        injectPageViewport(view);
+        int generation = tab.loadGeneration;
+        view.post(() -> {
+            if (tab.loadGeneration != generation) return;
+            view.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+                @Override
+                public void onComplete(long requestId) {
+                    if (tab.loadGeneration != generation) return;
+                    tab.layoutReady = true;
+                    if (tab.id != null && tab.id.equals(activeTabId)) hidePageLoadCover();
+                }
+            });
+        });
+    }
+
     void hideRefreshSpinner() {
+        if (refreshSpinner == null) return;
+        refreshSpinner.clearAnimation();
+        refreshSpinner.setVisibility(View.GONE);
+    }
+
+    private void showPageLoadCover(Tab tab) {
+        if (tab == null || tab.id == null || !tab.id.equals(activeTabId)) return;
+        if (pageLoadCover == null) return;
+        boolean dark = activity.pageFollowDarkMode() && activity.pageDarkMode();
+        pageLoadCover.setBackgroundColor(dark ? Color.parseColor("#121212") : Color.WHITE);
+        pageLoadCover.setVisibility(View.VISIBLE);
+        pageLoadCover.bringToFront();
+        if (tabsFab != null) tabsFab.bringToFront();
+        showRefreshSpinner();
+    }
+
+    private void hidePageLoadCover() {
+        if (pageLoadCover != null) pageLoadCover.setVisibility(View.GONE);
         if (refreshSpinner == null) return;
         refreshSpinner.clearAnimation();
         refreshSpinner.setVisibility(View.GONE);
@@ -521,6 +589,7 @@ final class BrowserTabsController {
         if (refreshSpinner == null) return;
         tint(refreshSpinner, chromeMuted);
         refreshSpinner.setVisibility(View.VISIBLE);
+        refreshSpinner.bringToFront();
         refreshSpinner.startAnimation(AnimationUtils.loadAnimation(activity, R.anim.refresh_spin));
     }
 
@@ -581,7 +650,10 @@ final class BrowserTabsController {
         attachWebView(tab);
         if (!restoreWebViewState(tab) && url != null && !url.trim().isEmpty()
                 && !url.startsWith("about:") && !url.startsWith("javascript:")) {
+            beginPageLoad(tab);
             tab.webView.loadUrl(url);
+        } else {
+            beginPageLoad(tab);
         }
         tab.webView.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (visible) {
@@ -759,6 +831,7 @@ final class BrowserTabsController {
             tab.webView.clearCache(true);
             tab.webView.clearFormData();
             tab.webView.clearHistory();
+            beginPageLoad(tab);
             if (!current.isEmpty()) tab.webView.loadUrl(current);
             else if (!loaded.isEmpty()) tab.webView.loadUrl(loaded);
         }
@@ -773,6 +846,7 @@ final class BrowserTabsController {
         tab.webView = activity.createPageWebView();
         applyDesktopMode(tab);
         attachWebView(tab);
+        beginPageLoad(tab);
         tab.webView.loadUrl(url);
         insertTab(tab);
         forgetClosedPage(tab.groupId, url);
@@ -802,7 +876,8 @@ final class BrowserTabsController {
             if (show) item.webView.onResume();
             else item.webView.onPause();
         }
-        hideRefreshSpinner();
+        if (!tab.layoutReady) showPageLoadCover(tab);
+        else hidePageLoadCover();
         activity.setPageWindow(true);
         activity.refreshPageChrome(tab.webView);
         restoreViewState(tab.webView);
@@ -850,6 +925,7 @@ final class BrowserTabsController {
         }
         if (tabs.isEmpty()) {
             activeGroupId = UNGROUPED;
+            hidePageLoadCover();
             activity.setPageWindow(false);
             if (groups.isEmpty()) {
                 dismissSheet();
@@ -1705,6 +1781,7 @@ final class BrowserTabsController {
         tab.desktop = !tab.desktop;
         applyDesktopMode(tab);
         if (tab.webView != null && tab.url != null && !tab.url.trim().isEmpty()) {
+            beginPageLoad(tab);
             tab.webView.loadUrl(tab.url);
         }
         persistState();
@@ -2594,6 +2671,7 @@ final class BrowserTabsController {
             last.desktop = page.desktop;
             applyDesktopMode(last);
             if (last.desktop && last.webView != null && last.url != null && !last.url.trim().isEmpty()) {
+                beginPageLoad(last);
                 last.webView.loadUrl(last.url);
             }
             insertTab(last);
@@ -3007,6 +3085,8 @@ final class BrowserTabsController {
         boolean desktop;
         String viewStateJson = "";
         boolean pendingViewRestore;
+        boolean layoutReady;
+        int loadGeneration;
         Object desktopScriptHandle;
     }
 
