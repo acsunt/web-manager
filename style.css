@@ -160,6 +160,10 @@ body:not(.native-app) .native-only-btn,
 body:not(.native-app) .apk-only, body:not(.native-app) .apk-only-section { display: none !important; }
 body.native-app .html-only-item { display: none !important; }
 
+#workspaceModal .modal-header,
+#toolsModal .modal-header { margin-bottom: 0 !important; padding-bottom: 8px !important; }
+#workspaceModal .modal-header::before,
+#toolsModal .modal-header::before { bottom: 0; }
 #passwordManagerModal .modal-header { margin-bottom: 0 !important; padding-bottom: 0 !important; }
 #passwordManagerModal .modal-header::before { bottom: 0; }
 .pwd-manager-hint { color: var(--text-secondary); margin: 0; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.45; }

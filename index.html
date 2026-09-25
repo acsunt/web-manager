@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.71</title>
+    <title>网页管理系统 v13.0.72</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -366,7 +366,7 @@
     </div>
 <div id="workspaceModal" class="modal"> 
         <div class="modal-content"> 
-            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"> 
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 0; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;"> 
                 <span>主页管理</span> 
                 <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('workspaceModal')"></i> 
             </div> 
@@ -452,7 +452,7 @@
     <div id="cropperModal" class="modal"><div class="modal-content" style="max-width: 600px;"><div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;"><span>剪裁图片</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('cropperModal')"></i></div><div class="cropper-container-wrapper"><img id="cropperImage" src="" style="max-width: 100%; display: block;"></div><div style="text-align: right; margin-top: 15px; display: flex; justify-content: space-between;"><button class="btn" onclick="cropper.reset()"><i class="fas fa-sync"></i> 重置</button><div class="modal-actions" style="margin-top:0;"><button class="btn" onclick="closeModal('cropperModal')">取消</button><button class="btn primary" onclick="confirmCrop()"><i class="fas fa-check"></i> 确定使用</button></div></div></div></div>
     <div id="toolsModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 0; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                 <span>工具箱</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('toolsModal')"></i>
             </div>
             <div class="form-group">
