@@ -170,9 +170,27 @@ public class MainActivity extends AppCompatActivity {
         return stable > 0 ? stable : 0;
     }
 
+    /** 旧版本地 HTML 写在 files/imported-html，新版已改到外部 Download。启动时删掉残留。 */
+    private void deleteLegacyImportedHtml() {
+        deleteTree(new File(getFilesDir(), "imported-html"));
+    }
+
+    private void deleteTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) deleteTree(child);
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        deleteLegacyImportedHtml();
         restoreThemeScale();
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);

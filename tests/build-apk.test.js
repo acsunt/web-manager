@@ -249,7 +249,8 @@ describe('APK 版本号', () => {
     expect(activity).toContain('getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)');
     expect(activity).not.toContain('System.currentTimeMillis() + "_" + safe');
     expect(activity).toContain('File out = new File(dir, safe);');
-    expect(activity).not.toContain('imported-html');
+    expect(activity).toContain('deleteLegacyImportedHtml()');
+    expect(activity).toContain('new File(getFilesDir(), "imported-html")');
     expect(activity).toContain('clearAppCache(');
     expect(activity).toContain('clearBrowserSession(');
     expect(activity).toContain('clearPageSiteData(');
