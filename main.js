@@ -16,7 +16,7 @@ import {
     nodesForDisplay,
     reorderWithinPinZone,
 } from './tree.js';
-import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
+import { cancelPasswordDraft, deleteSelectedPasswords, exportPasswordsFile, importPasswordsFromFile, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
 import { collectFileProtocolPages, collectOpenablePages, convertPageFilePackage, convertPageFileUrls, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
@@ -115,7 +115,7 @@ const DEFAULT_TOOLBAR_CONFIG = [
     { id: 'autoRefreshToggleBtn', name: '本地刷新', show: true }, 
     { id: 'iconGlobalConfigBtn', name: '图标设置', show: true }, 
     { id: 'ioBtn', name: '导入导出', show: true },
-    { id: 'browserWidgetBtn', name: '浏览器部件', show: false },
+    { id: 'browserWidgetBtn', name: '浏览器部件', show: true },
     { id: 'toolbarEditBtn', name: '自定义工具栏', show: true }
 ];
 let toolbarConfig = [...DEFAULT_TOOLBAR_CONFIG];
@@ -402,7 +402,7 @@ function initToolbar() {
                 if (idMap.has(def.id)) return;
                 if (def.id === 'browserWidgetBtn') {
                     const ioIndex = merged.findIndex(item => item.id === 'ioBtn');
-                    merged.splice(ioIndex >= 0 ? ioIndex + 1 : merged.length, 0, def);
+                    merged.splice(ioIndex >= 0 ? ioIndex + 1 : merged.length, 0, { ...def, show: true });
                     return;
                 }
                 merged.push(def);
@@ -3692,6 +3692,8 @@ const inlineHandlers = {
     togglePasswordSelectMode,
     togglePasswordSelectAll,
     deleteSelectedPasswords,
+    exportPasswordsFile,
+    importPasswordsFromFile,
     clearAllData,
     openThemeModal,
     toggleCountDisplay,

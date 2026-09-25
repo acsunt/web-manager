@@ -47,7 +47,7 @@ feat: 简短标题
 ## 推送前
 
 1. `index.html` 标题 PATCH +1（见版本号规则）
-2. 提交正文里写清新增 / 优化 / 修复
+2. 提交正文里写清新增 / 优化 / 修复。PowerShell 不支持 `git commit -m "feat: ...` 这种多段提交写法，`-m` 传多行会被拆开或丢掉「新增 / 优化 / 修复」。先把完整说明写成 **UTF-8 无 BOM** 文件，再 `git commit -F 文件路径`。`脚本/git-commit-push.ps1` 同样用 `-F`，不要用 `-m` 拼多段正文，也不要用 `Set-Content -Encoding utf8`（Windows PowerShell 5 会写成带 BOM，Git 可能把中文读乱）
 3. `.githooks/pre-push` 会检查这两项；缺说明则推送失败
 
 ## 推送后

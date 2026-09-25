@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelPasswordDraft, deletePassword, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from '../password-manager.js';
+import { cancelPasswordDraft, deletePassword, deleteSelectedPasswords, exportPasswordsFile, importPasswordsFromFile, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from '../password-manager.js';
 
 function mountManager() {
   document.body.innerHTML = `
@@ -12,6 +12,7 @@ function mountManager() {
       </div>
       <div id="passwordManagerEmpty"></div>
       <div id="passwordManagerList"></div>
+      <input type="file" id="passwordImportInput">
     </div>
   `;
 }
@@ -181,5 +182,48 @@ describe('password-manager', () => {
     openPasswordManager();
     expect(document.getElementById('passwordManagerModal').classList.contains('active')).toBe(false);
     expect(document.querySelector('.pwd-card')).toBeNull();
+  });
+
+  it('导出当前密码为 JSON 文件', async () => {
+    const blobs = [];
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob) => {
+        blobs.push(blob);
+        return 'blob:passwords';
+      },
+      revokeObjectURL: () => {},
+    });
+    openPasswordManager();
+    await exportPasswordsFile();
+    expect(blobs).toHaveLength(1);
+    const text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blobs[0]);
+    });
+    const doc = JSON.parse(text);
+    expect(doc.type).toBe('web_manager_passwords');
+    expect(doc.passwords).toHaveLength(2);
+  });
+
+  it('导入文件后按网站和账号合并', async () => {
+    openPasswordManager();
+    const input = document.getElementById('passwordImportInput');
+    const file = {
+      text: async () => JSON.stringify({
+        type: 'web_manager_passwords',
+        passwords: [
+          { website: 'example.com', username: 'alice', password: 'new', title: '新标题' },
+          { website: 'third.com', username: 'cara', password: 'c' },
+        ],
+      }),
+    };
+    Object.defineProperty(input, 'files', { value: [file] });
+    await importPasswordsFromFile(input);
+    const saved = JSON.parse(window.Android.saveSavedPasswords.mock.calls.at(-1)[0]);
+    expect(saved).toHaveLength(3);
+    expect(saved.find((item) => item.username === 'alice').password).toBe('new');
+    expect(saved.find((item) => item.username === 'cara').website).toBe('third.com');
   });
 });

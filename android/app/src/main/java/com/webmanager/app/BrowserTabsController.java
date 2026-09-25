@@ -70,7 +70,7 @@ final class BrowserTabsController {
     private final ImageButton categoryBtn;
     private final ImageButton homeBtn;
     private final ImageButton refreshBtn;
-    private final ImageButton downloadBtn;
+    private final ImageButton goUrlBtn;
     private final ImageButton desktopBtn;
     private final ImageButton pagesBtn;
     private final View tabsBtn;
@@ -149,7 +149,7 @@ final class BrowserTabsController {
         this.categoryBtn = activity.findViewById(R.id.categoryBtn);
         this.homeBtn = activity.findViewById(R.id.homeBtn);
         this.refreshBtn = activity.findViewById(R.id.refreshBtn);
-        this.downloadBtn = activity.findViewById(R.id.downloadBtn);
+        this.goUrlBtn = activity.findViewById(R.id.goUrlBtn);
         this.desktopBtn = activity.findViewById(R.id.desktopBtn);
         this.pagesBtn = activity.findViewById(R.id.pagesBtn);
         this.tabsBtn = activity.findViewById(R.id.tabsBtn);
@@ -167,12 +167,12 @@ final class BrowserTabsController {
         bindTabsOpener(tabsBtn);
         bindTabsOpener(tabsFab);
         if (categoryBtn != null) categoryBtn.setOnClickListener(v -> toggleGroupsVisible());
-        if (downloadBtn != null) downloadBtn.setOnClickListener(v -> activity.showDownloadManager());
+        if (goUrlBtn != null) goUrlBtn.setOnClickListener(v -> promptOpenUrl());
         if (desktopBtn != null) desktopBtn.setOnClickListener(v -> toggleDesktopActive());
         if (pagesBtn != null) pagesBtn.setOnClickListener(v -> togglePagesVisible());
         if (restoreBtn != null) restoreBtn.setOnClickListener(v -> restoreOverlay());
         SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        chromeVisible = prefs.getBoolean(PREF_CHROME, false);
+        chromeVisible = prefs.getBoolean(PREF_CHROME, true);
         pagesVisible = prefs.getBoolean(PREF_PAGES, false);
         extrasVisible = prefs.getBoolean(PREF_EXTRAS, true);
         applyChromeVisible();
@@ -246,7 +246,6 @@ final class BrowserTabsController {
     }
 
     boolean handleBack() {
-        if (activity.handleDownloadBack()) return true;
         Tab tab = activeTab();
         if (tab != null && tab.webView != null && tab.webView.canGoBack()) {
             tab.webView.goBack();
@@ -605,7 +604,6 @@ final class BrowserTabsController {
     void setAppDarkMode(boolean dark) {
         if (appDarkMode == dark) return;
         appDarkMode = dark;
-        activity.setDownloadManagerDarkMode(dark);
         if (sheetDialog != null && sheetDialog.isShowing()) renderSheet(sheetDialog);
         if (groupDialog != null && groupDialog.isShowing()) renderGroupManager(groupDialog);
     }
@@ -1511,7 +1509,7 @@ final class BrowserTabsController {
         if (categoryBtn != null) categoryBtn.setVisibility(extras);
         if (homeBtn != null) homeBtn.setVisibility(extras);
         if (refreshBtn != null) refreshBtn.setVisibility(extras);
-        if (downloadBtn != null) downloadBtn.setVisibility(extras);
+        if (goUrlBtn != null) goUrlBtn.setVisibility(extras);
         if (desktopBtn != null) desktopBtn.setVisibility(extras);
         if (pagesBtn != null) pagesBtn.setVisibility(extras);
         if (tabScroll != null) tabScroll.setVisibility(extras);
@@ -1556,7 +1554,8 @@ final class BrowserTabsController {
         if (browserActionsRow != null) {
             browserActionsRow.setPadding(dp(4), 0, dp(8), 0);
         }
-        scaleBarButton(downloadBtn);
+        scaleBarButton(refreshBtn);
+        scaleBarButton(goUrlBtn);
         scaleBarButton(desktopBtn);
         scaleBarButton(pagesBtn);
         scaleBarButton(categoryBtn);
@@ -2890,7 +2889,7 @@ final class BrowserTabsController {
         tint(categoryBtn, chromeText);
         tint(homeBtn, chromeText);
         tint(refreshBtn, chromeText);
-        tint(downloadBtn, chromeText);
+        tint(goUrlBtn, chromeText);
         tint(desktopBtn, chromeText);
         tint(pagesBtn, chromeText);
         tint(tabsBtn, chromeMuted);
@@ -3044,7 +3043,34 @@ final class BrowserTabsController {
         if (target.startsWith("/storage/") || target.startsWith("/sdcard/")) {
             return "file://" + target;
         }
-        return null;
+        if (target.contains(" ") || target.contains("\n") || target.contains("\t")) return null;
+        return "https://" + target;
+    }
+
+    private void promptOpenUrl() {
+        EditText input = new EditText(activity);
+        input.setHint("example.com 或 https://...");
+        input.setSingleLine(true);
+        int pad = dp(16);
+        input.setPadding(pad, pad, pad, pad);
+        new AlertDialog.Builder(activity, alertTheme())
+                .setTitle("打开网址")
+                .setView(input)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("打开", (dialog, which) -> {
+                    String raw = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (raw.isEmpty()) {
+                        toast("请输入网址");
+                        return;
+                    }
+                    String url = normalizeUrl(raw);
+                    if (url == null) {
+                        toast("网址无效");
+                        return;
+                    }
+                    if (!openUrl(url, "")) toast("打开失败");
+                })
+                .show();
     }
 
     private String canonicalUrl(String url) {

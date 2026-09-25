@@ -55,6 +55,52 @@ export function serializeCredentials(list) {
     return JSON.stringify(parseCredentials(list));
 }
 
+export function exportCredentialsDocument(list) {
+    return JSON.stringify({
+        type: 'web_manager_passwords',
+        version: '1.0',
+        passwords: parseCredentials(list),
+    }, null, 2);
+}
+
+export function importCredentialsDocument(raw, existing = []) {
+    let parsed = raw;
+    if (typeof raw === 'string') {
+        try { parsed = JSON.parse(raw); } catch { return { ok: false, error: '不是有效的 JSON 文件' }; }
+    }
+    let incoming = [];
+    if (Array.isArray(parsed)) incoming = parseCredentials(parsed);
+    else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.passwords)) incoming = parseCredentials(parsed.passwords);
+    else return { ok: false, error: '文件里没有密码数据' };
+    if (!incoming.length) return { ok: false, error: '文件里没有可导入的密码' };
+
+    const next = parseCredentials(existing);
+    let added = 0;
+    let updated = 0;
+    incoming.forEach((item) => {
+        const index = next.findIndex((row) => originsMatch(row.website, item.website) && row.username === item.username);
+        if (index >= 0) {
+            next[index] = {
+                ...next[index],
+                website: item.website || next[index].website,
+                title: item.title || next[index].title,
+                username: item.username,
+                password: item.password,
+                updatedAt: Date.now(),
+            };
+            updated += 1;
+            return;
+        }
+        next.push({
+            ...item,
+            id: `p_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+            updatedAt: Date.now(),
+        });
+        added += 1;
+    });
+    return { ok: true, list: next, added, updated };
+}
+
 export function snapshotCredential(entry) {
     return {
         id: String(entry?.id ?? ''),

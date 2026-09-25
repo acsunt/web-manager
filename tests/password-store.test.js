@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCredentialEdit,
   credentialsEqual,
+  exportCredentialsDocument,
+  importCredentialsDocument,
   matchCredentials,
   normalizeWebsite,
   originsMatch,
@@ -129,5 +131,36 @@ describe('draft cancel', () => {
     const draft = { id: '1', website: 'b.com', title: '站点', username: 'x', password: 'y' };
     expect(credentialsEqual(original, draft)).toBe(false);
     expect(snapshotCredential(original)).toEqual({ id: '1', website: 'a.com', title: '站点', username: 'u', password: 'p' });
+  });
+});
+
+describe('password file import export', () => {
+  it('导出文件带类型和密码列表', () => {
+    const doc = JSON.parse(exportCredentialsDocument([
+      { id: '1', website: 'a.com', title: '站点', username: 'u', password: 'p' },
+    ]));
+    expect(doc.type).toBe('web_manager_passwords');
+    expect(doc.passwords).toHaveLength(1);
+    expect(doc.passwords[0].username).toBe('u');
+  });
+
+  it('同网站同账号导入时更新，新账号追加', () => {
+    const existing = [{ id: '1', website: 'a.com', username: 'u', password: 'old', title: '旧' }];
+    const raw = exportCredentialsDocument([
+      { website: 'a.com', username: 'u', password: 'new', title: '新' },
+      { website: 'b.com', username: 'v', password: 'p2', title: '另一站' },
+    ]);
+    const result = importCredentialsDocument(raw, existing);
+    expect(result.ok).toBe(true);
+    expect(result.added).toBe(1);
+    expect(result.updated).toBe(1);
+    expect(result.list).toHaveLength(2);
+    expect(result.list[0].password).toBe('new');
+    expect(result.list[1].website).toBe('b.com');
+  });
+
+  it('不是密码文件时拒绝导入', () => {
+    expect(importCredentialsDocument('{', []).ok).toBe(false);
+    expect(importCredentialsDocument('{"type":"other"}', []).ok).toBe(false);
   });
 });

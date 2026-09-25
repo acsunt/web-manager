@@ -169,6 +169,8 @@ body.native-app .html-only-item { display: none !important; }
 .pwd-manager-hint { color: var(--text-secondary); margin: 0; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.45; }
 .pwd-manager-toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .pwd-manager-toolbar .btn[hidden] { display: none !important; }
+.pwd-file-actions { display: flex; gap: 8px; margin-top: 12px; }
+.pwd-file-actions .btn { flex: 1; justify-content: center; }
 #pwdSelectAllBtn { margin-left: auto; }
 .pwd-manager-empty { color: var(--text-secondary); font-size: calc(13px * var(--text-scale, 1)); padding: 12px 4px 4px; }
 .pwd-list { display: flex; flex-direction: column; gap: 12px; max-height: 52vh; overflow-y: auto; }

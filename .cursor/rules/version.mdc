@@ -19,4 +19,4 @@ alwaysApply: true
 2. 不要把标题留在 `v9.6.2` 或其他旧号
 3. 不要跳号，也不要只改提交说明却不改标题
 
-`git push` 会跑 `.githooks/pre-push`，终端会打印当前版本；标题没递增则推送失败。提交说明还要写清「新增 / 优化 / 修复」，规则见 `release.mdc`。
+`git push` 会跑 `.githooks/pre-push`，终端会打印当前版本；标题没递增则推送失败。提交说明还要写清「新增 / 优化 / 修复」，规则见 `release.mdc`。PowerShell 下不要用 `git commit -m` 写多段说明，改用 `git commit -F` 读文件。

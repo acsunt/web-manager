@@ -1,5 +1,5 @@
-import { applyCredentialEdit, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
-import { copyTextToClipboard, isNativeApp, showToast } from './ui.js';
+import { applyCredentialEdit, exportCredentialsDocument, importCredentialsDocument, parseCredentials, removeCredentials, snapshotCredential } from './password-store.js';
+import { copyTextToClipboard, downloadBlob, isNativeApp, showToast } from './ui.js';
 import { escapeHtml } from './utils.js';
 
 const drafts = new Map();
@@ -303,4 +303,54 @@ function deletePasswords(ids) {
     }
     showToast(ids.length > 1 ? `已删除 ${ids.length} 条` : '已删除');
     renderPasswordManager();
+}
+
+export async function exportPasswordsFile() {
+    if (!isNativeApp()) return;
+    const list = nativePasswords();
+    if (!list.length) {
+        showToast('还没有可导出的密码');
+        return;
+    }
+    const blob = new Blob([exportCredentialsDocument(list)], { type: 'application/json' });
+    const stamp = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const name = `passwords-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}.json`;
+    await downloadBlob(blob, name);
+    showToast(`已导出 ${list.length} 条密码`);
+}
+
+export function importPasswordsFromFile(input) {
+    if (!isNativeApp()) return;
+    const picker = input && input.files ? input : document.getElementById('passwordImportInput');
+    if (!input || !input.files) {
+        picker?.click();
+        return;
+    }
+    const file = input.files[0];
+    if (input.value !== undefined) input.value = '';
+    if (!file) return;
+    readPasswordImport(file).then((text) => {
+        const result = importCredentialsDocument(text, nativePasswords());
+        if (!result.ok) {
+            showToast(result.error || '导入失败');
+            return;
+        }
+        if (!persistPasswords(result.list)) {
+            showToast('导入失败');
+            return;
+        }
+        showToast(`已导入：新增 ${result.added} 条，更新 ${result.updated} 条`);
+        renderPasswordManager();
+    }).catch(() => showToast('读取文件失败'));
+}
+
+function readPasswordImport(file) {
+    if (typeof file?.text === 'function') return file.text();
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('read'));
+        reader.readAsText(file);
+    });
 }
