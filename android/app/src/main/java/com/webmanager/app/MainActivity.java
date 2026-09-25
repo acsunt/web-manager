@@ -1812,12 +1812,9 @@ public class MainActivity extends AppCompatActivity {
         Intent getContent = buildChooserIntent(Intent.ACTION_GET_CONTENT, type, multiple);
         Intent openDoc = buildChooserIntent(Intent.ACTION_OPEN_DOCUMENT, type, multiple);
         if ("image/*".equals(type) && !multiple) {
-            Intent pick = new Intent(Intent.ACTION_PICK);
-            pick.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
-            Intent chooser = Intent.createChooser(getContent, "选择图片");
-            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { pick });
+            Intent chooser = Intent.createChooser(getContent, "选择文件");
             if (startFileChooser(chooser)) return true;
-            if (startFileChooser(pick)) return true;
+            if (startFileChooser(getContent)) return true;
         }
         // Android 10 系统文件选择器一旦带上 application/json 等 EXTRA_MIME_TYPES，
         // 会在还没画出文件列表时直接崩溃，startActivity 成功后回退逻辑走不到。

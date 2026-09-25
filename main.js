@@ -2171,10 +2171,6 @@ function pickThemeBgFromGallery() {
     catch (e) { document.getElementById('bgUploadInput').click(); }
 }
 function pickThemeBgForCrop() {
-    if (typeof window.Android?.pickGalleryImage === 'function') {
-        pickThemeBgFromGallery();
-        return;
-    }
     document.getElementById('bgUploadInput').click();
 }
 function receiveGalleryImage(dataUrl) {

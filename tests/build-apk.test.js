@@ -198,6 +198,10 @@ describe('APK 版本号', () => {
     expect(html).not.toContain('初始化主题 (恢复默认设置)');
     expect(main).toContain('function pickThemeBgFromGallery');
     expect(main).toContain('function pickThemeBgForCrop');
+    expect(main).toContain("document.getElementById('bgUploadInput').click()");
+    expect(main).not.toContain('pickThemeBgFromGallery();\n        return;');
+    expect(html).toContain('确定清空当前模式的背景图片吗？');
+    expect(html).not.toContain('请选择需要清除的内容');
     expect(main).toContain('function receiveGalleryImage');
     expect(main).toContain('function applyLiveBg');
     expect(main).toContain('function placeLiveRange');
@@ -209,6 +213,7 @@ describe('APK 版本号', () => {
     expect(activity).toContain('MediaStore.Images.Media.EXTERNAL_CONTENT_URI');
     expect(activity).toContain('EXTRA_INITIAL_INTENTS');
     expect(activity).toContain('startGalleryPicker');
+    expect(activity).toContain('Intent.createChooser(getContent, "选择文件")');
     expect(main).toContain("nameInner.className='page-name-inner'");
     expect(main).toContain('syncNativePageDarkMode(themeConfig)');
     expect(ui).toContain('window.Android?.setPageDarkMode');
