@@ -550,7 +550,6 @@ public class MainActivity extends AppCompatActivity {
             pendingPageDownloadMime = mime;
             pendingPageDownloadName = filename;
             pendingPageDownloadId = UUID.randomUUID().toString();
-            id = pendingPageDownloadId;
         }
         return true;
     }
@@ -563,7 +562,6 @@ public class MainActivity extends AppCompatActivity {
                 pendingPageDownload.write(bytes);
                 return true;
             } catch (Exception e) {
-                String id = pendingPageDownloadId;
                 pendingPageDownload = null;
                 pendingPageDownloadMime = null;
                 pendingPageDownloadName = null;
@@ -577,13 +575,11 @@ public class MainActivity extends AppCompatActivity {
         final byte[] bytes;
         final String mime;
         final String filename;
-        final String id;
         synchronized (pageDownloadLock) {
             if (pendingPageDownload == null) return false;
             bytes = pendingPageDownload.toByteArray();
             mime = pendingPageDownloadMime;
             filename = pendingPageDownloadName;
-            id = pendingPageDownloadId;
             pendingPageDownload = null;
             pendingPageDownloadMime = null;
             pendingPageDownloadName = null;
