@@ -1804,6 +1804,16 @@ function endThemeAdjust() {
     });
     applyThemeSettings();
 }
+function placeLiveRange(group, rect) {
+    if (!group || !rect) return;
+    group.classList.add('adjust-live');
+    group.style.position = 'fixed';
+    group.style.left = rect.left + 'px';
+    group.style.top = rect.top + 'px';
+    group.style.width = rect.width + 'px';
+    group.style.zIndex = '5000';
+    group.style.margin = '0';
+}
 function initSliderDistractionFree() {
     const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange'];
     sliders.forEach(id => {
@@ -1815,15 +1825,7 @@ function initSliderDistractionFree() {
             const rect = group ? group.getBoundingClientRect() : null;
             document.body.classList.add('is-adjusting');
             if (container) container.classList.add('adjust-active');
-            if (group && rect) {
-                group.classList.add('adjust-live');
-                group.style.position = 'fixed';
-                group.style.left = rect.left + 'px';
-                group.style.top = rect.top + 'px';
-                group.style.width = rect.width + 'px';
-                group.style.zIndex = '3000';
-                group.style.margin = '0';
-            }
+            placeLiveRange(group, rect);
         });
         el.addEventListener('pointerup', endThemeAdjust);
         el.addEventListener('pointercancel', endThemeAdjust);
@@ -2168,6 +2170,13 @@ function pickThemeBgFromGallery() {
     try { window.Android.pickGalleryImage(); }
     catch (e) { document.getElementById('bgUploadInput').click(); }
 }
+function pickThemeBgForCrop() {
+    if (typeof window.Android?.pickGalleryImage === 'function') {
+        pickThemeBgFromGallery();
+        return;
+    }
+    document.getElementById('bgUploadInput').click();
+}
 function receiveGalleryImage(dataUrl) {
     if (!dataUrl) return;
     openCropperModal(dataUrl);
@@ -2182,7 +2191,7 @@ function performClearBg(type) {
         const mode = themeConfig.darkMode ? 'night' : 'day'; themeConfig[mode].bgType = 'none'; themeConfig[mode].bgValue = ''; showToast(`已清空 ${themeConfig.darkMode ? '夜间' : '日间'} 模式背景图`, 1500); 
     } else if (type === 'all') { 
         if(confirm('确定要将主题恢复为默认设置吗？')) { 
-            const keepPresets = !document.getElementById('clearPresetsCheckbox').checked; let existingPresets = {}; if (keepPresets) existingPresets = JSON.parse(JSON.stringify(themeConfig.presets));
+            const presetBox = document.getElementById('clearPresetsCheckbox'); const keepPresets = presetBox ? !presetBox.checked : false; let existingPresets = {}; if (keepPresets) existingPresets = JSON.parse(JSON.stringify(themeConfig.presets));
             themeConfig = createDefaultThemeConfig(); themeConfig.presets = existingPresets; 
             document.getElementById('darkModeToggle').checked = false; const follow = document.getElementById('pageFollowDarkModeCheck'); if (follow) follow.checked = false; const scaleFollow = document.getElementById('pageFollowScaleCheck'); if (scaleFollow) scaleFollow.checked = true; document.getElementById('customCssInput').value = DEFAULT_CSS_TEMPLATE; updatePresetDropdown(); showToast("主题已初始化", 1500); 
         } else { return; } 
@@ -3934,6 +3943,8 @@ const inlineHandlers = {
     updateBgAdjustment,
     handleBgUpload,
     receiveGalleryImage,
+    pickThemeBgFromGallery,
+    pickThemeBgForCrop,
     clearBackground,
     applyBgUrl,
     resetBgParams,

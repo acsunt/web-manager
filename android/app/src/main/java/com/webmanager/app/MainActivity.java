@@ -1717,21 +1717,27 @@ public class MainActivity extends AppCompatActivity {
 
     void pickGalleryImage() {
         runOnUiThread(() -> {
-            Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-            pick.setType("image/*");
-            try {
-                startActivityForResult(pick, GALLERY_PICK_REQUEST);
-            } catch (Exception e) {
-                Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
-                getContent.addCategory(Intent.CATEGORY_OPENABLE);
-                getContent.setType("image/*");
-                try {
-                    startActivityForResult(Intent.createChooser(getContent, "从图库选择"), GALLERY_PICK_REQUEST);
-                } catch (Exception ignored) {
-                    Toast.makeText(this, "无法打开图库", Toast.LENGTH_SHORT).show();
-                }
-            }
+            Intent pick = new Intent(Intent.ACTION_PICK);
+            pick.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+            Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
+            gallery.addCategory(Intent.CATEGORY_OPENABLE);
+            gallery.setType("image/*");
+            Intent chooser = Intent.createChooser(gallery, "选择图片");
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { pick });
+            if (startGalleryPicker(chooser)) return;
+            if (startGalleryPicker(pick)) return;
+            if (startGalleryPicker(gallery)) return;
+            Toast.makeText(this, "无法打开图库", Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private boolean startGalleryPicker(Intent intent) {
+        try {
+            startActivityForResult(intent, GALLERY_PICK_REQUEST);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void deliverGalleryImage(int resultCode, Intent data) {
@@ -1805,6 +1811,14 @@ public class MainActivity extends AppCompatActivity {
         String type = safeChooserMime(params);
         Intent getContent = buildChooserIntent(Intent.ACTION_GET_CONTENT, type, multiple);
         Intent openDoc = buildChooserIntent(Intent.ACTION_OPEN_DOCUMENT, type, multiple);
+        if ("image/*".equals(type) && !multiple) {
+            Intent pick = new Intent(Intent.ACTION_PICK);
+            pick.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+            Intent chooser = Intent.createChooser(getContent, "选择图片");
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { pick });
+            if (startFileChooser(chooser)) return true;
+            if (startFileChooser(pick)) return true;
+        }
         // Android 10 系统文件选择器一旦带上 application/json 等 EXTRA_MIME_TYPES，
         // 会在还没画出文件列表时直接崩溃，startActivity 成功后回退逻辑走不到。
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
