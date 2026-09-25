@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.67</title>
+    <title>网页管理系统 v13.0.68</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -456,8 +456,8 @@
                 <span>工具箱</span><i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('toolsModal')"></i>
             </div>
             <div class="form-group">
-                <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkDuplicates()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
-                <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkLinks()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
+                <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openDuplicateCheckModal()"><i class="fas fa-clone"></i> 重复网页检测 (所有主页)</button>
+                <button class="btn primary" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openLinkCheckModal()"><i class="fas fa-stethoscope"></i> 链接有效性检测 (全站)</button>
                 <button class="btn primary" id="checkAllIconsBtn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="checkAllIcons()"><i class="fas fa-icons"></i> 一键识别所有图标 (全站)</button>
                 <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openLocalPageToolModal()"><i class="fas fa-file-code"></i> 处理本地网页</button>
             </div>
@@ -482,18 +482,23 @@
                 <div class="apk-only-title">APK专用</div>
                 <button class="btn primary" id="passwordManagerBtn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="openPasswordManager()"><i class="fas fa-key"></i> 密码管理</button>
                 <div class="form-group" style="margin-bottom:0;">
-                    <div style="font-weight:600; margin-bottom:8px; font-size:calc(14px * var(--text-scale, 1));">数据管理</div>
-                    <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="clearRuntimeCache()"><i class="fas fa-broom"></i> 清除缓存</button>
-                    <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">只清图片、预加载和网页加载缓存，书签网页和核心配置都保留。</div>
-                    <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmClearSiteData()"><i class="fas fa-eraser"></i> 清空数据</button>
-                    <div class="text-muted" style="margin:-4px 0 8px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">书签网页保留，只清打开网页本身带的站点数据。操作前会二次确认。</div>
-                    <div class="site-data-clear-types" data-site-clear-group="tools-apk">
-                        <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="localStorage" checked onchange="onSiteDataClearTypeChange(this)"> localStorage</label>
-                        <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="indexedDB" onchange="onSiteDataClearTypeChange(this)"> IndexedDB</label>
-                        <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="cookie" onchange="onSiteDataClearTypeChange(this)"> cookie</label>
+                    <div class="tools-data-header">
+                        <div style="font-weight:600; font-size:calc(14px * var(--text-scale, 1));">数据管理</div>
+                        <button type="button" id="toolsDataToggleBtn" class="tools-data-toggle" onclick="toggleToolsDataManage()" title="展开数据管理" aria-expanded="false"><i class="fas fa-chevron-down"></i></button>
                     </div>
-                    <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openSelectiveClearModal()"><i class="fas fa-filter"></i> 分级删除</button>
-                    <div class="text-muted" style="margin:0; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">勾选主页、分类或单个网页后，只清对应范围的本地站点数据，书签本身保留。</div>
+                    <div id="toolsDataManageBody" class="tools-data-body">
+                        <button class="btn" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="clearRuntimeCache()"><i class="fas fa-broom"></i> 清除缓存</button>
+                        <div class="text-muted" style="margin:-4px 0 12px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">只清图片、预加载和网页加载缓存，书签网页和核心配置都保留。</div>
+                        <button class="btn danger" style="width:100%; justify-content:center; margin-bottom:10px;" onclick="confirmClearSiteData()"><i class="fas fa-eraser"></i> 清空数据</button>
+                        <div class="text-muted" style="margin:-4px 0 8px; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">书签网页保留，只清打开网页本身带的站点数据。操作前会二次确认。</div>
+                        <div class="site-data-clear-types" data-site-clear-group="tools-apk">
+                            <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="localStorage" checked onchange="onSiteDataClearTypeChange(this)"> localStorage</label>
+                            <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="indexedDB" onchange="onSiteDataClearTypeChange(this)"> IndexedDB</label>
+                            <label class="site-clear-type-label"><input type="checkbox" class="site-clear-type" data-type="cookie" onchange="onSiteDataClearTypeChange(this)"> cookie</label>
+                        </div>
+                        <button class="btn warning" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openSelectiveClearModal()"><i class="fas fa-filter"></i> 分级删除</button>
+                        <div class="text-muted" style="margin:0; color:var(--text-secondary); font-size:calc(12px * var(--text-scale, 1));">勾选主页、分类或单个网页后，只清对应范围的本地站点数据，书签本身保留。</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -565,6 +570,17 @@
                 <button class="btn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
             </div>
             <div class="text-muted" style="margin-top:10px;font-size:12px;">全部替换模式：转中文使用 decodeURIComponent()，转原始使用 encodeURI()。</div>
+        </div>
+    </div>
+
+    <div id="checkStartModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header" style="font-size: calc(18px * var(--text-scale, 1)); font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="checkStartTitle">检测</span>
+                <i class="fas fa-times close-modal-btn" style="cursor: pointer;" onclick="closeModal('checkStartModal')"></i>
+            </div>
+            <p id="checkStartHint" class="text-muted" style="color:var(--text-secondary); font-size:calc(13px * var(--text-scale, 1)); margin:0 0 16px;"></p>
+            <button class="btn primary" style="width:100%; justify-content:center;" onclick="startPendingCheck()"><i class="fas fa-play"></i> 开始检测</button>
         </div>
     </div>
 

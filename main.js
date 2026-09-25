@@ -1793,7 +1793,50 @@ function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'text
 function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (!savedTheme) { themeConfig = createDefaultThemeConfig(); return; } try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...createDefaultThemeConfig(), darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...createDefaultThemeConfig(), ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); themeConfig = createDefaultThemeConfig(); } }
 function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
-function openToolsModal() { applySiteDataClearTypeChecks(); document.getElementById('toolsModal').classList.add('active'); }
+const TOOLS_DATA_COLLAPSED_KEY = 'toolsDataCollapsed';
+function openToolsModal() { applySiteDataClearTypeChecks(); applyToolsDataCollapsed(localStorage.getItem(TOOLS_DATA_COLLAPSED_KEY) !== 'false'); document.getElementById('toolsModal').classList.add('active'); }
+
+function applyToolsDataCollapsed(collapsed) {
+    const body = document.getElementById('toolsDataManageBody');
+    const btn = document.getElementById('toolsDataToggleBtn');
+    if (!body || !btn) return;
+    body.classList.toggle('expanded', !collapsed);
+    btn.innerHTML = collapsed ? '<i class="fas fa-chevron-down"></i>' : '<i class="fas fa-chevron-up"></i>';
+    btn.title = collapsed ? '展开数据管理' : '折叠数据管理';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function toggleToolsDataManage() {
+    const body = document.getElementById('toolsDataManageBody');
+    if (!body) return;
+    const collapsed = body.classList.contains('expanded');
+    applyToolsDataCollapsed(collapsed);
+    localStorage.setItem(TOOLS_DATA_COLLAPSED_KEY, collapsed ? 'true' : 'false');
+}
+
+function openDuplicateCheckModal() {
+    closeModal('toolsModal');
+    window.pendingCheckKind = 'duplicates';
+    document.getElementById('checkStartTitle').innerText = '重复网页检测';
+    document.getElementById('checkStartHint').innerText = '扫描所有主页里的网址，找出重复出现的网页。';
+    document.getElementById('checkStartModal').classList.add('active');
+}
+
+function openLinkCheckModal() {
+    closeModal('toolsModal');
+    window.pendingCheckKind = 'links';
+    document.getElementById('checkStartTitle').innerText = '链接有效性检测';
+    document.getElementById('checkStartHint').innerText = '检查全站网络链接是否可访问，本地文件会跳过。';
+    document.getElementById('checkStartModal').classList.add('active');
+}
+
+function startPendingCheck() {
+    const kind = window.pendingCheckKind;
+    closeModal('checkStartModal');
+    if (kind === 'duplicates') checkDuplicates();
+    else if (kind === 'links') checkLinks();
+}
+
 function openLocalPageToolModal() {
     closeModal('toolsModal');
     document.getElementById('localPageToolModal').classList.add('active');
