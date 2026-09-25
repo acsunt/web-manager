@@ -414,6 +414,9 @@ input[type="range"] { width: 100%; cursor: pointer; }
 .report-recognized-title::before { content: '\f02e'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: calc(11px * var(--text-scale, 1)); opacity: 0.7; }
 body.theme-neumorphism .icon-result-thumb { box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light); border: none; }
 
+.local-page-package { margin-top: 14px; }
+.local-page-package-label { margin-bottom: 8px; font-size: calc(14px * var(--text-scale, 1)); font-weight: 600; }
+.local-page-package-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .local-page-progress { margin-top: 16px; }
 .local-page-progress-track { height: 8px; border-radius: 999px; background: var(--input-bg); overflow: hidden; border: 1px solid var(--border-color); }
 .local-page-progress-bar { height: 100%; width: 0%; background: var(--primary-color); transition: width 0.15s linear; }

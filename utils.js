@@ -276,6 +276,27 @@ export function convertPageFileUrls(node, mode) {
     return changed;
 }
 
+export function replaceFileUrlPackage(text, packageName) {
+    const value = String(text ?? '');
+    const pkg = String(packageName ?? '').trim();
+    if (!pkg || !/^[a-zA-Z][\w.]*$/.test(pkg) || !isFileProtocolUrl(value)) return value;
+    return value.replace(/\/data\/[^/]+\/files\//g, () => `/data/${pkg}/files/`);
+}
+
+export function convertPageFilePackage(node, packageName) {
+    let changed = false;
+    const apply = (holder) => {
+        if (!holder || !isFileProtocolUrl(holder.url)) return;
+        const next = replaceFileUrlPackage(holder.url, packageName);
+        if (next === holder.url) return;
+        holder.url = next;
+        changed = true;
+    };
+    apply(node);
+    if (Array.isArray(node?.urls)) node.urls.forEach(apply);
+    return changed;
+}
+
 export function normalizeWebUrl(url = '') {
     const trimmed = url.trim();
     if (!trimmed || /^https?:\/\//i.test(trimmed) || isLocalUrl(trimmed)) return trimmed;

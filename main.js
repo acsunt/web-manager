@@ -18,7 +18,7 @@ import {
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
 import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
-import { collectFileProtocolPages, collectOpenablePages, convertPageFileUrls, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
+import { collectFileProtocolPages, collectOpenablePages, convertPageFilePackage, convertPageFileUrls, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
     ensureWorkspaceGroups,
@@ -1849,9 +1849,8 @@ function resetLocalPageProgress() {
 }
 
 function setLocalPageConvertBusy(busy) {
-    ['localPageDecodeBtn', 'localPageEncodeBtn'].forEach((id) => {
-        const btn = document.getElementById(id);
-        if (btn) btn.disabled = busy;
+    document.querySelectorAll('#localPageToolModal .local-page-convert-btn').forEach((btn) => {
+        btn.disabled = busy;
     });
 }
 
@@ -1861,7 +1860,7 @@ function openLocalPageToolModal() {
     document.getElementById('localPageToolModal').classList.add('active');
 }
 
-async function convertLocalPageText(mode) {
+async function convertLocalPageText(mode, packageName, label) {
     if (localPageConverting) return;
     const pages = collectFileProtocolPages(appData.workspaces);
     if (pages.length === 0) {
@@ -1880,7 +1879,10 @@ async function convertLocalPageText(mode) {
     let changed = 0;
     const batch = 40;
     for (let i = 0; i < pages.length; i++) {
-        if (convertPageFileUrls(pages[i], mode)) changed++;
+        const didChange = mode === 'package'
+            ? convertPageFilePackage(pages[i], packageName)
+            : convertPageFileUrls(pages[i], mode);
+        if (didChange) changed++;
         const done = i === pages.length - 1 || i % batch === batch - 1;
         if (!done) continue;
         const current = i + 1;
@@ -1894,7 +1896,7 @@ async function convertLocalPageText(mode) {
         renderTree();
     }
     if (text) text.textContent = '转换完成';
-    const action = mode === 'decode' ? '转中文' : '转原始';
+    const action = mode === 'decode' ? '转中文' : mode === 'encode' ? '转原始' : `转包名（${label || packageName}）`;
     showToast(changed > 0 ? `已${action} ${changed} 个本地网页` : '转换完成，没有需要改动的本地网页', 2000);
     localPageConverting = false;
     setLocalPageConvertBusy(false);

@@ -15,6 +15,8 @@ import {
   convertUriText,
   collectFileProtocolPages,
   convertPageFileUrls,
+  replaceFileUrlPackage,
+  convertPageFilePackage,
   isOpenableUrl,
   normalizeWebUrl,
   escapeHtml,
@@ -336,6 +338,31 @@ describe('处理 file:/// 本地网页', () => {
     expect(page.url).toBe('file:///C:/笔记.html');
     expect(page.urls[0].url).toBe('file:///C:/笔记.html');
     expect(skipped.url).toBe('https://example.com');
+  });
+
+  it('转包名只替换 data/ 和 files/ 之间的包名', () => {
+    const raw = 'file:///storage/emulated/0/Android/data/com.old.app/files/Download/笔记.html';
+    expect(replaceFileUrlPackage(raw, 'com.webmanager.app')).toBe(
+      'file:///storage/emulated/0/Android/data/com.webmanager.app/files/Download/笔记.html',
+    );
+    expect(replaceFileUrlPackage(raw, 'com.yjllq.kitp')).toContain('/data/com.yjllq.kitp/files/');
+    expect(replaceFileUrlPackage(raw, 'com.yjllq.kito')).toContain('/data/com.yjllq.kito/files/');
+    expect(replaceFileUrlPackage(raw, 'com.yjllq.chrome.beta')).toContain('/data/com.yjllq.chrome.beta/files/');
+    expect(replaceFileUrlPackage('https://example.com/data/com.old.app/files/a.html', 'com.webmanager.app'))
+      .toBe('https://example.com/data/com.old.app/files/a.html');
+    expect(replaceFileUrlPackage('file:///C:/notes/a.html', 'com.webmanager.app')).toBe('file:///C:/notes/a.html');
+  });
+
+  it('转包名会改网页及其备用地址', () => {
+    const page = {
+      type: 'page',
+      url: 'file:///storage/emulated/0/Android/data/com.old.app/files/a.html',
+      urls: [{ url: 'file:///storage/emulated/0/Android/data/com.old.app/files/b.html', name: '' }],
+    };
+    expect(convertPageFilePackage(page, 'com.yjllq.kito')).toBe(true);
+    expect(page.url).toContain('/data/com.yjllq.kito/files/');
+    expect(page.urls[0].url).toContain('/data/com.yjllq.kito/files/');
+    expect(convertPageFilePackage(page, 'com.yjllq.kito')).toBe(false);
   });
 });
 

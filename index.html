@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>网页管理系统 v13.0.70</title>
+    <title>网页管理系统 v13.0.71</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -562,10 +562,19 @@
                 <span>处理本地网页</span>
                 <i class="fas fa-times close-modal-btn" style="cursor:pointer;" onclick="closeModal('localPageToolModal')"></i>
             </div>
-            <p class="text-muted" style="color:var(--text-secondary); font-size:calc(13px * var(--text-scale, 1)); margin:0 0 16px;">转换本系统里全部以 file:/// 开头的本地网页。转中文使用 decodeURIComponent()，转原始使用 encodeURI()。</p>
+            <p class="text-muted" style="color:var(--text-secondary); font-size:calc(13px * var(--text-scale, 1)); margin:0 0 16px;">转换本系统里全部以 file:/// 开头的本地网页。转中文使用 decodeURIComponent()，转原始使用 encodeURI()。转包名只替换这些地址里 data/ 和 files/ 之间的包名，不改 APK 包名。</p>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <button class="btn primary" id="localPageDecodeBtn" onclick="convertLocalPageText('decode')"><i class="fas fa-language"></i> 转中文</button>
-                <button class="btn" id="localPageEncodeBtn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
+                <button class="btn primary local-page-convert-btn" id="localPageDecodeBtn" onclick="convertLocalPageText('decode')"><i class="fas fa-language"></i> 转中文</button>
+                <button class="btn local-page-convert-btn" id="localPageEncodeBtn" onclick="convertLocalPageText('encode')"><i class="fas fa-code"></i> 转原始</button>
+            </div>
+            <div class="local-page-package">
+                <div class="local-page-package-label">转包名</div>
+                <div class="local-page-package-actions">
+                    <button class="btn local-page-convert-btn" onclick="convertLocalPageText('package','com.yjllq.kitp','低版本可拓')">低版本可拓</button>
+                    <button class="btn local-page-convert-btn" onclick="convertLocalPageText('package','com.webmanager.app','apk')">apk</button>
+                    <button class="btn local-page-convert-btn" onclick="convertLocalPageText('package','com.yjllq.kito','可拓')">可拓</button>
+                    <button class="btn local-page-convert-btn" onclick="convertLocalPageText('package','com.yjllq.chrome.beta','红雨见')">红雨见</button>
+                </div>
             </div>
             <div id="localPageToolProgress" class="local-page-progress" style="display:none;">
                 <div class="local-page-progress-track">
