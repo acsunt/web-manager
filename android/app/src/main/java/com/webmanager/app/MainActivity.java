@@ -121,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Runnable sampleChromeRunnable = () -> samplePageColors(chromeWebView);
     private static final int SAMPLE_STRIP_PX = 8;
-    private static final long SAMPLE_THROTTLE_MS = 180;
+    private static final long SAMPLE_THROTTLE_MS = 900;
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final int DOWNLOAD_PERMISSION_REQUEST = 1002;
     private Runnable pendingDownload;
@@ -229,7 +229,7 @@ public class MainActivity extends AppCompatActivity {
         appWebView.getSettings().setSupportMultipleWindows(true);
         appWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
         appWebView.setFitsSystemWindows(false);
-        appWebView.setBackgroundColor(Color.TRANSPARENT);
+        appWebView.setBackgroundColor(Color.WHITE);
         appWebView.addJavascriptInterface(bridge, "Android");
         appWebView.setWebViewClient(new WebViewClient() {
             @Override
@@ -270,7 +270,6 @@ public class MainActivity extends AppCompatActivity {
         webView.setSaveEnabled(true);
         if (tabs != null) tabs.applyPageDarkSettings(webView);
         webView.addJavascriptInterface(new PageChromeBridge(webView), "WebManagerChrome");
-        webView.setOnScrollChangeListener((v, l, t, oldl, oldt) -> refreshPageChrome((WebView) v, false));
         webView.setWebViewClient(new PageWebViewClient());
         webView.setWebChromeClient(new PageChromeClient());
         webView.setDownloadListener(downloadListener(webView));
@@ -291,6 +290,11 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setTextZoom(100);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        settings.setOffscreenPreRaster(true);
+        try {
+            settings.setRendererPriorityPolicy(WebSettings.RENDERER_PRIORITY_IMPORTANT, false);
+        } catch (Throwable ignored) {
+        }
     }
 
     void applyThemeScale(boolean followSystem, boolean followPage, float textScale, float uiScale) {
@@ -1113,7 +1117,6 @@ public class MainActivity extends AppCompatActivity {
         if (browserBar != null) browserBar.setBackgroundColor(pageBottomColor);
         applySystemBarIcons(lightSystemBars);
         if (tabs != null) tabs.applyChromeColors(pageBottomColor);
-        if (tabs != null) tabs.injectPageSafeArea();
     }
 
     private int opaque(int color) {
@@ -1162,11 +1165,10 @@ public class MainActivity extends AppCompatActivity {
                         + "for(var i=0;i<nodes.length&&overflow.length<40;i++){var el=nodes[i];if(!el||el===document.documentElement||el===document.body)continue;"
                         + "if((el.scrollTop||0)>0||(el.scrollLeft||0)>0)overflow.push({i:i,x:el.scrollLeft||0,y:el.scrollTop||0});}"
                         + "WebManagerChrome.onViewState(JSON.stringify({x:window.scrollX||0,y:window.scrollY||0,overflow:overflow}));}catch(e){}}"
-                        + "var t,c;function on(){if(t)cancelAnimationFrame(t);t=requestAnimationFrame(ping);"
-                        + "if(c)return;c=setTimeout(function(){c=0;collect();},400);}"
-                        + "window.addEventListener('scroll',on,true);"
+                        + "var t,c;function on(){if(t)cancelAnimationFrame(t);t=requestAnimationFrame(ping);}"
+                        + "function settle(){if(c)clearTimeout(c);c=setTimeout(function(){c=0;collect();},700);}"
+                        + "window.addEventListener('scroll',settle,true);"
                         + "window.addEventListener('resize',on);"
-                        + "document.addEventListener('touchmove',on,{passive:true});"
                         + "collect();"
                         + "})();",
                 null

@@ -117,7 +117,15 @@ body.theme-glass .search-item { backdrop-filter: var(--backdrop-filter); -webkit
 .search-sub-match { font-size: calc(12px * var(--text-scale, 1)); color: var(--primary-color); background: rgba(0, 123, 255, 0.1); padding: 4px 8px; border-radius: 4px; margin-top: 4px; display: inline-block; width: 100%; }
 
 .btn { padding: calc(6px * var(--ui-scale, 1)) calc(12px * var(--ui-scale, 1)); cursor: pointer; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: calc(6px * var(--ui-scale, 1)); color: var(--text-secondary); font-size: calc(14px * var(--text-scale, 1)); display: inline-flex; align-items: center; gap: calc(5px * var(--ui-scale, 1)); transition: 0.2s; white-space: nowrap; }
-.toolbar .btn { background: var(--card-bg); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(var(--theme-base-rgb), 0.2); box-shadow: 0 2px 5px rgba(0,0,0,0.05); color: var(--text-color); font-weight: 500; text-shadow: none; flex-grow: 1; justify-content: center; }
+.toolbar .btn { background: var(--card-bg); border: 1px solid rgba(var(--theme-base-rgb), 0.2); box-shadow: 0 2px 5px rgba(0,0,0,0.05); color: var(--text-color); font-weight: 500; text-shadow: none; flex-grow: 1; justify-content: center; }
+body:not(.native-app) .toolbar .btn { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+body.native-app #web-bg-layer { filter: none !important; will-change: auto; }
+body.native-app #custom-layer-root { will-change: auto; }
+body.native-app.theme-glass .toolbar,
+body.native-app.theme-glass .search-item,
+body.native-app.theme-glass .category-block[data-level="0"],
+body.native-app.theme-glass .page-card,
+body.native-app.theme-glass .modal-content { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 body:not(.dark-mode) .toolbar .btn { color: #000 !important; font-weight: 600; }
 .toolbar .btn:hover { filter: brightness(0.95); transform: translateY(-1px); }
 body.dark-mode .toolbar .btn:hover { filter: brightness(1.2); }

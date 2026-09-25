@@ -119,7 +119,11 @@ describe('APK 版本号', () => {
     expect(activity).toContain('applyPageChromeColors(');
     expect(activity).toContain('browserBar.setBackgroundColor(pageBottomColor)');
     expect(activity).toContain('tabs.setAppDarkMode(!light)');
-    expect(activity).toContain('setOnScrollChangeListener');
+    expect(activity).not.toContain('setOnScrollChangeListener');
+    expect(activity).toContain('setOffscreenPreRaster(true)');
+    expect(activity).toContain('RENDERER_PRIORITY_IMPORTANT');
+    expect(activity).toContain('appWebView.setBackgroundColor(Color.WHITE)');
+    expect(activity).toContain('SAMPLE_THROTTLE_MS = 900');
     expect(activity).toContain('postVisualStateCallback');
     expect(activity).toContain('WebManagerChrome');
     expect(activity).toContain('browserBar.setPadding');
@@ -185,6 +189,9 @@ describe('APK 版本号', () => {
     expect(css).toContain('background: transparent !important; flex: 1 1 auto; width: 100%;');
     expect(css).toContain('.page-name-inner { min-width: 0; max-width: 100%; line-height: 1.2; }');
     expect(css).toContain('.page-name { padding: 3px 4px 1px; }');
+    expect(css).toContain('body.native-app #web-bg-layer { filter: none !important; will-change: auto; }');
+    expect(css).toContain('body.native-app.theme-glass .page-card');
+    expect(main).toContain("document.body.style.setProperty('--backdrop-filter', 'none')");
     expect(main).toContain("nameInner.className='page-name-inner'");
     expect(main).toContain('syncNativePageDarkMode(themeConfig)');
     expect(ui).toContain('window.Android?.setPageDarkMode');

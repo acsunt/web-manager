@@ -2067,7 +2067,9 @@ function applyThemeSettings() {
     let r, g, b; if (themeConfig.darkMode) { r = 30; g = 30; b = 30; } else { r = 252; g = 252; b = 252; } 
     const transVal = parseFloat(settings.contentTransparency || 0); const mainAlpha = 1 - (transVal / 100); const maskVal = parseFloat(settings.contentMask || 0); const maskAlpha = maskVal / 100; 
     root.style.setProperty('--theme-base-rgb', `${r}, ${g}, ${b}`); root.style.setProperty('--theme-bg-alpha', mainAlpha); root.style.setProperty('--text-mask-alpha', maskAlpha); 
-    if (currentTheme === 'glass') { if (transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); } else { const dynamicBlur = 12 * (1 - (transVal / 100)); document.body.style.setProperty('--backdrop-filter', `blur(${dynamicBlur}px)`); } } else { document.body.style.removeProperty('--backdrop-filter', 'none'); } 
+    const nativeApp = document.body.classList.contains('native-app');
+    if (nativeApp || currentTheme !== 'glass' || transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); }
+    else { const dynamicBlur = 12 * (1 - (transVal / 100)); document.body.style.setProperty('--backdrop-filter', `blur(${dynamicBlur}px)`); } 
     if (transVal > 0) { const rgba = `rgba(${r}, ${g}, ${b}, ${mainAlpha})`; document.body.style.setProperty('--card-bg', rgba); document.body.style.setProperty('--root-cat-bg', rgba); document.body.style.setProperty('--root-header-bg', rgba); document.body.style.setProperty('--sub-cat-header-bg', rgba); document.body.style.setProperty('--input-bg', rgba); } else { document.body.style.removeProperty('--card-bg'); document.body.style.removeProperty('--root-cat-bg'); document.body.style.removeProperty('--root-header-bg'); document.body.style.removeProperty('--sub-cat-header-bg'); document.body.style.removeProperty('--input-bg'); } 
     syncNativeSystemBars(!!themeConfig.darkMode);
     syncNativePageDarkMode(themeConfig);
