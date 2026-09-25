@@ -371,7 +371,7 @@ function init() {
         applyIconMode();
         applyColumnMode();
 
-        loadThemeConfig(); applyThemeSettings(); initToolbar();
+        loadThemeConfig(); applyThemeSettings(); initToolbar(); initSliderDistractionFree();
         applySiteDataClearTypeChecks();
         if (isNativeApp()) document.body.classList.add('native-app');
         renderTree(); document.body.classList.add('hide-urls');
@@ -1789,7 +1789,49 @@ function wsToggleSelectAll(checkbox) { document.querySelectorAll('.ws-checkbox')
 function wsBatchChangeGroup() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先勾选需要操作的主页'); openWsGroupSelectModal('', true); }
 function wsBatchDelete() { const checked = document.querySelectorAll('.ws-checkbox:checked'); if (checked.length === 0) return alert('请先选择要删除主页'); if (confirm(`确定删除这 ${checked.length} 个主页吗？`)) { const idsToDelete = Array.from(checked).map(cb => cb.value); appData = removeWorkspacesByIds(appData, idsToDelete); updateDataPointer(); save(); renderTree(); renderWorkspaceList(); document.getElementById('wsSelectAllBox').checked = false; showToast("批量删除成功"); } }
 
-function initSliderDistractionFree() { const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange']; sliders.forEach(id => { const el = document.getElementById(id); if(el) { const startAdjust = () => { document.body.classList.add('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.add('adjust-active'); }; const endAdjust = () => { document.body.classList.remove('is-adjusting'); const container = el.closest('.adjust-container'); if(container) container.classList.remove('adjust-active'); }; el.addEventListener('mousedown', startAdjust); el.addEventListener('touchstart', startAdjust, {passive: true}); el.addEventListener('mouseup', endAdjust); el.addEventListener('touchend', endAdjust); } }); }
+function endThemeAdjust() {
+    if (!document.body.classList.contains('is-adjusting')) return;
+    document.body.classList.remove('is-adjusting');
+    document.querySelectorAll('.adjust-active').forEach(node => node.classList.remove('adjust-active'));
+    document.querySelectorAll('.adjust-live').forEach(node => {
+        node.classList.remove('adjust-live');
+        node.style.position = '';
+        node.style.left = '';
+        node.style.top = '';
+        node.style.width = '';
+        node.style.zIndex = '';
+        node.style.margin = '';
+    });
+    applyThemeSettings();
+}
+function initSliderDistractionFree() {
+    const sliders = ['themeAlphaRange', 'textMaskRange', 'bgBlurRange', 'bgOpacityRange', 'bgOverlayRange', 'textScaleRange', 'uiScaleRange'];
+    sliders.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const group = el.closest('.range-group');
+        const container = el.closest('.adjust-container');
+        el.addEventListener('pointerdown', () => {
+            const rect = group ? group.getBoundingClientRect() : null;
+            document.body.classList.add('is-adjusting');
+            if (container) container.classList.add('adjust-active');
+            if (group && rect) {
+                group.classList.add('adjust-live');
+                group.style.position = 'fixed';
+                group.style.left = rect.left + 'px';
+                group.style.top = rect.top + 'px';
+                group.style.width = rect.width + 'px';
+                group.style.zIndex = '3000';
+                group.style.margin = '0';
+            }
+        });
+        el.addEventListener('pointerup', endThemeAdjust);
+        el.addEventListener('pointercancel', endThemeAdjust);
+        el.addEventListener('blur', endThemeAdjust);
+    });
+    window.addEventListener('pointerup', endThemeAdjust);
+    window.addEventListener('pointercancel', endThemeAdjust);
+}
 function loadThemeConfig() { const savedTheme = localStorage.getItem('webManagerThemeConfig'); if (!savedTheme) { themeConfig = createDefaultThemeConfig(); return; } try { const parsed = JSON.parse(savedTheme); if (parsed.day === undefined) { themeConfig = { ...createDefaultThemeConfig(), darkMode: parsed.darkMode || false, customCss: parsed.customCss || '', presets: parsed.presets || {}, day: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: parsed.bgBlur || 0, bgOpacity: parsed.bgOpacity !== undefined ? parsed.bgOpacity : 1, bgOverlay: parsed.bgOverlay || 0, contentTransparency: parsed.contentTransparency || 0, contentMask: parsed.contentMask || 0 }, night: { theme: parsed.theme || 'minimal', bgType: parsed.bgType || 'none', bgValue: parsed.bgValue || '', bgBlur: 0, bgOpacity: 1, bgOverlay: 0, contentTransparency: 0, contentMask: 0 } }; saveThemeConfig(); } else { themeConfig = { ...createDefaultThemeConfig(), ...parsed }; if (parsed.bgValue && (!themeConfig.day.bgValue)) { themeConfig.day.bgType = parsed.bgType || 'none'; themeConfig.day.bgValue = parsed.bgValue; themeConfig.night.bgType = parsed.bgType || 'none'; themeConfig.night.bgValue = parsed.bgValue; delete themeConfig.bgType; delete themeConfig.bgValue; } if (themeConfig.lockedImg === undefined) { themeConfig.lockedImg = themeConfig.locked !== undefined ? themeConfig.locked : true; themeConfig.lockedContent = themeConfig.locked !== undefined ? themeConfig.locked : true; } if (!themeConfig.day.theme) themeConfig.day.theme = themeConfig.theme || 'minimal'; if (!themeConfig.night.theme) themeConfig.night.theme = themeConfig.theme || 'minimal'; } } catch(e) { console.error(e); themeConfig = createDefaultThemeConfig(); } }
 function cleanDuplicates() { if (!data) return; if (cleanDuplicateIds(data)) save(); }
 function toggleToolbar() { const toolbar = document.getElementById('mainToolbar'); const btn = document.getElementById('toolbarToggleBtn'); toolbar.classList.toggle('collapsed'); const isCollapsed = toolbar.classList.contains('collapsed'); btn.innerHTML = isCollapsed ? '<i class="fas fa-angle-down"></i> 展开工具栏' : '<i class="fas fa-angle-up"></i> 折叠'; localStorage.setItem('toolbarCollapsed', isCollapsed); }
@@ -1910,8 +1952,15 @@ function exportThemeSettings() { const configToExport = JSON.parse(JSON.stringif
 function openThemeModal() { document.getElementById('darkModeToggle').checked = themeConfig.darkMode; const follow = document.getElementById('pageFollowDarkModeCheck'); if (follow) follow.checked = !!themeConfig.pageFollowDarkMode; const scaleFollow = document.getElementById('pageFollowScaleCheck'); if (scaleFollow) scaleFollow.checked = themeConfig.pageFollowScale !== false; const input = document.getElementById('customCssInput'); if(!input.value.trim()) input.value = themeConfig.customCss || DEFAULT_CSS_TEMPLATE; updateBgPreviewUI(); updateSliderValuesFromConfig(); updateBgAdjustment(); updateLockUI(); document.getElementById('themeModal').classList.add('active'); }
 function updateSliderValuesFromConfig() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; document.getElementById('bgBlurRange').value = settings.bgBlur; document.getElementById('bgOpacityRange').value = settings.bgOpacity; document.getElementById('bgOverlayRange').value = settings.bgOverlay; document.getElementById('themeAlphaRange').value = settings.contentTransparency; document.getElementById('textMaskRange').value = settings.contentMask; if (themeConfig.systemTextSize) { document.getElementById('systemTextScaleCheck').checked = true; document.getElementById('textScaleRange').disabled = true; document.getElementById('uiScaleRange').disabled = true; document.getElementById('textScaleRange').value = 100; document.getElementById('uiScaleRange').value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; } else { document.getElementById('systemTextScaleCheck').checked = false; document.getElementById('textScaleRange').disabled = false; document.getElementById('uiScaleRange').disabled = false; const textVal = Math.round((themeConfig.textScale || 1) * 100); document.getElementById('textScaleRange').value = textVal; document.getElementById('textScaleDisplay').innerText = textVal + '%'; const uiVal = Math.round((themeConfig.uiScale || 1) * 100); document.getElementById('uiScaleRange').value = uiVal; document.getElementById('uiScaleDisplay').innerText = uiVal + '%'; } const hint = document.getElementById('themeModeHint'); hint.innerText = themeConfig.darkMode ? '当前配置：夜间模式风格' : '当前配置：日间模式风格'; hint.style.color = themeConfig.darkMode ? '#4dabf7' : '#e67700'; document.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active')); const currentTheme = settings.theme || 'minimal'; const activeEl = document.getElementById('theme-' + currentTheme); if(activeEl) activeEl.classList.add('active'); }
 function toggleSystemTextScale() { const isChecked = document.getElementById('systemTextScaleCheck').checked; const textRange = document.getElementById('textScaleRange'); const uiRange = document.getElementById('uiScaleRange'); if (isChecked) { textRange.disabled = true; uiRange.disabled = true; textRange.value = 100; uiRange.value = 100; document.getElementById('textScaleDisplay').innerText = '100%'; document.getElementById('uiScaleDisplay').innerText = '100%'; themeConfig.textScale = 1; themeConfig.uiScale = 1; themeConfig.systemTextSize = true; } else { textRange.disabled = false; uiRange.disabled = false; themeConfig.systemTextSize = false; } applyThemeSettings(); saveThemeConfig(); }
-function updateTextScale() { const range = document.getElementById('textScaleRange'); const val = range.value; document.getElementById('textScaleDisplay').innerText = val + '%'; themeConfig.textScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('uiScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
-function updateUiScale() { const range = document.getElementById('uiScaleRange'); const val = range.value; document.getElementById('uiScaleDisplay').innerText = val + '%'; themeConfig.uiScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('textScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function updateTextScale() { const range = document.getElementById('textScaleRange'); const val = range.value; document.getElementById('textScaleDisplay').innerText = val + '%'; themeConfig.textScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('uiScaleRange').disabled = false; if (document.body.classList.contains('is-adjusting')) applyLiveScale(); else applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function updateUiScale() { const range = document.getElementById('uiScaleRange'); const val = range.value; document.getElementById('uiScaleDisplay').innerText = val + '%'; themeConfig.uiScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('textScaleRange').disabled = false; if (document.body.classList.contains('is-adjusting')) applyLiveScale(); else applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function applyLiveScale() {
+    const root = document.documentElement;
+    const textScale = themeConfig.systemTextSize ? 1 : (themeConfig.textScale || 1);
+    const uiScale = themeConfig.systemTextSize ? 1 : (themeConfig.uiScale || 1);
+    root.style.setProperty('--text-scale', textScale);
+    root.style.setProperty('--ui-scale', uiScale);
+}
 
 function editThemeRange(rangeId) {
     const range = document.getElementById(rangeId);
@@ -1982,7 +2031,40 @@ function importThemeSettings(input) {
 }
 
 function updateBgPreviewUI() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; const previewImg = document.getElementById('bgPreviewImage'); const previewText = document.querySelector('.bg-preview-text'); const urlInput = document.getElementById('bgUrlInput'); if (settings.bgType === 'none' || !settings.bgValue) { previewImg.style.backgroundImage = 'none'; previewText.style.display = 'block'; urlInput.value = ''; } else { previewImg.style.backgroundImage = `url("${settings.bgValue}")`; previewText.style.display = 'none'; if (settings.bgType === 'url') urlInput.value = settings.bgValue; else urlInput.value = ''; } }
-function updateBgAdjustment() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; settings.bgBlur = document.getElementById('bgBlurRange').value; settings.bgOpacity = document.getElementById('bgOpacityRange').value; settings.bgOverlay = document.getElementById('bgOverlayRange').value; settings.contentTransparency = document.getElementById('themeAlphaRange').value; settings.contentMask = document.getElementById('textMaskRange').value; document.getElementById('blurValDisplay').innerText = settings.bgBlur + 'px'; document.getElementById('opacityValDisplay').innerText = Math.round(settings.bgOpacity * 100) + '%'; document.getElementById('overlayValDisplay').innerText = Math.round(settings.bgOverlay * 100) + '%'; document.getElementById('themeAlphaDisplay').innerText = settings.contentTransparency + '%'; document.getElementById('textMaskDisplay').innerText = settings.contentMask + '%'; applyThemeSettings(); const previewImg = document.getElementById('bgPreviewImage'); const previewOverlay = document.getElementById('bgPreviewOverlay'); if (previewImg) { previewImg.style.filter = `blur(${settings.bgBlur}px)`; previewImg.style.opacity = settings.bgOpacity; } if (previewOverlay) { const overlayBaseColor = getComputedStyle(document.body).getPropertyValue('--bg-overlay-color').trim(); previewOverlay.style.backgroundColor = `rgba(${overlayBaseColor}, ${settings.bgOverlay})`; } if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function updateBgAdjustment() { const mode = themeConfig.darkMode ? 'night' : 'day'; const settings = themeConfig[mode]; settings.bgBlur = document.getElementById('bgBlurRange').value; settings.bgOpacity = document.getElementById('bgOpacityRange').value; settings.bgOverlay = document.getElementById('bgOverlayRange').value; settings.contentTransparency = document.getElementById('themeAlphaRange').value; settings.contentMask = document.getElementById('textMaskRange').value; document.getElementById('blurValDisplay').innerText = settings.bgBlur + 'px'; document.getElementById('opacityValDisplay').innerText = Math.round(settings.bgOpacity * 100) + '%'; document.getElementById('overlayValDisplay').innerText = Math.round(settings.bgOverlay * 100) + '%'; document.getElementById('themeAlphaDisplay').innerText = settings.contentTransparency + '%'; document.getElementById('textMaskDisplay').innerText = settings.contentMask + '%'; if (document.body.classList.contains('is-adjusting')) applyLiveBg(settings); else applyThemeSettings(); const previewImg = document.getElementById('bgPreviewImage'); const previewOverlay = document.getElementById('bgPreviewOverlay'); if (previewImg) { previewImg.style.filter = `blur(${settings.bgBlur}px)`; previewImg.style.opacity = settings.bgOpacity; } if (previewOverlay) { const overlayBaseColor = getComputedStyle(document.body).getPropertyValue('--bg-overlay-color').trim(); previewOverlay.style.backgroundColor = `rgba(${overlayBaseColor}, ${settings.bgOverlay})`; } if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
+function applyLiveBg(settings) {
+    const root = document.documentElement;
+    root.style.setProperty('--bg-blur', settings.bgBlur + 'px');
+    root.style.setProperty('--bg-img-opacity', settings.bgOpacity);
+    root.style.setProperty('--bg-overlay-alpha', settings.bgOverlay);
+    root.style.setProperty('--text-mask-alpha', parseFloat(settings.contentMask || 0) / 100);
+    const transVal = parseFloat(settings.contentTransparency || 0);
+    const mainAlpha = 1 - (transVal / 100);
+    root.style.setProperty('--theme-bg-alpha', mainAlpha);
+    let r = 252, g = 252, b = 252;
+    if (themeConfig.darkMode) { r = 30; g = 30; b = 30; }
+    const body = document.body;
+    if (transVal > 0) {
+        const rgba = `rgba(${r}, ${g}, ${b}, ${mainAlpha})`;
+        body.style.setProperty('--card-bg', rgba);
+        body.style.setProperty('--root-cat-bg', rgba);
+        body.style.setProperty('--root-header-bg', rgba);
+        body.style.setProperty('--sub-cat-header-bg', rgba);
+        body.style.setProperty('--input-bg', rgba);
+    } else {
+        body.style.removeProperty('--card-bg');
+        body.style.removeProperty('--root-cat-bg');
+        body.style.removeProperty('--root-header-bg');
+        body.style.removeProperty('--sub-cat-header-bg');
+        body.style.removeProperty('--input-bg');
+    }
+    const currentTheme = settings.theme || 'minimal';
+    if (currentTheme === 'glass' && transVal < 100) {
+        body.style.setProperty('--backdrop-filter', `blur(${12 * (1 - transVal / 100)}px)`);
+    } else {
+        body.style.setProperty('--backdrop-filter', 'none');
+    }
+}
 function resetBgParams() { const mode = themeConfig.darkMode ? 'night' : 'day'; const currentTheme = themeConfig[mode].theme; themeConfig[mode] = { ...DEFAULT_THEME_CONFIG[mode], theme: currentTheme }; updateSliderValuesFromConfig(); updateBgAdjustment(); updateBgPreviewUI(); }
 
 async function copyCss() {
@@ -2067,8 +2149,7 @@ function applyThemeSettings() {
     let r, g, b; if (themeConfig.darkMode) { r = 30; g = 30; b = 30; } else { r = 252; g = 252; b = 252; } 
     const transVal = parseFloat(settings.contentTransparency || 0); const mainAlpha = 1 - (transVal / 100); const maskVal = parseFloat(settings.contentMask || 0); const maskAlpha = maskVal / 100; 
     root.style.setProperty('--theme-base-rgb', `${r}, ${g}, ${b}`); root.style.setProperty('--theme-bg-alpha', mainAlpha); root.style.setProperty('--text-mask-alpha', maskAlpha); 
-    const nativeApp = document.body.classList.contains('native-app');
-    if (nativeApp || currentTheme !== 'glass' || transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); }
+    if (currentTheme !== 'glass' || transVal >= 100) { document.body.style.setProperty('--backdrop-filter', 'none'); }
     else { const dynamicBlur = 12 * (1 - (transVal / 100)); document.body.style.setProperty('--backdrop-filter', `blur(${dynamicBlur}px)`); } 
     if (transVal > 0) { const rgba = `rgba(${r}, ${g}, ${b}, ${mainAlpha})`; document.body.style.setProperty('--card-bg', rgba); document.body.style.setProperty('--root-cat-bg', rgba); document.body.style.setProperty('--root-header-bg', rgba); document.body.style.setProperty('--sub-cat-header-bg', rgba); document.body.style.setProperty('--input-bg', rgba); } else { document.body.style.removeProperty('--card-bg'); document.body.style.removeProperty('--root-cat-bg'); document.body.style.removeProperty('--root-header-bg'); document.body.style.removeProperty('--sub-cat-header-bg'); document.body.style.removeProperty('--input-bg'); } 
     syncNativeSystemBars(!!themeConfig.darkMode);
@@ -2079,6 +2160,18 @@ function applyThemeSettings() {
 
 function saveThemeConfig() { try { localStorage.setItem('webManagerThemeConfig', JSON.stringify(themeConfig)); } catch (e) { if (e.name === 'QuotaExceededError') alert('主题保存失败：存储空间不足。请尽量使用图片链接(URL)代替本地上传。'); } }
 function handleBgUpload(input) { if (input.files && input.files[0]) { const file = input.files[0]; const reader = new FileReader(); reader.onload = function(e) { openCropperModal(e.target.result); input.value = ''; }; reader.readAsDataURL(file); } }
+function pickThemeBgFromGallery() {
+    if (typeof window.Android?.pickGalleryImage !== 'function') {
+        document.getElementById('bgUploadInput').click();
+        return;
+    }
+    try { window.Android.pickGalleryImage(); }
+    catch (e) { document.getElementById('bgUploadInput').click(); }
+}
+function receiveGalleryImage(dataUrl) {
+    if (!dataUrl) return;
+    openCropperModal(dataUrl);
+}
 function openCropperModal(imageSrc) { const image = document.getElementById('cropperImage'); image.src = imageSrc; document.getElementById('cropperModal').classList.add('active'); if (cropper) cropper.destroy(); cropper = new Cropper(image, { viewMode: 1, dragMode: 'move', autoCropArea: 1, restore: false, guides: true, center: true, highlight: false, cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false, aspectRatio: window.innerWidth / window.innerHeight, }); }
 function confirmCrop() { if (!cropper) return; const canvas = cropper.getCroppedCanvas({ maxWidth: 1280, maxHeight: 1280, imageSmoothingQuality: 'medium' }); const base64 = canvas.toDataURL('image/jpeg', 0.5); const mode = themeConfig.darkMode ? 'night' : 'day'; themeConfig[mode].bgType = 'image'; themeConfig[mode].bgValue = base64; applyThemeSettings(); saveThemeConfig(); updateBgPreviewUI(); updateBgAdjustment(); closeModal('cropperModal'); }
 function applyBgUrl() { const url = document.getElementById('bgUrlInput').value.trim(); if (url) { const mode = themeConfig.darkMode ? 'night' : 'day'; themeConfig[mode].bgType = 'url'; themeConfig[mode].bgValue = url; applyThemeSettings(); saveThemeConfig(); updateBgPreviewUI(); updateBgAdjustment(); } }
@@ -3840,6 +3933,7 @@ const inlineHandlers = {
     toggleThemeLock,
     updateBgAdjustment,
     handleBgUpload,
+    receiveGalleryImage,
     clearBackground,
     applyBgUrl,
     resetBgParams,

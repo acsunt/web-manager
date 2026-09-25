@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
@@ -123,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int SAMPLE_STRIP_PX = 8;
     private static final long SAMPLE_THROTTLE_MS = 900;
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int GALLERY_PICK_REQUEST = 1003;
     private static final int DOWNLOAD_PERMISSION_REQUEST = 1002;
     private Runnable pendingDownload;
     private static final String THEME_PREFS = "theme_scale";
@@ -1700,6 +1702,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == GALLERY_PICK_REQUEST) {
+            deliverGalleryImage(resultCode, data);
+            return;
+        }
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
         Uri[] result = parseFileChooserResult(resultCode, data);
         try {
@@ -1707,6 +1713,70 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
         filePathCallback = null;
+    }
+
+    void pickGalleryImage() {
+        runOnUiThread(() -> {
+            Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            pick.setType("image/*");
+            try {
+                startActivityForResult(pick, GALLERY_PICK_REQUEST);
+            } catch (Exception e) {
+                Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
+                getContent.addCategory(Intent.CATEGORY_OPENABLE);
+                getContent.setType("image/*");
+                try {
+                    startActivityForResult(Intent.createChooser(getContent, "从图库选择"), GALLERY_PICK_REQUEST);
+                } catch (Exception ignored) {
+                    Toast.makeText(this, "无法打开图库", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void deliverGalleryImage(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null || data.getData() == null || appWebView == null) return;
+        Uri uri = data.getData();
+        new Thread(() -> {
+            String dataUrl = readImageDataUrl(uri);
+            if (dataUrl == null) {
+                runOnUiThread(() -> Toast.makeText(this, "无法读取图片", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            String js = "if(typeof receiveGalleryImage==='function')receiveGalleryImage("
+                    + JSONObject.quote(dataUrl) + ");";
+            runOnUiThread(() -> appWebView.evaluateJavascript(js, null));
+        }).start();
+    }
+
+    private String readImageDataUrl(Uri uri) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) return null;
+            BitmapFactory.decodeStream(in, null, bounds);
+        } catch (Exception e) {
+            return null;
+        }
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = gallerySampleSize(bounds.outWidth, bounds.outHeight, 1600);
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) return null;
+            Bitmap bitmap = BitmapFactory.decodeStream(in, null, opts);
+            if (bitmap == null) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out);
+            bitmap.recycle();
+            return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static int gallerySampleSize(int width, int height, int maxEdge) {
+        int size = 1;
+        while (width / size > maxEdge || height / size > maxEdge) size *= 2;
+        return size;
     }
 
     private Uri[] parseFileChooserResult(int resultCode, Intent data) {

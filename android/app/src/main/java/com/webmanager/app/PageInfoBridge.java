@@ -161,6 +161,11 @@ final class PageInfoBridge {
     }
 
     @JavascriptInterface
+    public void pickGalleryImage() {
+        activity.pickGalleryImage();
+    }
+
+    @JavascriptInterface
     public String consumeImportFile() {
         return activity.consumeImportFile();
     }
