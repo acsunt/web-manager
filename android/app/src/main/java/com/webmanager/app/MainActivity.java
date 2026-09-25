@@ -291,9 +291,13 @@ public class MainActivity extends AppCompatActivity {
         settings.setTextZoom(100);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         settings.setOffscreenPreRaster(true);
-        try {
-            settings.setRendererPriorityPolicy(WebSettings.RENDERER_PRIORITY_IMPORTANT, false);
-        } catch (Throwable ignored) {
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                settings.getClass()
+                        .getMethod("setRendererPriorityPolicy", int.class, boolean.class)
+                        .invoke(settings, 2, false);
+            } catch (Throwable ignored) {
+            }
         }
     }
 

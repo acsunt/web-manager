@@ -121,7 +121,8 @@ describe('APK 版本号', () => {
     expect(activity).toContain('tabs.setAppDarkMode(!light)');
     expect(activity).not.toContain('setOnScrollChangeListener');
     expect(activity).toContain('setOffscreenPreRaster(true)');
-    expect(activity).toContain('RENDERER_PRIORITY_IMPORTANT');
+    expect(activity).toContain('setRendererPriorityPolicy');
+    expect(activity).toContain('.invoke(settings, 2, false)');
     expect(activity).toContain('appWebView.setBackgroundColor(Color.WHITE)');
     expect(activity).toContain('SAMPLE_THROTTLE_MS = 900');
     expect(activity).toContain('postVisualStateCallback');
