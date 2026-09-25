@@ -491,6 +491,8 @@ describe('APK 版本号', () => {
     expect(tabs).toContain('activity.pageDownloadScript()');
     expect(tabs).toContain('activity.injectPageDownloadHook(view)');
     expect(tabs).toContain('promptOpenUrl()');
+    expect(tabs).toContain('styleOpenUrlInput(input)');
+    expect(tabs).toContain('input.setTextColor(sheetText())');
     expect(tabs).not.toContain('R.id.downloadBtn');
     expect(tabs).not.toContain('activity.showDownloadManager()');
     const layout = readFileSync(join(rootDir, 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_main.xml'), 'utf8');

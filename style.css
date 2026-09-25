@@ -378,6 +378,8 @@ body.theme-neumorphism .form-control { border: none; box-shadow: inset 2px 2px 5
 
 .range-group { width: 100%; margin-bottom: 10px; }
 .range-header { display: flex; justify-content: space-between; font-size: calc(13px * var(--text-scale, 1)); margin-bottom: 6px; color: var(--text-color); }
+.range-value { cursor: pointer; color: var(--primary-color); min-width: 3.2em; text-align: right; }
+.range-value:hover { text-decoration: underline; }
 input[type="range"] { width: 100%; cursor: pointer; }
 
 .dropdown-list { background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); }

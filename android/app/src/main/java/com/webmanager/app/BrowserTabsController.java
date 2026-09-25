@@ -3051,13 +3051,18 @@ final class BrowserTabsController {
         EditText input = new EditText(activity);
         input.setHint("example.com 或 https://...");
         input.setSingleLine(true);
-        int pad = dp(16);
-        input.setPadding(pad, pad, pad, pad);
-        new AlertDialog.Builder(activity, alertTheme())
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        int fieldPad = dp(12);
+        input.setPadding(fieldPad, fieldPad, fieldPad, fieldPad);
+        FrameLayout wrap = new FrameLayout(activity);
+        int pad = dp(20);
+        wrap.setPadding(pad, pad / 2, pad, 0);
+        wrap.addView(input, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        AlertDialog dialog = new AlertDialog.Builder(activity, alertTheme())
                 .setTitle("打开网址")
-                .setView(input)
+                .setView(wrap)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("打开", (dialog, which) -> {
+                .setPositiveButton("打开", (shown, which) -> {
                     String raw = input.getText() == null ? "" : input.getText().toString().trim();
                     if (raw.isEmpty()) {
                         toast("请输入网址");
@@ -3070,7 +3075,15 @@ final class BrowserTabsController {
                     }
                     if (!openUrl(url, "")) toast("打开失败");
                 })
-                .show();
+                .create();
+        dialog.setOnShowListener(shown -> styleOpenUrlInput(input));
+        styleOpenUrlInput(input);
+        dialog.show();
+    }
+
+    private void styleOpenUrlInput(EditText input) {
+        stylePromptInput(input);
+        input.setBackground(roundedSurface(sheetInput(), 10f));
     }
 
     private String canonicalUrl(String url) {

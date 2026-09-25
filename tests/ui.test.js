@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, currentThemeScale, defaultThemeScale, installNativeDialogs, onSelectiveClearCheckChange, registerInlineHandlers, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from '../ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, currentThemeScale, defaultThemeScale, installNativeDialogs, onSelectiveClearCheckChange, parseThemeRangeValue, registerInlineHandlers, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from '../ui.js';
 
 describe('collectInlineHandlerNames', () => {
   it('能从一段 HTML 抽出 onclick 函数名', () => {
@@ -159,6 +159,18 @@ describe('defaultThemeScale', () => {
   it('自定义缩放会限制在滑块范围内', () => {
     expect(currentThemeScale({ systemTextSize: false, textScale: 4, uiScale: 0.2 }))
       .toEqual({ systemTextSize: false, pageFollowScale: true, textScale: 3, uiScale: 0.5 });
+  });
+});
+
+describe('parseThemeRangeValue', () => {
+  it('把填写的数字限制在提示的范围内', () => {
+    expect(parseThemeRangeValue('150%', 40, 300, 1)).toBe(150);
+    expect(parseThemeRangeValue('10', 40, 300, 1)).toBe(40);
+    expect(parseThemeRangeValue('500', 40, 300, 1)).toBe(300);
+    expect(parseThemeRangeValue('12px', 0, 20, 1)).toBe(12);
+    expect(parseThemeRangeValue('80', 0, 100, 0.01)).toBeCloseTo(0.8);
+    expect(parseThemeRangeValue('abc', 0, 100, 1)).toBe(null);
+    expect(parseThemeRangeValue('  ', 0, 100, 1)).toBe(null);
   });
 });
 

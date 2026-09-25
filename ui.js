@@ -139,6 +139,16 @@ function clampThemeScale(value, min, max, fallback) {
     return Math.min(max, Math.max(min, n));
 }
 
+export function parseThemeRangeValue(raw, min, max, scale = 1) {
+    if (raw == null) return null;
+    const text = String(raw).trim().replace(/(px|%)$/i, '').trim();
+    if (!text) return null;
+    const n = Number(text);
+    if (!Number.isFinite(n)) return null;
+    const clamped = Math.min(max, Math.max(min, Math.round(n)));
+    return clamped * scale;
+}
+
 export function syncNativeThemeScale(config) {
     if (typeof window === 'undefined' || typeof window.Android?.setThemeScale !== 'function') return;
     const scale = currentThemeScale(config);

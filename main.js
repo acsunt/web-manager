@@ -17,7 +17,7 @@ import {
     reorderWithinPinZone,
 } from './tree.js';
 import { cancelPasswordDraft, deleteSelectedPasswords, exportPasswordsFile, importPasswordsFromFile, openPasswordManager, savePasswordDraft, togglePasswordSelectAll, togglePasswordSelectMode } from './password-manager.js';
-import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
+import { applySafeAreaInsets, collectInlineHandlerNames, copyTextToClipboard, defaultThemeScale, downloadBlob, installNativeDialogs, isNativeApp, onSelectiveClearCheckChange, parseThemeRangeValue, registerInlineHandlers, setSelectiveClearChecked, showToast, syncNativePageDarkMode, syncNativeSystemBars, syncNativeThemeScale } from './ui.js';
 import { collectFileProtocolPages, collectOpenablePages, convertPageFilePackage, convertPageFileUrls, countLocalAndWebUrls, countPages, countTotalPages, escapeHtml, htmlFileTitle, isHtmlFile, looksLikeBookmarkHtml, HIDE_ICONS_STORAGE_KEY, normalizeUrls, parseBookmarkHtml, parseHideIconsPref, parseSearchHistory, rememberSearchQuery, resolveColumnModes, sanitizeData, SEARCH_HISTORY_KEY, stripIconFieldsFromTree, stripRedundantUrlFromTree } from './utils.js';
 import {
     createDefaultAppData as createDefaultAppDataInWorkspace,
@@ -1913,6 +1913,34 @@ function toggleSystemTextScale() { const isChecked = document.getElementById('sy
 function updateTextScale() { const range = document.getElementById('textScaleRange'); const val = range.value; document.getElementById('textScaleDisplay').innerText = val + '%'; themeConfig.textScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('uiScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
 function updateUiScale() { const range = document.getElementById('uiScaleRange'); const val = range.value; document.getElementById('uiScaleDisplay').innerText = val + '%'; themeConfig.uiScale = val / 100; document.getElementById('systemTextScaleCheck').checked = false; themeConfig.systemTextSize = false; document.getElementById('textScaleRange').disabled = false; applyThemeSettings(); if(window.saveBgTimer) clearTimeout(window.saveBgTimer); window.saveBgTimer = setTimeout(saveThemeConfig, 500); }
 
+function editThemeRange(rangeId) {
+    const range = document.getElementById(rangeId);
+    if (!range || range.disabled) {
+        if (range && (rangeId === 'textScaleRange' || rangeId === 'uiScaleRange')) showToast('请先关掉跟随系统', 1500);
+        else if (range) showToast('请先解锁', 1500);
+        return;
+    }
+    const min = Number(range.min);
+    const max = Number(range.max);
+    const current = Number(range.value);
+    const displayScale = rangeId === 'bgOpacityRange' || rangeId === 'bgOverlayRange' ? 100 : 1;
+    const displayMin = Math.round(min * displayScale);
+    const displayMax = Math.round(max * displayScale);
+    const displayCurrent = Math.round(current * displayScale);
+    const unit = rangeId === 'bgBlurRange' ? 'px' : '%';
+    const entered = prompt(`请输入 ${displayMin} 到 ${displayMax}${unit}`, String(displayCurrent));
+    if (entered == null) return;
+    const next = parseThemeRangeValue(entered, displayMin, displayMax, displayScale === 1 ? 1 : 1 / displayScale);
+    if (next == null) {
+        showToast('请输入数字', 1500);
+        return;
+    }
+    range.value = String(next);
+    if (rangeId === 'textScaleRange') updateTextScale();
+    else if (rangeId === 'uiScaleRange') updateUiScale();
+    else updateBgAdjustment();
+}
+
 function importThemeSettings(input) { 
     const file = input.files[0]; if (!file) return; 
     const handleConfig = (newConfig) => { 
@@ -3806,6 +3834,7 @@ const inlineHandlers = {
     toggleSystemTextScale,
     updateTextScale,
     updateUiScale,
+    editThemeRange,
     toggleThemeLock,
     updateBgAdjustment,
     handleBgUpload,
